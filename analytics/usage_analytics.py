@@ -117,7 +117,7 @@ class UsageAnalyticsEngine:
                 COUNT(*) as session_count,
                 SUM(total_interactions) as interaction_count,
                 AVG(duration_seconds) as avg_duration,
-                AVG(CASE WHEN workflow_completed = 1 THEN 1.0 ELSE 0.0 END) as completion_rate
+                AVG(CASE WHEN workflow_completed = true THEN 1.0 ELSE 0.0 END) as completion_rate
             FROM session_summaries 
             WHERE started_at >= :start_time AND started_at <= :end_time
             GROUP BY {time_group}
@@ -152,7 +152,7 @@ class UsageAnalyticsEngine:
             SELECT 
                 primary_intent,
                 COUNT(*) as session_count,
-                AVG(CASE WHEN workflow_completed = 1 THEN 1.0 ELSE 0.0 END) as completion_rate,
+                AVG(CASE WHEN workflow_completed = true THEN 1.0 ELSE 0.0 END) as completion_rate,
                 AVG(total_interactions) as avg_steps,
                 AVG(success_score) as avg_success_score,
                 SUM(total_interactions) as total_interactions,
@@ -582,13 +582,13 @@ class UsageAnalyticsEngine:
             SELECT 
                 COUNT(*) as total_sessions,
                 COUNT(DISTINCT primary_intent) as unique_intents,
-                AVG(CASE WHEN workflow_completed = 1 THEN 1.0 ELSE 0.0 END) as overall_completion_rate,
+                AVG(CASE WHEN workflow_completed = true THEN 1.0 ELSE 0.0 END) as overall_completion_rate,
                 AVG(success_score) as avg_quality_score,
                 SUM(total_interactions) as total_interactions,
                 AVG(duration_seconds) as avg_session_duration,
                 COUNT(CASE WHEN drop_off_step IS NOT NULL THEN 1 END) as sessions_with_dropoff
             FROM session_summaries
-            WHERE started_at >= datetime('now', '-7 days')
+            WHERE started_at >= NOW() - INTERVAL '7 days'
         """)
         
         result = self.db.execute(summary_query).fetchone()
