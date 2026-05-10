@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"http://localhost:8000/analytics/session-volume\")",
+      "Bash(curl -s \"http://localhost:8000/analytics/intent-performance\")",
+      "Bash(curl -s \"http://localhost:8000/analytics/dropoff-analysis\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s \"http://localhost:8000/analytics/tool-performance\")",
+      "Bash(curl -s \"http://localhost:8000/analytics/quality-by-intent\")",
+      "Bash(curl -s \"http://localhost:8000/analytics/dashboard-summary\")",
+      "Bash(curl -s \"http://localhost:8000/evaluation/health\")",
+      "Bash(curl -s \"http://localhost:8000/patterns/analyze?hours_back=168&min_pattern_count=3\")",
+      "Bash(curl -s -X POST \"http://localhost:8000/patterns/analyze?hours_back=168&min_pattern_count=3\")",
+      "Bash(curl -s \"http://localhost:8000/analytics/top-intents\")",
+      "Bash(pkill -f \"uvicorn main:app\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:8000__TRACKED_VAR__)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"http://localhost:8000/evaluation/evaluate-batch?hours_back=0.5\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"http://localhost:8000/ingest/test/generic\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"http://localhost:8000/patterns/analyze?hours_back=168&min_pattern_count=3\")",
+      "Bash(curl -s \"http://localhost:8000/patterns/insights/top-intents\")",
+      "Bash(curl -s \"http://localhost:8000/patterns/export/developer?hours_back=168&min_impact=0.05\")",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('  OK' if d['status']=='healthy' else '  FAIL'\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" -X POST \"http://localhost:8000/ingest/test/langsmith\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8000/patterns/insights/top-intents\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8000/patterns/export/developer\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:8000/patterns/export/fixes\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(' ', d['evaluation_system']\\)\")",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+from .ingest_endpoints import app
