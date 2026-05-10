@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional, Union
 from datetime import datetime, timezone
 import uuid
 from pydantic import BaseModel, Field, validator
-import pandas as pd
+# import pandas as pd  # Removed for deployment - using native csv module instead
 
 
 class ParsedInteraction(BaseModel):
@@ -144,21 +144,22 @@ class CSVLogParser:
         if isinstance(data, str):
             data = io.StringIO(data)
         
-        # Read CSV with pandas for better type inference
+        # Read CSV with native csv module
         try:
-            df = pd.read_csv(data)
+            reader = csv.DictReader(data)
+            rows = list(reader)
         except Exception as e:
             raise ValueError(f"Failed to parse CSV: {e}")
         
-        if df.empty:
+        if not rows:
             return []
         
         interactions = []
         
         # Auto-detect column mappings
-        column_mappings = CSVLogParser._detect_column_mappings(df.columns.tolist())
+        column_mappings = CSVLogParser._detect_column_mappings(list(rows[0].keys()) if rows else [])
         
-        for idx, row in df.iterrows():
+        for idx, row in enumerate(rows):
             try:
                 interaction = CSVLogParser._map_csv_row(row, column_mappings, idx)
                 interactions.append(interaction)

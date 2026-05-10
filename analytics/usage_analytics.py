@@ -7,7 +7,7 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, and_, or_
-import pandas as pd
+# import pandas as pd  # Removed for deployment - will add back later
 from dataclasses import dataclass
 import json
 
