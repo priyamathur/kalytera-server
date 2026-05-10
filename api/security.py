@@ -162,10 +162,17 @@ class OptimizedClaudeClient:
         
         try:
             from anthropic import Anthropic
-            self.client = Anthropic(api_key=self.key_manager.api_key)
+            # Remove proxies parameter to fix compatibility
+            self.client = Anthropic(
+                api_key=self.key_manager.api_key,
+                max_retries=2,
+                timeout=30.0
+            )
             security_logger.info("Claude client initialized successfully")
         except Exception as e:
             security_logger.error(f"Failed to initialize Claude client: {e}")
+            # Graceful fallback
+            self.client = None
     
     async def evaluate_interaction(
         self, 

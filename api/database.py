@@ -32,7 +32,12 @@ def initialize_database():
         # Verify tables were created by checking for agent_logs table
         with engine.connect() as conn:
             from sqlalchemy import text
-            result = conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_logs';"))
+            if "sqlite" in DATABASE_URL:
+                query = "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_logs';"
+            else:
+                query = "SELECT tablename FROM pg_tables WHERE tablename='agent_logs';"
+            
+            result = conn.execute(text(query))
             tables = result.fetchall()
             if tables:
                 print("✅ Database tables created/verified successfully")
