@@ -12,6 +12,8 @@ services:
     name: agentiq-api
     env: python
     plan: free
+    runtime: python
+    pythonVersion: 3.11.9
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn api.ingest_endpoints:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
