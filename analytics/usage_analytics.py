@@ -551,7 +551,7 @@ class UsageAnalyticsEngine:
             FROM session_summaries ss
             LEFT JOIN agent_logs al ON ss.id = al.session_id
             WHERE ss.primary_intent = :intent 
-            AND ss.workflow_completed = 0
+            AND ss.workflow_completed = false
             GROUP BY ss.drop_off_step
             ORDER BY frequency DESC
             LIMIT :limit

@@ -19,7 +19,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-API_BASE_URL = st.secrets.get("api_base_url", "http://localhost:8000") if hasattr(st, "secrets") else "http://localhost:8000"
+import os
+
+# Get API base URL from environment or streamlit secrets
+API_BASE_URL = os.getenv("API_BASE_URL", "https://agentiq-api-z9it.onrender.com")
+if hasattr(st, "secrets") and st.secrets.get("api_base_url"):
+    API_BASE_URL = st.secrets.get("api_base_url")
 
 st.markdown("""
 <style>

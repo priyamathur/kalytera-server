@@ -33,3 +33,19 @@ services:
       - key: EVALUATION_BATCH_SIZE
         value: 5
     autoDeploy: true
+    
+  # Streamlit Dashboard
+  - type: web
+    name: agentiq-dashboard
+    env: python
+    plan: free
+    runtime: python
+    pythonVersion: 3.11.9
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run dashboard/main.py --server.port $PORT --server.address 0.0.0.0
+    envVars:
+      - key: API_BASE_URL
+        value: https://agentiq-api-z9it.onrender.com
+      - key: PYTHONPATH
+        value: .
+    autoDeploy: true
