@@ -69,9 +69,20 @@ async def run_database_migrations():
             }
             
     except Exception as e:
-        # Fallback to direct table creation
+        # Fallback to direct table creation and column additions
         try:
+            # Create all tables
             Base.metadata.create_all(bind=engine)
+            
+            # Add missing failure_category column if it doesn't exist
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                try:
+                    conn.execute(text("ALTER TABLE eval_results ADD COLUMN failure_category VARCHAR"))
+                    conn.commit()
+                except Exception:
+                    pass  # Column might already exist
+                    
             return {
                 "success": True,
                 "message": "Database initialized via direct table creation (migration fallback)",

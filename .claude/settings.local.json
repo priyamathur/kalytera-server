@@ -24,7 +24,8 @@
       "Bash(curl -s -X POST https://agentiq-api-z9it.onrender.com/admin/run-migrations)",
       "Bash(curl -s -X POST https://agentiq-api-z9it.onrender.com/evaluation/evaluate-batch)",
       "Bash(python3 -m alembic revision --autogenerate -m \"add failure_category column to eval_results\")",
-      "Bash(git commit -m \"fix: add Streamlit dashboard deployment and fix boolean type errors\")"
+      "Bash(git commit -m \"fix: add Streamlit dashboard deployment and fix boolean type errors\")",
+      "Bash(git commit -m \"fix: add SQL migration to create missing failure_category column\")"
     ],
     "deny": [],
     "ask": []
