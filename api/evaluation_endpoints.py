@@ -5,9 +5,9 @@ Manage LLM judge evaluations and background processing
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import Dict, Any, List
+from typing import Optional
 import asyncio
-import os
+from pydantic import BaseModel
 
 from api.database import get_db
 from evaluation.agent_judge import AgentJudge, EvaluationScheduler
@@ -25,21 +25,30 @@ def get_agent_judge():
     """Get AgentJudge instance, handling missing API key gracefully"""
     try:
         return AgentJudge()
-    except ValueError:
+    except (ValueError, Exception) as e:
+        print(f"⚠️ AgentJudge initialization failed: {e}")
         return None
 
 @evaluation_router.get("/health")
 async def evaluation_health_check():
     """Check evaluation system health"""
     
-    judge = get_agent_judge()
-    
-    return {
-        "evaluation_system": "online" if judge else "unavailable (no API key)",
-        "anthropic_api": "configured" if judge else "not configured",
-        "background_scheduler": "running" if _evaluation_scheduler and _evaluation_scheduler.is_running else "stopped",
-        "model": judge.model if judge else None
-    }
+    try:
+        judge = get_agent_judge()
+        
+        return {
+            "evaluation_system": "online" if judge else "unavailable (no API key)",
+            "anthropic_api": "configured" if judge else "not configured", 
+            "background_scheduler": "running" if _evaluation_scheduler and _evaluation_scheduler.is_running else "stopped",
+            "model": "claude-sonnet-4" if judge else None,
+            "status": "healthy"
+        }
+    except Exception as e:
+        return {
+            "evaluation_system": "error",
+            "error": str(e),
+            "status": "unhealthy"
+        }
 
 
 @evaluation_router.post("/evaluate-batch")
@@ -271,6 +280,70 @@ async def get_failure_patterns(
             status_code=500,
             detail=f"Failed to analyze failure patterns: {str(e)}"
         )
+
+
+class EvaluationRequest(BaseModel):
+    user_input: str
+    agent_response: str
+    context: Optional[str] = None
+
+@evaluation_router.post("/evaluate-interaction")
+async def evaluate_single_interaction(request: EvaluationRequest):
+    """
+    Evaluate a single interaction using LLM judge
+    Required for enterprise evaluation capabilities
+    """
+    
+    judge = get_agent_judge()
+    if not judge:
+        raise HTTPException(
+            status_code=503,
+            detail="Evaluation service unavailable - Anthropic API key not configured"
+        )
+    
+    try:
+        # Prepare conversation context
+        conversation_context = []
+        if request.context:
+            conversation_context.append({"context": request.context})
+        
+        result = await judge.evaluate_interaction(
+            user_input=request.user_input,
+            agent_response=request.agent_response,
+            conversation_context=conversation_context,
+            tool_results=None,
+            intent=None
+        )
+        
+        return {
+            "overall_score": result.overall_score,
+            "accuracy_score": result.accuracy_score,
+            "goal_alignment_score": result.goal_alignment_score,
+            "decision_quality_score": result.decision_quality_score,
+            "completeness_score": result.completeness_score,
+            "failure_category": result.primary_failure_mode,
+            "evaluation_reasoning": result.failure_reasoning,
+            "improvement_suggestions": result.improvement_suggestions,
+            "evaluator_model": result.evaluator_model
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Evaluation failed: {str(e)}"
+        )
+
+
+@evaluation_router.post("/batch-evaluate")
+async def batch_evaluate_interactions(
+    hours_back: float = 24.0,
+    db: Session = Depends(get_db)
+):
+    """
+    Batch evaluate interactions from the last hours_back period
+    Alternative endpoint name for compatibility
+    """
+    return await trigger_batch_evaluation(hours_back=hours_back, db=db)
 
 
 @evaluation_router.post("/test-evaluation")

@@ -5,16 +5,14 @@ Core IP: Sophisticated evaluation using Claude with 4-dimensional scoring and fa
 
 import json
 import asyncio
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 from datetime import datetime, timedelta
 import uuid
 from dataclasses import dataclass
-from anthropic import Anthropic
-import os
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from db.models import AgentLog, EvalResult, SessionSummary
+from db.models import EvalResult
 from evaluation.judge_prompts import build_evaluation_prompt
 from api.security import optimized_claude_client, key_manager
 
@@ -67,6 +65,7 @@ class AgentJudge:
         self.claude_client = optimized_claude_client
         self.judge_available = key_manager.is_available
         self.evaluation_version = "2.0_optimized"
+        self.model = model  # Store model for reference
         
         if self.judge_available:
             print(f"✅ Secure AgentJudge initialized (key: {key_manager.get_masked_key()})")
@@ -77,9 +76,9 @@ class AgentJudge:
         self, 
         user_input: str,
         agent_response: str,
-        conversation_context: List[Dict[str, Any]] = None,
-        tool_results: str = None,
-        intent: str = None
+        conversation_context: Optional[List[Dict[str, Any]]] = None,
+        tool_results: Optional[str] = None,
+        intent: Optional[str] = None
     ) -> EvaluationResult:
         """
         Evaluate a single agent interaction
@@ -106,7 +105,7 @@ class AgentJudge:
         
         try:
             # Call Claude for evaluation
-            response = self.client.messages.create(
+            response = self.claude_client.messages.create(
                 model=self.model,
                 max_tokens=2000,
                 temperature=0.1,  # Low temperature for consistent scoring
@@ -180,7 +179,7 @@ class AgentJudge:
         
         return results
     
-    async def evaluate_new_logs(self, db: Session, hours_back: int = 0.5) -> List[EvaluationResult]:
+    async def evaluate_new_logs(self, db: Session, hours_back: float = 0.5) -> List[EvaluationResult]:
         """
         Find and evaluate new agent logs that haven't been evaluated yet
         

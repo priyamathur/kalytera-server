@@ -499,7 +499,7 @@ class UsageAnalyticsEngine:
                 COUNT(*) as total_sessions,
                 AVG(ss.success_score) as avg_quality_score,
                 SUM(CASE WHEN ss.success_score >= :pass_threshold THEN 1 ELSE 0 END) as passed_sessions,
-                SUM(CASE WHEN ss.workflow_completed = 0 THEN 1 ELSE 0 END) as failed_completions,
+                SUM(CASE WHEN ss.workflow_completed = false THEN 1 ELSE 0 END) as failed_completions,
                 SUM(ss.errors_count) as total_errors
             FROM session_summaries ss
             WHERE ss.primary_intent IS NOT NULL

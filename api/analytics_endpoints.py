@@ -10,8 +10,6 @@ from datetime import datetime
 
 from analytics.usage_analytics import (
     UsageAnalyticsEngine,
-    SessionVolumePoint,
-    IntentAnalytics,
     WorkflowPath,
     DropoffInsight,
     ToolUsageAnalytics,
@@ -494,3 +492,38 @@ async def get_tool_usage_alias(
 ):
     """Alias for tool-performance endpoint"""
     return await get_tool_performance_analytics(db)
+
+
+@analytics_router.get("/drop-off-analysis")
+async def get_drop_off_analysis_alias(
+    hours_back: int = Query(168, description="Hours back to analyze"),
+    db: Session = Depends(get_db)
+):
+    """
+    Drop-off Analysis (with hyphens for test compatibility)
+    Shows where users abandon conversations - the most impactful insight
+    """
+    try:
+        analytics_engine = UsageAnalyticsEngine(db)
+        dropoff_data = analytics_engine.get_dropoff_analysis()
+        
+        # Format for test compatibility
+        drop_off_by_step = {}
+        for insight in dropoff_data:
+            step_key = f"step_{insight.step}"
+            drop_off_by_step[step_key] = {
+                "sessions": insight.dropoff_count,
+                "drop_rate": round(insight.dropoff_rate, 3),
+                "intent_breakdown": insight.intent_breakdown,
+                "common_reasons": insight.common_reasons
+            }
+        
+        return {
+            "drop_off_by_step": drop_off_by_step,
+            "analysis_period_hours": hours_back,
+            "total_dropoff_points": len(dropoff_data),
+            "last_updated": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get drop-off analysis: {str(e)}")

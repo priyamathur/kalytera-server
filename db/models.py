@@ -1,6 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, Text, Boolean, ForeignKey
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
 
@@ -73,6 +72,9 @@ class EvalResult(Base):
     # Evaluation reasoning and feedback
     evaluation_reasoning = Column(Text, nullable=True)  # why these scores
     improvement_suggestions = Column(Text, nullable=True)  # what could be better
+    
+    # Failure classification (7-category taxonomy)
+    failure_category = Column(String, nullable=True)  # wrong_answer, tool_failure, goal_drift, incomplete, hallucination, context_loss, loop
     
     # Evaluation metadata
     evaluator_model = Column(String, default="claude-3-sonnet", nullable=False)
