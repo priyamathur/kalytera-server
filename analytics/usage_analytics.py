@@ -7,7 +7,6 @@ from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, and_, or_
-import pandas as pd
 from dataclasses import dataclass
 import json
 
@@ -99,16 +98,16 @@ class UsageAnalyticsEngine:
         end_time = datetime.now()
         start_time = end_time - timedelta(hours=hours_back)
         
-        # Define time grouping based on granularity
+        # Define time grouping based on granularity (PostgreSQL compatible)
         if granularity == "hour":
             time_format = "%Y-%m-%d %H:00:00"
-            time_group = "strftime('%Y-%m-%d %H:00:00', started_at)"
+            time_group = "DATE_TRUNC('hour', started_at)"
         elif granularity == "day":
             time_format = "%Y-%m-%d 00:00:00"
-            time_group = "strftime('%Y-%m-%d 00:00:00', started_at)"
+            time_group = "DATE_TRUNC('day', started_at)"
         else:  # week
-            time_format = "%Y-%W"
-            time_group = "strftime('%Y-%W', started_at)"
+            time_format = "%Y-%m-%d"
+            time_group = "DATE_TRUNC('week', started_at)"
         
         # Query session volume by time period
         query = text(f"""
@@ -131,7 +130,8 @@ class UsageAnalyticsEngine:
         
         volume_points = []
         for row in result:
-            timestamp = datetime.strptime(row[0], time_format) if granularity != "week" else datetime.now()
+            # PostgreSQL DATE_TRUNC returns timestamp objects directly
+            timestamp = row[0] if isinstance(row[0], datetime) else datetime.strptime(str(row[0]), time_format)
             volume_points.append(SessionVolumePoint(
                 timestamp=timestamp,
                 session_count=row[1],
@@ -207,10 +207,10 @@ class UsageAnalyticsEngine:
                 ss.primary_intent,
                 ss.workflow_completed,
                 ss.duration_seconds,
-                GROUP_CONCAT(
+                STRING_AGG(
                     CASE 
                         WHEN al.tool_calls IS NOT NULL AND al.tool_calls != '[]' THEN 'tool_call'
-                        WHEN al.error_occurred = 1 THEN 'error'
+                        WHEN al.error_occurred = true THEN 'error'
                         WHEN al.workflow_step = 1 THEN 'initial_request'
                         WHEN al.workflow_step <= 2 THEN 'clarification'
                         WHEN al.workflow_step <= 4 THEN 'processing'
@@ -279,7 +279,7 @@ class UsageAnalyticsEngine:
                 ss.drop_off_step,
                 COUNT(*) as dropoff_count,
                 ss.primary_intent,
-                GROUP_CONCAT(al.error_message) as error_messages
+                STRING_AGG(al.error_message, ',') as error_messages
             FROM session_summaries ss
             LEFT JOIN agent_logs al ON ss.id = al.session_id 
                 AND al.workflow_step = ss.drop_off_step
@@ -548,7 +548,7 @@ class UsageAnalyticsEngine:
             SELECT 
                 ss.drop_off_step,
                 COUNT(*) as frequency,
-                GROUP_CONCAT(DISTINCT al.error_message) as error_messages
+                STRING_AGG(DISTINCT al.error_message, ',') as error_messages
             FROM session_summaries ss
             LEFT JOIN agent_logs al ON ss.id = al.session_id
             WHERE ss.primary_intent = :intent 
@@ -577,7 +577,8 @@ class UsageAnalyticsEngine:
     def get_analytics_summary(self) -> Dict[str, Any]:
         """Get high-level analytics summary for dashboard"""
         
-        # Key metrics query
+        # Key metrics query (last 7 days)
+        seven_days_ago = datetime.now() - timedelta(days=7)
         summary_query = text("""
             SELECT 
                 COUNT(*) as total_sessions,
@@ -588,10 +589,10 @@ class UsageAnalyticsEngine:
                 AVG(duration_seconds) as avg_session_duration,
                 COUNT(CASE WHEN drop_off_step IS NOT NULL THEN 1 END) as sessions_with_dropoff
             FROM session_summaries
-            WHERE started_at >= NOW() - INTERVAL '7 days'
+            WHERE started_at >= :seven_days_ago
         """)
         
-        result = self.db.execute(summary_query).fetchone()
+        result = self.db.execute(summary_query, {'seven_days_ago': seven_days_ago}).fetchone()
         
         return {
             'total_sessions': result[0],
