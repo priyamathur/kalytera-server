@@ -172,12 +172,12 @@ class UsageAnalyticsEngine:
             intent_analytics.append(IntentAnalytics(
                 intent=row[0],
                 session_count=row[1],
-                completion_rate=row[2] or 0.0,
-                avg_steps=row[3] or 0.0,
-                avg_success_score=row[4] or 0.0,
-                total_interactions=row[5] or 0,
-                avg_duration_seconds=row[6] or 0.0,
-                error_rate=row[7] or 0.0
+                completion_rate=float(row[2]) if row[2] else 0.0,
+                avg_steps=float(row[3]) if row[3] else 0.0,
+                avg_success_score=float(row[4]) if row[4] else 0.0,
+                total_interactions=int(row[5]) if row[5] else 0,
+                avg_duration_seconds=float(row[6]) if row[6] else 0.0,
+                error_rate=float(row[7]) if row[7] else 0.0
             ))
         
         return intent_analytics
