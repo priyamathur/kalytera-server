@@ -3,14 +3,13 @@ Usage Analytics Engine for AgentIQ
 Transforms raw session data into actionable insights for agent performance optimization
 """
 
-from typing import Dict, List, Any, Optional, Tuple
+from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, and_, or_
+from sqlalchemy import text
 from dataclasses import dataclass
 import json
 
-from db.models import SessionSummary, AgentLog
 
 
 @dataclass
@@ -243,7 +242,7 @@ class UsageAnalyticsEngine:
             
             path_analytics[path_key]['frequency'] += 1
             path_analytics[path_key]['completions'] += (1 if completed else 0)
-            path_analytics[path_key]['total_duration'] += (duration or 0)
+            path_analytics[path_key]['total_duration'] += float(duration or 0)
             
             intent_key = intent or 'unknown'
             if intent_key not in path_analytics[path_key]['intent_distribution']:
@@ -258,7 +257,7 @@ class UsageAnalyticsEngine:
                     path=path_str.split(' -> '),
                     frequency=analytics['frequency'],
                     completion_rate=analytics['completions'] / analytics['frequency'],
-                    avg_duration=analytics['total_duration'] / analytics['frequency'],
+                    avg_duration=float(analytics['total_duration']) / analytics['frequency'],
                     intent_distribution=analytics['intent_distribution']
                 ))
         
