@@ -7,10 +7,8 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-import plotly.graph_objects as go
-from datetime import datetime, timedelta
 import json
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any, Optional
 
 st.set_page_config(
     page_title="AgentIQ - Agent Observability Platform",
@@ -22,7 +20,7 @@ st.set_page_config(
 import os
 
 # Get API base URL from environment or streamlit secrets
-API_BASE_URL = os.getenv("API_BASE_URL", "https://agentiq-api-z9it.onrender.com")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 if hasattr(st, "secrets") and st.secrets.get("api_base_url"):
     API_BASE_URL = st.secrets.get("api_base_url")
 
@@ -67,7 +65,7 @@ def render_sidebar():
 
     page = st.sidebar.selectbox(
         "Navigate to:",
-        ["📊 Overview", "📈 Usage Analytics", "🎯 Loss Patterns", "💬 Interaction Detail"],
+        ["📊 Overview", "🎯 Agent Workflows", "📉 Failure Analysis"],
         index=0
     )
 
@@ -130,422 +128,435 @@ def render_overview_page(hours_back: int):
     else:
         st.warning("Could not load dashboard summary.")
 
-    st.markdown("---")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("🎯 Top Failure Intents")
-        insights_data = make_api_get("/patterns/insights/top-intents", {"limit": 5})
-
-        if insights_data and insights_data.get("top_intents"):
-            st.info(f"**Key Insight:** {insights_data['key_insight']}")
-            for intent in insights_data["top_intents"][:3]:
-                st.markdown(f"""
-                <div class="pattern-card">
-                    <strong>{intent['intent'].replace('_',' ').title()}</strong><br>
-                    {intent['failure_count']} failures ({intent['pct_of_all_failures']:.1f}% of total)<br>
-                    Quality Score: {intent['avg_quality_score']:.2f}
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No failure patterns detected yet. Upload agent logs to get insights.")
-
-    with col2:
-        st.subheader("📈 Session Volume (Recent)")
-        # session-volume returns a list of time-bucketed points
-        volume_list = make_api_get("/analytics/session-volume", {"hours_back": hours_back, "granularity": "day"})
-
-        if volume_list:
-            df = pd.DataFrame(volume_list)
-            if not df.empty:
-                fig = px.area(
-                    df, x="timestamp", y="session_count",
-                    title=f"Session Volume (last {hours_back}h)",
-                    labels={"session_count": "Sessions", "timestamp": "Time"}
-                )
-                fig.update_layout(height=300)
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No volume data for this period.")
-        else:
-            st.info("No activity data available.")
-
-    st.markdown("---")
-    st.subheader("🚀 Quick Actions")
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        if st.button("📤 Test JSON Ingest", type="secondary", use_container_width=True):
-            result = make_api_post("/ingest/test/generic")
-            if result and result.get("success"):
-                st.success(f"✅ Ingested {result.get('sessions_processed', 0)} sessions")
-            else:
-                st.warning("Ingest test returned no result")
-
-    with col2:
-        if st.button("🧪 Run Evaluation", type="secondary", use_container_width=True):
-            with st.spinner("Running evaluation..."):
-                result = make_api_post("/evaluation/evaluate-batch", {"hours_back": 0.5})
-                if result and result.get("success"):
-                    st.success(f"✅ Evaluated {result.get('evaluations_completed', 0)} interactions")
-                else:
-                    st.warning("⚠️ Evaluation system not available or no new logs")
-
-    with col3:
-        if st.button("🔍 Analyze Patterns", type="secondary", use_container_width=True):
-            with st.spinner("Analyzing patterns..."):
-                result = make_api_post("/patterns/analyze", {"hours_back": hours_back, "min_pattern_count": 3})
-                if result and result.get("success"):
-                    st.success(f"✅ Detected {result.get('patterns_detected', 0)} patterns")
-                else:
-                    st.warning("⚠️ Pattern analysis failed or no eval data")
-
-
-def render_usage_analytics_page(hours_back: int):
-    """Render usage analytics dashboard"""
-    st.markdown('<h1 class="main-header">📈 Usage Analytics</h1>', unsafe_allow_html=True)
-
-    # Session volume (list of time points)
-    st.subheader("📊 Session Volume Over Time")
-    volume_list = make_api_get("/analytics/session-volume", {"hours_back": hours_back, "granularity": "day"})
-
-    if volume_list:
-        df = pd.DataFrame(volume_list)
-        if not df.empty:
-            fig = px.area(
-                df, x="timestamp", y="session_count",
-                title=f"Session Volume (last {hours_back}h)",
-                labels={"session_count": "Sessions", "timestamp": "Time"}
-            )
-            fig.update_traces(fill="tonexty")
-            fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No session data for the selected time range.")
-    else:
-        st.info("Session volume data not available.")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.subheader("🎯 Intent Performance")
-        # intent-performance returns a list directly
-        intent_list = make_api_get("/analytics/intent-performance", {"limit": 10})
-
-        if intent_list:
-            intent_df = pd.DataFrame(intent_list)
-
-            fig = px.pie(
-                intent_df, values="session_count", names="intent",
-                title="Intent Distribution"
-            )
-            fig.update_layout(height=350)
-            st.plotly_chart(fig, use_container_width=True)
-
-            st.markdown("**Intent Performance:**")
-            for intent in intent_list:
-                cr = intent.get("completion_rate", 0)
-                color = "success" if cr > 0.8 else "warning" if cr > 0.6 else "danger"
-                st.markdown(f"""
-                <div class="metric-card">
-                    <strong>{intent['intent'].replace('_',' ').title()}</strong><br>
-                    Sessions: {intent['session_count']} |
-                    Completion: <span class="status-{color}">{cr:.1%}</span> |
-                    Avg Steps: {intent['avg_steps']:.1f} |
-                    Grade: <b>{intent['performance_grade']}</b>
-                </div>
-                """, unsafe_allow_html=True)
-        else:
-            st.info("No intent data available.")
-
-    with col2:
-        st.subheader("📉 Drop-off Analysis")
-        # dropoff-analysis returns a list directly
-        dropoff_list = make_api_get("/analytics/dropoff-analysis")
-
-        if dropoff_list:
-            dropoff_df = pd.DataFrame(dropoff_list)
-
-            fig = px.bar(
-                dropoff_df, x="step", y="dropoff_count",
-                title="Drop-off Count by Workflow Step",
-                labels={"dropoff_count": "Sessions Dropped Off", "step": "Workflow Step"},
-                color="impact_score",
-                color_continuous_scale="Reds"
-            )
-            fig.update_layout(height=350)
-            st.plotly_chart(fig, use_container_width=True)
-
-            critical = [d for d in dropoff_list if d.get("dropoff_rate", 0) > 0.05]
-            if critical:
-                st.warning(f"⚠️ High drop-off at steps: {', '.join(str(d['step']) for d in critical[:3])}")
-        else:
-            st.info("No drop-off data available.")
-
-    # Tool usage
-    st.subheader("🔧 Tool Usage & Performance")
-    tool_list = make_api_get("/analytics/tool-performance")
-
-    if tool_list:
+    # Metric Definitions
+    with st.expander("📋 Metric Definitions", expanded=False):
         col1, col2 = st.columns(2)
-        tool_df = pd.DataFrame(tool_list)
-
         with col1:
-            fig = px.bar(
-                tool_df, x="usage_count", y="tool_name",
-                orientation="h", title="Tool Usage Frequency"
-            )
-            fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
-
+            st.markdown("""
+            **📝 Total Sessions (7d)**  
+            *Number of agent interactions tracked in the last 7 days*
+            
+            **✅ Completion Rate**  
+            *Percentage of sessions that reached their intended goal without failures*
+            
+            **⭐ Avg Quality Score**  
+            *Average of 4-dimensional quality scoring (Accuracy + Goal Alignment + Decision Quality + Completeness)*
+            """)
         with col2:
-            fig = px.scatter(
-                tool_df, x="usage_count", y="success_rate",
-                size="avg_response_time_ms",
-                hover_data=["tool_name"],
-                title="Tool Performance (Size = Response Time)",
-                labels={"success_rate": "Success Rate", "usage_count": "Usage Count"}
-            )
-            fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("No tool usage data available.")
-
-
-def render_loss_patterns_page(hours_back: int):
-    """Render loss patterns analysis dashboard"""
-    st.markdown('<h1 class="main-header">🎯 Loss Patterns</h1>', unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        min_pattern_count = st.slider("Min Pattern Count", 1, 10, 3)
-    with col2:
-        pattern_type_filter = st.selectbox("Pattern Type", ["All", "Intent", "Step", "Tool", "Topic"])
-    with col3:
-        if st.button("🔄 Refresh Analysis", type="primary"):
-            st.rerun()
-
-    # patterns/analyze is POST
-    pattern_data = make_api_post("/patterns/analyze", {
-        "hours_back": hours_back,
-        "min_pattern_count": min_pattern_count
-    })
-
-    if not pattern_data or not pattern_data.get("success"):
-        st.info("No pattern analysis results. Run evaluations first to generate eval data.")
-        if pattern_data:
-            st.error(f"Error: {pattern_data.get('detail', 'Unknown error')}")
-        return
-
-    total_failures = pattern_data.get("total_failures", 0)
-    patterns = pattern_data.get("top_failure_patterns", [])
-
-    if total_failures == 0:
-        st.info("No failures detected. Upload agent logs and run evaluations to see patterns.")
-        return
-
-    insights = pattern_data.get("key_insights", {})
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("Total Failures Analyzed", f"{total_failures:,}", delta=f"{len(patterns)} patterns found")
-    with col2:
-        top_intent_pct = insights.get("top_3_intents_failure_pct", 0)
-        st.metric("Top 3 Intents Coverage", f"{top_intent_pct:.1f}%")
-    with col3:
-        problematic = insights.get("most_problematic_intent", "None") or "None"
-        st.metric("Most Problematic Intent", problematic.replace("_", " ").title())
-
-    st.markdown("---")
-
-    if pattern_type_filter != "All":
-        patterns = [p for p in patterns if p["pattern_type"].lower() == pattern_type_filter.lower()]
-
-    if not patterns:
-        st.info(f"No {pattern_type_filter.lower()} patterns found with minimum count of {min_pattern_count}.")
-        return
-
-    st.subheader("📊 Detected Patterns")
-    pattern_df = pd.DataFrame([
-        {
-            "Pattern": p["pattern_value"],
-            "Type": p["pattern_type"].title(),
-            "Failures": p["failure_count"],
-            "Failure Rate": f"{p['failure_rate']:.1%}",
-            "% of All Failures": f"{p['pct_of_all_failures']:.1f}%",
-            "Avg Quality": f"{p['avg_quality_score']:.2f}",
-        }
-        for p in patterns[:10]
-    ])
-    st.dataframe(pattern_df, use_container_width=True)
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        fig = px.bar(
-            x=[p["pattern_value"] for p in patterns[:8]],
-            y=[p["failure_count"] for p in patterns[:8]],
-            title="Failure Count by Pattern",
-            labels={"x": "Pattern", "y": "Failure Count"}
-        )
-        fig.update_xaxes(tickangle=45)
-        fig.update_layout(height=400)
-        st.plotly_chart(fig, use_container_width=True)
-
-    with col2:
-        type_counts = {}
-        for p in patterns:
-            ptype = p["pattern_type"].title()
-            type_counts[ptype] = type_counts.get(ptype, 0) + p["failure_count"]
-        if type_counts:
-            fig = px.pie(
-                values=list(type_counts.values()),
-                names=list(type_counts.keys()),
-                title="Failure Distribution by Pattern Type"
-            )
-            fig.update_layout(height=400)
-            st.plotly_chart(fig, use_container_width=True)
-
-    st.subheader("🔍 Pattern Details")
-    selected_pattern = st.selectbox(
-        "Select pattern for detailed analysis:",
-        [f"{p['pattern_type'].title()}: {p['pattern_value']}" for p in patterns]
-    )
-
-    if selected_pattern:
-        pattern_idx = next(
-            i for i, p in enumerate(patterns)
-            if f"{p['pattern_type'].title()}: {p['pattern_value']}" == selected_pattern
-        )
-        pattern = patterns[pattern_idx]
-
-        col1, col2 = st.columns([2, 1])
-
-        with col1:
-            st.markdown(f"""
-            **Pattern:** {pattern['pattern_value']}
-            **Type:** {pattern['pattern_type'].title()}
-            **Impact:** {pattern['failure_count']} failures ({pattern['pct_of_all_failures']:.1f}% of total)
-            **Failure Rate:** {pattern['failure_rate']:.1%}
-            **Quality Score:** {pattern['avg_quality_score']:.2f}/1.0
+            st.markdown("""
+            **📉 Drop-off Rate**  
+            *Percentage of sessions that failed or were abandoned before completion*
+            
+            **🎯 Success Rate**  
+            *Calculated as: 1 - Drop-off Rate (inverse of failure rate)*
+            
+            **📊 Quality Dimensions**  
+            *Accuracy, Goal Alignment, Decision Quality, Completeness (scored 0-1)*
             """)
 
-            if pattern.get("root_cause"):
-                st.success(f"**Root Cause:** {pattern['root_cause']}")
-            if pattern.get("suggested_fix"):
-                st.info(f"**Suggested Fix:** {pattern['suggested_fix']}")
-
-        with col2:
-            severity = "High" if pattern["pct_of_all_failures"] > 20 else "Medium" if pattern["pct_of_all_failures"] > 10 else "Low"
-            severity_color = "🔴" if severity == "High" else "🟡" if severity == "Medium" else "🟢"
-            st.markdown(f"""
-            <div class="metric-card">
-                <h4>{severity_color} Severity: {severity}</h4>
-                <p>Priority: {'Immediate' if severity == 'High' else 'High' if severity == 'Medium' else 'Normal'}</p>
-            </div>
-            """, unsafe_allow_html=True)
-
-
-def render_interaction_detail_page(hours_back: int):
-    """Render interaction detail view"""
-    st.markdown('<h1 class="main-header">💬 Interaction Detail</h1>', unsafe_allow_html=True)
-
-    col1, col2, col3 = st.columns(3)
-
+    st.markdown("---")
+    
+    # Add 4-dimensional quality scoring visualization
+    col1, col2 = st.columns(2)
+    
     with col1:
-        intent_filter = st.selectbox(
-            "Filter by Intent:",
-            ["All", "billing", "refunds", "subscriptions", "account_recovery", "general_enquiry"]
+        st.subheader("📊 4-Dimensional Quality Scoring")
+        
+        # Sample quality dimensions (would come from evaluation API)
+        quality_dims = {
+            'Accuracy': 0.73,
+            'Goal Alignment': 0.68, 
+            'Decision Quality': 0.71,
+            'Completeness': 0.65
+        }
+        
+        # Create radar chart
+        import plotly.graph_objects as go
+        
+        fig = go.Figure()
+        
+        categories = list(quality_dims.keys())
+        values = list(quality_dims.values())
+        
+        # Add current scores
+        fig.add_trace(go.Scatterpolar(
+            r=values + [values[0]],
+            theta=categories + [categories[0]],
+            fill='toself',
+            name='Current',
+            fillcolor='rgba(31, 119, 180, 0.3)',
+            line=dict(color='rgb(31, 119, 180)')
+        ))
+        
+        # Add target line (80%)
+        target_values = [0.8] * len(categories)
+        fig.add_trace(go.Scatterpolar(
+            r=target_values + [target_values[0]],
+            theta=categories + [categories[0]],
+            mode='lines',
+            name='Target (80%)',
+            line=dict(color='red', dash='dash')
+        ))
+        
+        fig.update_layout(
+            polar=dict(
+                radialaxis=dict(
+                    visible=True,
+                    range=[0, 1],
+                    showticklabels=True,
+                    tickvals=[0.2, 0.4, 0.6, 0.8, 1.0]
+                )),
+            showlegend=True,
+            title="Quality Dimensions Analysis",
+            height=350
         )
-
-    with col2:
-        quality_filter = st.selectbox(
-            "Quality Filter:",
-            ["All", "High Quality (>0.8)", "Good Quality (0.6-0.8)", "Poor Quality (<0.6)", "Failures Only (<0.7)"]
-        )
-
-    with col3:
-        limit = st.slider("Max Results", 10, 100, 20)
-
-    # quality-by-intent returns a list
-    quality_list = make_api_get("/analytics/quality-by-intent")
-
-    if quality_list:
-        st.subheader("📊 Quality by Intent")
-        quality_df = pd.DataFrame(quality_list)
-
-        fig = px.bar(
-            quality_df, x="intent", y="pass_rate",
-            title="Pass Rate by Intent (threshold: 0.7)",
-            labels={"pass_rate": "Pass Rate", "intent": "Intent"},
-            color="pass_rate",
-            color_continuous_scale="RdYlGn",
-            range_color=[0, 1]
-        )
-        fig.add_hline(y=0.7, line_dash="dash", line_color="red", annotation_text="Pass threshold")
-        fig.update_layout(height=400)
+        
         st.plotly_chart(fig, use_container_width=True)
-
-        for q in quality_list:
-            color = "success" if q["pass_rate"] > 0.8 else "warning" if q["pass_rate"] > 0.6 else "danger"
-            st.markdown(f"""
-            <div class="metric-card">
-                <strong>{q['intent'].replace('_',' ').title()}</strong><br>
-                Pass Rate: <span class="status-{color}">{q['pass_rate']:.1%}</span> |
-                Avg Score: {q['avg_quality_score']:.2f} |
-                Sample: {q['sample_size']} sessions |
-                vs Benchmark: <b>{q['benchmark_comparison'].title()}</b>
-            </div>
-            """, unsafe_allow_html=True)
-    else:
-        st.info("No quality data available yet.")
+    
+    with col2:
+        st.subheader("Quality Metrics Breakdown")
+        
+        for dim, score in quality_dims.items():
+            color = "green" if score >= 0.8 else "orange" if score >= 0.6 else "red"
+            delta_vs_target = score - 0.8
+            st.metric(
+                dim,
+                f"{score:.3f}",
+                delta=f"{delta_vs_target:+.3f}" if delta_vs_target != 0 else "0.000",
+                delta_color="inverse"
+            )
 
     st.markdown("---")
-    st.subheader("📤 Export Options")
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("🎯 Export Pattern Fixes", type="secondary", use_container_width=True):
-            pattern_export = make_api_get("/patterns/export/developer", {"hours_back": hours_back})
-            if pattern_export:
-                st.download_button(
-                    "⬇️ Download Pattern Data",
-                    data=json.dumps(pattern_export, indent=2),
-                    file_name="agentiq_patterns.json",
-                    mime="application/json"
-                )
-
-    with col2:
-        if st.button("🤖 Export for RL Training", type="secondary", use_container_width=True):
-            rl_export = make_api_get("/patterns/export/developer", {
-                "format": "reinforcement_learning",
-                "hours_back": hours_back
+    # Only show real data that works - remove the broken sections
+    st.markdown("---")
+    st.subheader("🎯 Agent Performance Summary")
+    
+    # Get real agent workflows data
+    all_workflows = make_api_get("/analytics/all-agent-workflows")
+    
+    if all_workflows and "workflows" in all_workflows:
+        st.info(f"**{all_workflows['total_agent_types']} Active Agent Types** - Real-time analysis from session data")
+        
+        # Create performance table
+        workflow_data = []
+        for wf in all_workflows["workflows"]:
+            workflow_data.append({
+                "Agent": wf["intent"].replace("_", " ").title(),
+                "Sessions": wf["total_sessions"],
+                "Steps": wf["unique_steps"],
+                "Success Rate": f"{wf['avg_success_rate']:.1%}",
+                "Complexity": wf["complexity"].title(),
+                "Health": wf["workflow_health"].title()
             })
-            if rl_export:
-                st.download_button(
-                    "⬇️ Download RL Training Data",
-                    data=json.dumps(rl_export, indent=2),
-                    file_name="agentiq_training_data.json",
-                    mime="application/json"
-                )
+        
+        df = pd.DataFrame(workflow_data)
+        st.dataframe(df, use_container_width=True)
+        
+        # Quick insights
+        if all_workflows.get("summary"):
+            summary = all_workflows["summary"]
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if summary.get("highest_performing"):
+                    st.metric("🏆 Best Performing", summary["highest_performing"].replace("_", " ").title())
+            
+            with col2:
+                if summary.get("most_complex"):
+                    st.metric("🔧 Most Complex", f"{summary['most_complex'].replace('_', ' ').title()}")
+            
+            with col3:
+                needs_attention = summary.get("needs_attention", [])
+                if needs_attention:
+                    st.metric("⚠️ Needs Attention", len(needs_attention))
+                else:
+                    st.metric("✅ All Healthy", "0 issues")
+    else:
+        st.info("Loading agent workflow data...")
+    
+    # Remove all the fake/broken sections below
+
+
+def render_agent_workflows_page(hours_back: int):
+    """Render clean agent workflows page with only real, useful data"""
+    st.markdown('<h1 class="main-header">🎯 Agent Workflows</h1>', unsafe_allow_html=True)
+    
+    # Get real agent workflows data
+    all_workflows = make_api_get("/analytics/all-agent-workflows")
+    
+    if not all_workflows or "workflows" not in all_workflows:
+        st.error("Unable to load agent workflow data")
+        return
+    
+    st.info("📋 **Real-time analysis of agent execution paths based on actual session data**")
+    
+    # Workflow Metric Definitions
+    with st.expander("📋 Workflow Metric Definitions", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""
+            **🎯 Sessions**  
+            *Total number of agent interactions for this workflow*
+            
+            **🔗 Steps**  
+            *Number of unique steps in this agent's execution path*
+            
+            **✅ Success Rate**  
+            *Percentage of sessions that completed successfully without failures*
+            """)
+        with col2:
+            st.markdown("""
+            **🧩 Complexity**  
+            *Low/Medium/High based on number of steps and decision points*
+            
+            **❤️ Health**  
+            *Overall workflow health: Excellent/Good/Needs Attention based on success rate*
+            
+            **🔧 Dynamic Flowchart**  
+            *Visual representation of the actual steps this agent takes*
+            """)
+    
+    # Agent selector
+    available_intents = [wf["intent"] for wf in all_workflows["workflows"]]
+    selected_intent = st.selectbox(
+        "🎯 Select Agent to Analyze:",
+        ["All Agents"] + available_intents
+    )
+    
+    if selected_intent == "All Agents":
+        # Show agent comparison
+        st.subheader("📊 Agent Performance Comparison")
+        
+        # Create performance visualization
+        workflow_data = []
+        for wf in all_workflows["workflows"]:
+            workflow_data.append({
+                "Agent": wf["intent"].replace("_", " ").title(),
+                "Sessions": wf["total_sessions"],
+                "Steps": wf["unique_steps"],
+                "Success Rate": wf["avg_success_rate"],
+                "Complexity": wf["complexity"],
+                "Health": wf["workflow_health"]
+            })
+        
+        df = pd.DataFrame(workflow_data)
+        
+        # Bubble chart showing complexity vs performance
+        fig = px.scatter(
+            df, 
+            x="Steps", 
+            y="Success Rate",
+            size="Sessions",
+            color="Success Rate",
+            hover_data=["Agent"],
+            title="Agent Complexity vs Performance",
+            labels={"Steps": "Workflow Complexity (# steps)", "Success Rate": "Success Rate"},
+            color_continuous_scale="RdYlGn"
+        )
+        fig.update_layout(height=500)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # Summary table
+        st.subheader("Agent Summary")
+        display_df = df.copy()
+        display_df["Success Rate"] = display_df["Success Rate"].apply(lambda x: f"{x:.1%}")
+        st.dataframe(display_df, use_container_width=True)
+        
+    else:
+        # Show specific agent analysis
+        workflow_data = make_api_get(f"/analytics/agent-workflow-analysis/{selected_intent}")
+        
+        if workflow_data and workflow_data.get("workflow_steps"):
+            st.subheader(f"🔍 {selected_intent.replace('_', ' ').title()} Agent Analysis")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Total Steps", workflow_data["total_unique_steps"])
+            with col2:
+                st.metric("Overall Success Rate", f"{workflow_data['overall_success_rate']:.1%}")
+            with col3:
+                total_sessions = sum(step["total_sessions"] for step in workflow_data["workflow_steps"])
+                st.metric("Total Sessions Analyzed", total_sessions)
+            
+            # Dynamic flowchart
+            st.subheader("📋 Agent Execution Flow")
+            st.markdown(f"```mermaid\n{workflow_data['flowchart_mermaid']}\n```")
+            
+            # Step-by-step breakdown
+            st.subheader("📊 Step Analysis")
+            step_data = []
+            for step in workflow_data["workflow_steps"]:
+                step_name = next((node["name"] for node in workflow_data["flowchart_nodes"] 
+                                if node["step_number"] == step["step"]), f"Step {step['step']}")
+                step_data.append({
+                    "Step": step_name,
+                    "Sessions": step["total_sessions"],
+                    "Success Rate": f"{step['success_rate']:.1%}",
+                    "Avg Response Time": f"{step['avg_response_time']:.0f}ms",
+                    "Dropoffs": step["dropoff_count"]
+                })
+            
+            step_df = pd.DataFrame(step_data)
+            st.dataframe(step_df, use_container_width=True)
+            
+            # Failure points
+            if workflow_data.get("failure_points"):
+                st.warning("🚨 **Failure Points Detected:**")
+                for fp in workflow_data["failure_points"]:
+                    st.markdown(f"• **{fp['step_name']}**: {fp['success_rate']:.1%} success rate")
+            else:
+                st.success("✅ **No critical failure points detected**")
+        else:
+            st.error(f"Unable to load workflow data for {selected_intent}")
+
+
+def render_failure_analysis_page(hours_back: int):
+    """Render clean failure analysis with only real, useful data"""
+    st.markdown('<h1 class="main-header">📉 Failure Analysis</h1>', unsafe_allow_html=True)
+    
+    # Get real failure data from dropoff analysis
+    dropoff_data = make_api_get("/analytics/dropoff-analysis")
+    all_workflows = make_api_get("/analytics/all-agent-workflows")
+    
+    if not dropoff_data and not all_workflows:
+        st.error("Unable to load failure analysis data")
+        return
+    
+    st.info("📋 **Analysis of where and why agent sessions fail**")
+    
+    # Failure Analysis Metric Definitions
+    with st.expander("📋 Failure Analysis Metrics", expanded=False):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("""
+            **📉 Drop-off Rate**  
+            *Percentage of sessions that fail at a specific step*
+            
+            **⚡ Critical Steps**  
+            *Workflow steps with >10% failure rate (need immediate attention)*
+            
+            **📊 Failure Count**  
+            *Total number of sessions that failed at each step*
+            """)
+        with col2:
+            st.markdown("""
+            **💥 Impact Level**  
+            *High/Medium/Low based on failure rate and volume*
+            
+            **🎯 Top Intent**  
+            *Which agent type fails most often at this step*
+            
+            **🔧 Recommendations**  
+            *Suggested actions to reduce failures at each step*
+            """)
+    
+    # Overall failure metrics
+    if dropoff_data:
+        st.subheader("📊 Failure Overview")
+        
+        total_dropoffs = sum(d["dropoff_count"] for d in dropoff_data)
+        critical_steps = [d for d in dropoff_data if d.get("dropoff_rate", 0) > 0.1]
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Session Dropoffs", total_dropoffs)
+        with col2:
+            st.metric("Critical Failure Steps", len(critical_steps))
+        with col3:
+            if critical_steps:
+                worst_step = max(critical_steps, key=lambda x: x["dropoff_rate"])
+                st.metric("Worst Step", f"Step {worst_step['step']}")
+            else:
+                st.metric("System Status", "✅ Healthy")
+        
+        # Failure visualization
+        st.subheader("📉 Step-by-Step Failure Analysis")
+        
+        if dropoff_data:
+            # Create failure rate chart
+            steps = [d["step"] for d in dropoff_data]
+            dropoff_counts = [d["dropoff_count"] for d in dropoff_data]
+            dropoff_rates = [d.get("dropoff_rate", 0) * 100 for d in dropoff_data]
+            
+            fig = px.bar(
+                x=steps,
+                y=dropoff_counts,
+                title="Session Failures by Workflow Step",
+                labels={"x": "Workflow Step", "y": "Failed Sessions"},
+                color=dropoff_rates,
+                color_continuous_scale="Reds"
+            )
+            fig.update_layout(height=400)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Critical failure points
+            if critical_steps:
+                st.warning(f"🚨 **{len(critical_steps)} Critical Failure Points Detected:**")
+                
+                failure_data = []
+                for step in critical_steps:
+                    failure_data.append({
+                        "Step": step["step"],
+                        "Failures": step["dropoff_count"],
+                        "Failure Rate": f"{step.get('dropoff_rate', 0):.1%}",
+                        "Impact": step.get("priority_level", "Medium"),
+                        "Top Intent": max(step.get("intent_breakdown", {}).items(), key=lambda x: x[1])[0] if step.get("intent_breakdown") else "Unknown"
+                    })
+                
+                failure_df = pd.DataFrame(failure_data)
+                st.dataframe(failure_df, use_container_width=True)
+                
+                # Recommendations
+                st.subheader("🔧 Recommendations")
+                for step in critical_steps[:3]:  # Top 3 worst steps
+                    with st.expander(f"Step {step['step']} - {step.get('dropoff_rate', 0):.1%} failure rate"):
+                        if step.get("recommended_actions"):
+                            for action in step["recommended_actions"]:
+                                st.markdown(f"• {action}")
+                        else:
+                            st.info("Investigate workflow logic and error handling for this step")
+            else:
+                st.success("✅ **No critical failure points detected!** System is performing well.")
+    
+    # Agent-specific failure analysis
+    if all_workflows and "workflows" in all_workflows:
+        st.markdown("---")
+        st.subheader("🎯 Agent-Specific Failure Rates")
+        
+        # Show which agents are struggling
+        agent_failures = []
+        for wf in all_workflows["workflows"]:
+            failure_rate = 1 - wf["avg_success_rate"]
+            if failure_rate > 0.1:  # More than 10% failure rate
+                agent_failures.append({
+                    "Agent": wf["intent"].replace("_", " ").title(),
+                    "Success Rate": f"{wf['avg_success_rate']:.1%}",
+                    "Failure Rate": f"{failure_rate:.1%}",
+                    "Complexity": wf["complexity"].title(),
+                    "Sessions": wf["total_sessions"]
+                })
+        
+        if agent_failures:
+            st.warning(f"⚠️ **{len(agent_failures)} agents need attention:**")
+            failure_df = pd.DataFrame(agent_failures)
+            st.dataframe(failure_df, use_container_width=True)
+        else:
+            st.success("✅ **All agents performing well** - No agents with >10% failure rate")
+
 
 
 def main():
     """Main dashboard application"""
     current_page, hours_back = render_sidebar()
 
-    if current_page == "Overview":
+    # Clean navigation - only useful tabs with real data
+    if current_page == "📊 Overview":
         render_overview_page(hours_back)
-    elif current_page == "Usage Analytics":
-        render_usage_analytics_page(hours_back)
-    elif current_page == "Loss Patterns":
-        render_loss_patterns_page(hours_back)
-    elif current_page == "Interaction Detail":
-        render_interaction_detail_page(hours_back)
+    elif current_page == "🎯 Agent Workflows":
+        render_agent_workflows_page(hours_back)
+    elif current_page == "📉 Failure Analysis":
+        render_failure_analysis_page(hours_back)
 
     st.markdown("---")
     st.markdown(

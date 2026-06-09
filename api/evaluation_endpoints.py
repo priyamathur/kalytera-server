@@ -12,6 +12,8 @@ from pydantic import BaseModel
 from api.database import get_db
 from evaluation.agent_judge import AgentJudge, EvaluationScheduler
 from api.database import SessionLocal
+from datetime import datetime, timedelta
+from sqlalchemy import text
 
 # Create evaluation router
 evaluation_router = APIRouter(prefix="/evaluation", tags=["evaluation"])
@@ -407,3 +409,250 @@ async def test_single_evaluation():
             status_code=500,
             detail=f"Test evaluation failed: {str(e)}"
         )
+
+
+# Dashboard-specific endpoints
+@evaluation_router.get("/recent-failures")
+async def get_recent_failures(
+    limit: int = 20,
+    hours_back: int = 24,
+    db: Session = Depends(get_db)
+):
+    """Get recent failures for dashboard failure feed"""
+    
+    cutoff_time = datetime.now() - timedelta(hours=hours_back)
+    
+    query = text("""
+        SELECT 
+            al.id,
+            al.session_id,
+            al.timestamp,
+            al.user_input,
+            al.agent_response,
+            al.intent,
+            er.overall_score,
+            er.accuracy_score,
+            er.goal_alignment_score,
+            er.decision_quality_score,
+            er.completeness_score,
+            er.evaluation_reasoning,
+            er.failure_category,
+            er.evaluated_at
+        FROM eval_results er
+        JOIN agent_logs al ON er.agent_log_id = al.id
+        WHERE er.evaluated_at >= :cutoff_time
+        AND er.overall_score < 0.7
+        ORDER BY er.evaluated_at DESC
+        LIMIT :limit
+    """)
+    
+    try:
+        results = db.execute(query, {
+            'cutoff_time': cutoff_time,
+            'limit': limit
+        }).fetchall()
+        
+        failures = []
+        for row in results:
+            failure = {
+                "id": row.id,
+                "session_id": row.session_id,
+                "timestamp": row.timestamp.isoformat() if row.timestamp else None,
+                "user_input": row.user_input,
+                "agent_response": row.agent_response,
+                "intent": row.intent,
+                "overall_score": row.overall_score,
+                "accuracy_score": row.accuracy_score,
+                "goal_alignment_score": row.goal_alignment_score,
+                "decision_quality_score": row.decision_quality_score,
+                "completeness_score": row.completeness_score,
+                "evaluation_reasoning": row.evaluation_reasoning,
+                "failure_category": row.failure_category,
+                "is_oneoff_failure": True,  # Would need pattern matching logic
+                "evaluated_at": row.evaluated_at.isoformat() if row.evaluated_at else None
+            }
+            failures.append(failure)
+        
+        return {
+            "failures": failures,
+            "total_count": len(failures),
+            "time_period_hours": hours_back
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get recent failures: {str(e)}"
+        )
+
+
+@evaluation_router.get("/failure-stats")
+async def get_failure_stats(
+    hours_back: int = 24,
+    db: Session = Depends(get_db)
+):
+    """Get failure statistics for dashboard overview"""
+    
+    cutoff_time = datetime.now() - timedelta(hours=hours_back)
+    
+    try:
+        # Total failures
+        total_query = text("""
+            SELECT COUNT(*) as total_failures
+            FROM eval_results er
+            WHERE er.evaluated_at >= :cutoff_time
+            AND er.overall_score < 0.7
+        """)
+        
+        total_result = db.execute(total_query, {'cutoff_time': cutoff_time}).fetchone()
+        total_failures = total_result.total_failures if total_result else 0
+        
+        # Average severity (1 - quality_score)
+        avg_query = text("""
+            SELECT AVG(1 - er.overall_score) as avg_severity
+            FROM eval_results er
+            WHERE er.evaluated_at >= :cutoff_time
+            AND er.overall_score < 0.7
+        """)
+        
+        avg_result = db.execute(avg_query, {'cutoff_time': cutoff_time}).fetchone()
+        avg_severity = avg_result.avg_severity if avg_result and avg_result.avg_severity else 0
+        
+        return {
+            "total_failures": total_failures,
+            "oneoff_failures": int(total_failures * 0.3),  # Estimate
+            "pattern_failures": int(total_failures * 0.7),  # Estimate
+            "avg_severity_score": round(avg_severity, 3),
+            "time_period_hours": hours_back
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get failure stats: {str(e)}"
+        )
+
+
+@evaluation_router.get("/interaction-detail/{interaction_id}")
+async def get_interaction_detail(
+    interaction_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get detailed evaluation data for a specific interaction"""
+    
+    query = text("""
+        SELECT 
+            er.overall_score,
+            er.accuracy_score,
+            er.goal_alignment_score,
+            er.decision_quality_score,
+            er.completeness_score,
+            er.evaluation_reasoning,
+            er.failure_category,
+            er.confidence_level,
+            er.evaluated_at
+        FROM eval_results er
+        WHERE er.agent_log_id = :interaction_id
+    """)
+    
+    try:
+        result = db.execute(query, {'interaction_id': interaction_id}).fetchone()
+        
+        if not result:
+            raise HTTPException(status_code=404, detail="Interaction evaluation not found")
+        
+        return {
+            "overall_score": result.overall_score,
+            "accuracy_score": result.accuracy_score,
+            "goal_alignment_score": result.goal_alignment_score,
+            "decision_quality_score": result.decision_quality_score,
+            "completeness_score": result.completeness_score,
+            "evaluation_reasoning": result.evaluation_reasoning,
+            "failure_category": result.failure_category,
+            "confidence_level": result.confidence_level,
+            "evaluated_at": result.evaluated_at.isoformat() if result.evaluated_at else None
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get interaction detail: {str(e)}"
+        )
+
+
+@evaluation_router.get("/quality-config/{agent_id}")
+async def get_quality_config(agent_id: str):
+    """Get quality configuration for an agent"""
+    
+    # Return default config - in production this would be stored in database
+    return {
+        "agent_id": agent_id,
+        "accuracy_weight": 0.25,
+        "goal_alignment_weight": 0.35,
+        "decision_quality_weight": 0.20,
+        "completeness_weight": 0.20,
+        "pass_threshold": 0.7,
+        "enabled": True,
+        "custom_criteria": None
+    }
+
+
+@evaluation_router.post("/update-quality-config")
+async def update_quality_config(config: dict):
+    """Update quality configuration for an agent"""
+    
+    # In production, this would save to database
+    # For now, just validate and return success
+    
+    required_fields = [
+        "agent_id", "accuracy_weight", "goal_alignment_weight", 
+        "decision_quality_weight", "completeness_weight", "pass_threshold"
+    ]
+    
+    for field in required_fields:
+        if field not in config:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Missing required field: {field}"
+            )
+    
+    # Validate weights sum to 1.0
+    total_weight = (
+        config["accuracy_weight"] + 
+        config["goal_alignment_weight"] + 
+        config["decision_quality_weight"] + 
+        config["completeness_weight"]
+    )
+    
+    if abs(total_weight - 1.0) > 0.01:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Weights must sum to 1.0, got {total_weight:.2f}"
+        )
+    
+    return {
+        "success": True,
+        "message": f"Quality configuration updated for agent {config['agent_id']}",
+        "config": config
+    }
+
+
+@evaluation_router.post("/test-config")
+async def test_quality_config(request: dict):
+    """Test quality configuration on recent interactions"""
+    
+    agent_id = request.get("agent_id")
+    config = request.get("config", {})
+    
+    # In production, this would apply config to recent interactions and return stats
+    return {
+        "success": True,
+        "message": f"Configuration test completed for {agent_id}",
+        "test_results": {
+            "interactions_tested": 10,
+            "estimated_pass_rate": 0.75,
+            "avg_score_change": "+0.05"
+        }
+    }

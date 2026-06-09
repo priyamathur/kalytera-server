@@ -259,7 +259,6 @@ async def get_pattern_trends(
     """
     
     from sqlalchemy import text
-    from datetime import datetime, timedelta
     
     try:
         # Get pattern trends from stored loss_patterns table

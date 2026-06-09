@@ -7,7 +7,6 @@ Provides high-accuracy intent classification for session routing
 import os
 from typing import List, Dict, Tuple, Optional
 from anthropic import Anthropic
-from datetime import datetime
 import json
 import asyncio
 from dataclasses import dataclass
@@ -25,6 +24,15 @@ class IntentClassification:
 
 class IntentClassifier:
     """Claude-powered intent classifier for agent conversations"""
+    
+    # Model fallback chain - try newer models first, fall back to older/smaller ones
+    CLAUDE_MODELS = [
+        "claude-3-5-sonnet-20241022",  # Latest Sonnet
+        "claude-3-5-haiku-20241022",   # Latest Haiku  
+        "claude-3-opus-20240229",      # Opus (most capable)
+        "claude-3-sonnet-20240229",    # Original Sonnet
+        "claude-3-haiku-20240307",     # Stable Haiku (fastest)
+    ]
     
     # Standard intent taxonomy - can be customized per deployment
     INTENT_CATEGORIES = {
@@ -67,6 +75,53 @@ class IntentClassifier:
             raise ValueError("ANTHROPIC_API_KEY environment variable not set or is a placeholder")
         self.client = Anthropic(api_key=api_key)
     
+    async def classify_intent(self, conversation_text: str) -> Dict[str, str]:
+        """
+        Simple intent classification interface for trace endpoint
+        
+        Args:
+            conversation_text: Formatted conversation string
+            
+        Returns:
+            Dict with intent and confidence
+        """
+        # Parse conversation into interactions
+        interactions = self._parse_conversation_text(conversation_text)
+        
+        # Get full classification
+        classification = await self.classify_session_intent(interactions)
+        
+        return {
+            "intent": classification.primary_intent,
+            "confidence": classification.confidence,
+            "reasoning": classification.reasoning
+        }
+
+    def _parse_conversation_text(self, conversation_text: str) -> List[Dict]:
+        """Parse conversation text back into interaction format"""
+        interactions = []
+        lines = conversation_text.strip().split('\n')
+        
+        current_user_input = ""
+        current_agent_response = ""
+        
+        for line in lines:
+            line = line.strip()
+            if line.startswith("User:"):
+                current_user_input = line[5:].strip()
+            elif line.startswith("Agent:"):
+                current_agent_response = line[6:].strip()
+                # When we have both user and agent, create interaction
+                if current_user_input and current_agent_response:
+                    interactions.append({
+                        "user_input": current_user_input,
+                        "agent_response": current_agent_response
+                    })
+                    current_user_input = ""
+                    current_agent_response = ""
+        
+        return interactions
+
     async def classify_session_intent(self, interactions: List[Dict]) -> IntentClassification:
         """
         Classify intent based on first 2 interactions of a session
@@ -96,26 +151,32 @@ class IntentClassifier:
         # Build classification prompt
         prompt = self._build_classification_prompt(conversation_text)
         
-        try:
-            # Get classification from Claude
-            response = self.client.messages.create(
-                model="claude-3-sonnet-20240229",
-                max_tokens=1000,
-                temperature=0.1,  # Low temperature for consistent classification
-                messages=[
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            
-            # Parse Claude's response
-            classification = self._parse_classification_response(response.content[0].text)
-            
-            return classification
-            
-        except Exception as e:
-            print(f"⚠️  Intent classification failed: {e}")
-            # Fallback to rule-based classification
-            return self._fallback_classification(analysis_interactions)
+        # Try multiple Claude models in order of preference
+        for model_name in self.CLAUDE_MODELS:
+            try:
+                # Get classification from Claude
+                response = self.client.messages.create(
+                    model=model_name,
+                    max_tokens=1000,
+                    temperature=0.1,  # Low temperature for consistent classification
+                    messages=[
+                        {"role": "user", "content": prompt}
+                    ]
+                )
+                
+                # Parse Claude's response
+                classification = self._parse_classification_response(response.content[0].text)
+                
+                print(f"✅ Intent classification successful with {model_name}")
+                return classification
+                
+            except Exception as e:
+                print(f"⚠️  Model {model_name} failed: {e}")
+                continue  # Try next model
+        
+        # If all Claude models fail, use rule-based fallback as last resort
+        print(f"⚠️  All Claude models failed, using rule-based fallback")
+        return self._fallback_classification(analysis_interactions)
     
     def _format_conversation_for_analysis(self, interactions: List[Dict]) -> str:
         """Format interactions into readable conversation for Claude"""
@@ -232,7 +293,7 @@ Respond only with valid JSON."""
         )
     
     def _fallback_classification(self, interactions: List[Dict]) -> IntentClassification:
-        """Rule-based fallback when Claude API fails"""
+        """Rule-based fallback when all Claude models fail - last resort only"""
         
         # Combine all user inputs for analysis
         all_text = " ".join([
@@ -274,7 +335,7 @@ Respond only with valid JSON."""
             primary_intent=primary_intent,
             confidence=confidence,
             secondary_intents=secondary_intents,
-            reasoning=f"Rule-based fallback classification based on keyword matching",
+            reasoning="Rule-based fallback classification based on keyword matching",
             workflow_patterns=["keyword_based"]
         )
     

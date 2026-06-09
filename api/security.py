@@ -6,9 +6,6 @@ Implements secure key handling and token usage optimization
 import os
 import hashlib
 from typing import Optional
-from functools import lru_cache
-import asyncio
-import time
 from datetime import datetime, timedelta
 from collections import defaultdict
 import logging

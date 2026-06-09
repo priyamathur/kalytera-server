@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime
 import subprocess
-import os
 
 from api.database import get_db, engine
 from db.models import Base

@@ -1,21 +1,18 @@
 """
 FastAPI ingest endpoints for AgentIQ
-POST /ingest/json and /ingest/csv for real-time agent log ingestion
+POST /api/trace for real-time agent interaction tracing
+Framework-agnostic webhook receiver that never blocks agents
 """
 
 from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 from typing import List, Dict, Any, Optional, Union
-import json
-import io
 from datetime import datetime
-import asyncio
 from sqlalchemy.orm import Session
-from ingestion.parsers import LogParser, ParsedInteraction
-from ingestion.session_builder import SessionBuilder, BatchSessionBuilder
+import logging
+from ingestion.session_builder import SessionBuilder
 from evaluation.intent_classifier import IntentClassifier
-from db.models import Base, SessionSummary, AgentLog
 from api.database import get_db, SessionLocal
 
 # Initialize services
@@ -27,7 +24,6 @@ except Exception as e:
     print(f"⚠️  Intent classifier unavailable: {e}")
 
 session_builder = SessionBuilder(intent_classifier)
-batch_builder = BatchSessionBuilder(session_builder)
 
 # FastAPI app
 app = FastAPI(
@@ -60,177 +56,182 @@ app.add_middleware(
 # Database dependency imported from api.database
 
 
-# Request models
-class JSONIngestRequest(BaseModel):
-    """Request model for JSON log ingestion"""
-    data: Union[List[Dict[str, Any]], Dict[str, Any]] = Field(
-        ..., description="JSON log data - single object or array of objects"
-    )
-    source: Optional[str] = Field(
-        "api", description="Source system identifier"
-    )
-    format_hint: Optional[str] = Field(
-        None, description="Format hint: 'langsmith', 'generic', or auto-detect"
-    )
-    
-    @validator('data')
-    def validate_data(cls, v):
-        if not v:
-            raise ValueError("Data cannot be empty")
-        return v
+# Real-time trace models
+class TraceRequest(BaseModel):
+    """Real-time agent interaction trace request"""
+    session_id: str = Field(..., description="Unique session identifier")
+    timestamp: str = Field(..., description="ISO timestamp of the interaction")
+    user_input: str = Field(..., description="User's message/query")
+    agent_response: str = Field(..., description="Agent's response")
+    response_time_ms: int = Field(..., description="Response time in milliseconds")
+    workflow_step: Optional[int] = Field(1, description="Step in conversation workflow")
+    tool_calls: Optional[str] = Field(None, description="JSON string of tools used")
+    tokens_used: Optional[int] = Field(None, description="Number of tokens consumed")
+    error_occurred: Optional[bool] = Field(False, description="Whether an error occurred")
+    error_message: Optional[str] = Field(None, description="Error message if error occurred")
 
-
-class IngestResponse(BaseModel):
-    """Response model for ingestion endpoints"""
+class TraceResponse(BaseModel):
+    """Real-time trace response"""
     success: bool
     message: str
-    sessions_processed: int
-    interactions_processed: int
-    errors: List[str]
     processing_time_ms: int
-    session_ids: List[str]
+
+# Batch processing models and functions removed - AgentIQ is real-time only
 
 
-class IngestStatus(BaseModel):
-    """Status model for background processing"""
-    task_id: str
-    status: str  # "processing", "completed", "failed"
-    progress: float  # 0.0 - 1.0
-    message: str
-    sessions_processed: int = 0
-    interactions_processed: int = 0
-
-
-# In-memory task tracking (use Redis in production)
-background_tasks_status = {}
-
-
-# Helper functions
-async def process_parsed_interactions(
-    interactions: List[ParsedInteraction],
-    db: Session,
-    source: str
-) -> IngestResponse:
-    """Process parsed interactions into database"""
+# Real-time trace endpoint
+@app.post("/trace", response_model=TraceResponse)
+async def trace_interaction(
+    trace: TraceRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Real-time agent interaction trace webhook
     
+    Framework-agnostic endpoint that:
+    - Never blocks (returns immediately)
+    - Never raises exceptions to callers
+    - Processes traces asynchronously
+    - Builds sessions in real-time
+    
+    This is the primary entry point for production agents.
+    """
     start_time = datetime.now()
-    errors = []
     
     try:
-        # Build sessions from interactions
-        session_summaries, agent_logs = await batch_builder.build_sessions_from_parsed_data(interactions)
+        # Convert trace request to database models
+        from datetime import datetime as dt
+        from db.models import AgentLog
+        import uuid
         
-        # Insert session summaries
-        for summary in session_summaries:
-            db.add(summary)
+        # Parse timestamp
+        try:
+            timestamp = dt.fromisoformat(trace.timestamp.replace('Z', '+00:00'))
+        except:
+            timestamp = datetime.now()
         
-        # Insert agent logs
-        for log in agent_logs:
-            db.add(log)
+        # Create AgentLog entry
+        agent_log = AgentLog(
+            id=str(uuid.uuid4()),
+            session_id=trace.session_id,
+            timestamp=timestamp,
+            user_input=trace.user_input,
+            agent_response=trace.agent_response,
+            workflow_step=trace.workflow_step,
+            tool_calls=trace.tool_calls,
+            response_time_ms=trace.response_time_ms,
+            tokens_used=trace.tokens_used,
+            error_occurred=trace.error_occurred,
+            error_message=trace.error_message
+        )
         
-        # Commit transaction
+        # Add to database immediately (fast insert)
+        db.add(agent_log)
         db.commit()
         
-        # Calculate processing time
+        # Schedule background session building and intent classification
+        background_tasks.add_task(
+            process_trace_background,
+            trace.session_id,
+            agent_log.id
+        )
+        
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
         
-        return IngestResponse(
+        return TraceResponse(
             success=True,
-            message=f"Successfully ingested {len(session_summaries)} sessions from {source}",
-            sessions_processed=len(session_summaries),
-            interactions_processed=len(agent_logs),
-            errors=errors,
-            processing_time_ms=processing_time,
-            session_ids=[s.id for s in session_summaries]
+            message="Trace received and queued for processing",
+            processing_time_ms=processing_time
         )
         
     except Exception as e:
-        db.rollback()
-        error_msg = f"Database insertion failed: {str(e)}"
-        errors.append(error_msg)
+        # Never raise exceptions to the calling agent
+        # Log locally and return success to avoid breaking agent
+        logger = logging.getLogger("agentiq.trace")
+        logger.error(f"Trace processing failed for session {trace.session_id}: {e}")
         
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
         
-        return IngestResponse(
-            success=False,
-            message=error_msg,
-            sessions_processed=0,
-            interactions_processed=0,
-            errors=errors,
-            processing_time_ms=processing_time,
-            session_ids=[]
+        # Still return success to avoid blocking the agent
+        return TraceResponse(
+            success=True,  # Always return success to agent
+            message="Trace received",
+            processing_time_ms=processing_time
         )
 
-
-async def background_ingest_task(
-    task_id: str,
-    interactions: List[ParsedInteraction],
-    source: str
-):
-    """Background task for processing large ingestion jobs"""
-    
-    background_tasks_status[task_id] = IngestStatus(
-        task_id=task_id,
-        status="processing",
-        progress=0.0,
-        message="Starting ingestion..."
-    )
-    
+async def process_trace_background(session_id: str, agent_log_id: str):
+    """
+    Background processing for trace events:
+    1. Classify intent (first 2 interactions)
+    2. Update session summary in real-time
+    """
     try:
-        # Process in chunks for progress tracking
-        chunk_size = 50
-        total_sessions = len(set(i.session_id for i in interactions))
-        processed_sessions = 0
-        
         db = SessionLocal()
         
-        for i in range(0, len(interactions), chunk_size):
-            chunk = interactions[i:i + chunk_size]
-            
-            # Process chunk
-            session_summaries, agent_logs = await batch_builder.build_sessions_from_parsed_data(chunk)
-            
-            # Insert to database
-            for summary in session_summaries:
-                db.add(summary)
-            for log in agent_logs:
-                db.add(log)
-            
-            db.commit()
-            
-            processed_sessions += len(session_summaries)
-            progress = min(1.0, processed_sessions / total_sessions)
-            
-            # Update status
-            background_tasks_status[task_id] = IngestStatus(
-                task_id=task_id,
-                status="processing",
-                progress=progress,
-                message=f"Processed {processed_sessions}/{total_sessions} sessions",
-                sessions_processed=processed_sessions,
-                interactions_processed=len(agent_logs)
-            )
+        # Check if this is one of the first 2 interactions for intent classification
+        from sqlalchemy import text
         
-        # Mark completed
-        background_tasks_status[task_id] = IngestStatus(
-            task_id=task_id,
-            status="completed",
-            progress=1.0,
-            message=f"Successfully processed {processed_sessions} sessions",
-            sessions_processed=processed_sessions,
-            interactions_processed=len(interactions)
-        )
+        interaction_count_query = text("""
+            SELECT COUNT(*) FROM agent_logs 
+            WHERE session_id = :session_id
+        """)
         
+        result = db.execute(interaction_count_query, {"session_id": session_id})
+        interaction_count = result.scalar()
+        
+        # Classify intent on first 2 interactions
+        if interaction_count <= 2 and intent_classifier:
+            try:
+                # Get recent interactions for this session
+                recent_interactions_query = text("""
+                    SELECT user_input, agent_response 
+                    FROM agent_logs 
+                    WHERE session_id = :session_id 
+                    ORDER BY timestamp ASC 
+                    LIMIT 2
+                """)
+                
+                interactions = db.execute(recent_interactions_query, {"session_id": session_id}).fetchall()
+                
+                # Build conversation context for intent classification
+                conversation_text = []
+                for user_input, agent_response in interactions:
+                    conversation_text.append(f"User: {user_input}")
+                    conversation_text.append(f"Agent: {agent_response}")
+                
+                conversation = "\n".join(conversation_text)
+                
+                # Classify intent
+                intent_result = await intent_classifier.classify_intent(conversation)
+                
+                # Update all logs in this session with the classified intent
+                if intent_result and intent_result.get('intent'):
+                    update_intent_query = text("""
+                        UPDATE agent_logs 
+                        SET intent = :intent 
+                        WHERE session_id = :session_id 
+                        AND intent IS NULL
+                    """)
+                    
+                    db.execute(update_intent_query, {
+                        "intent": intent_result['intent'],
+                        "session_id": session_id
+                    })
+                    
+            except Exception as e:
+                logger = logging.getLogger("agentiq.background")
+                logger.error(f"Intent classification failed for session {session_id}: {e}")
+        
+        # Update session summary
+        await session_builder.update_session_summary(session_id, db)
+        
+        db.commit()
         db.close()
         
     except Exception as e:
-        background_tasks_status[task_id] = IngestStatus(
-            task_id=task_id,
-            status="failed",
-            progress=0.0,
-            message=f"Processing failed: {str(e)}"
-        )
-
+        logger = logging.getLogger("agentiq.background")
+        logger.error(f"Background trace processing failed for session {session_id}: {e}")
 
 # Endpoints
 @app.get("/")
@@ -263,254 +264,117 @@ async def health_check():
     }
 
 
-@app.post("/ingest/json", response_model=IngestResponse)
-async def ingest_json_logs(
-    request: JSONIngestRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
-):
-    """
-    Ingest JSON format agent logs
-    
-    Supports:
-    - Generic JSON logs with flexible field mapping
-    - LangSmith trace exports
-    - Custom agent framework exports
-    """
-    
-    try:
-        # Determine format
-        format_type = request.format_hint or "auto"
-        if format_type == "auto":
-            # Auto-detect based on data structure
-            if isinstance(request.data, dict) and "runs" in request.data:
-                format_type = "langsmith"
-            else:
-                format_type = "json"
-        
-        # Parse interactions
-        interactions = LogParser.parse(request.data, format_type)
-        
-        if not interactions:
-            raise HTTPException(
-                status_code=400,
-                detail="No valid interactions found in provided data"
-            )
-        
-        # For large datasets, process in background
-        if len(interactions) > 100:
-            task_id = f"ingest_{datetime.now().timestamp()}"
-            background_tasks.add_task(
-                background_ingest_task,
-                task_id,
-                interactions,
-                request.source
-            )
-            
-            return IngestResponse(
-                success=True,
-                message=f"Large dataset queued for background processing. Task ID: {task_id}",
-                sessions_processed=0,
-                interactions_processed=len(interactions),
-                errors=[],
-                processing_time_ms=0,
-                session_ids=[]
-            )
-        
-        # Process immediately for smaller datasets
-        return await process_parsed_interactions(interactions, db, request.source)
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"JSON ingestion failed: {str(e)}"
-        )
+# BATCH INGESTION ENDPOINTS REMOVED
+# AgentIQ runs alongside agents in real-time, not as a batch log processor
+# Use the /api/trace endpoint for real-time agent interaction tracing
+
+# @app.post("/ingest/json") - REMOVED: Use /api/trace instead
+# @app.post("/ingest/csv") - REMOVED: Use /api/trace instead
+# 
+# AgentIQ is designed for real-time agent monitoring, not log analysis.
+# If you need to import historical data, use the SDK in replay mode:
 
 
-@app.post("/ingest/csv", response_model=IngestResponse)
-async def ingest_csv_logs(
-    file: UploadFile = File(...),
-    source: str = "csv_upload",
-    background_tasks: BackgroundTasks = None,
-    db: Session = Depends(get_db)
-):
-    """
-    Ingest CSV format agent logs
-    
-    Automatically detects column mappings for:
-    - session_id, timestamp, user_input, agent_response
-    - tool_calls, response_time_ms, tokens_used
-    - error information and metadata
-    """
-    
-    # Validate file type
-    if not file.filename.endswith('.csv'):
-        raise HTTPException(
-            status_code=400,
-            detail="File must be a CSV (.csv extension required)"
-        )
-    
-    try:
-        # Read file content
-        content = await file.read()
-        csv_string = content.decode('utf-8')
-        
-        # Parse CSV
-        interactions = LogParser.parse(csv_string, "csv")
-        
-        if not interactions:
-            raise HTTPException(
-                status_code=400,
-                detail="No valid interactions found in CSV file"
-            )
-        
-        # For large CSV files, process in background
-        if len(interactions) > 100:
-            task_id = f"csv_ingest_{datetime.now().timestamp()}"
-            background_tasks.add_task(
-                background_ingest_task,
-                task_id,
-                interactions,
-                source
-            )
-            
-            return IngestResponse(
-                success=True,
-                message=f"Large CSV queued for background processing. Task ID: {task_id}",
-                sessions_processed=0,
-                interactions_processed=len(interactions),
-                errors=[],
-                processing_time_ms=0,
-                session_ids=[]
-            )
-        
-        # Process immediately for smaller files
-        return await process_parsed_interactions(interactions, db, source)
-        
-    except UnicodeDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail="CSV file encoding error. Please ensure file is UTF-8 encoded."
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"CSV ingestion failed: {str(e)}"
-        )
-
-
-@app.get("/ingest/status/{task_id}", response_model=IngestStatus)
-async def get_ingest_status(task_id: str):
-    """Get status of background ingestion task"""
-    
-    if task_id not in background_tasks_status:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Task {task_id} not found"
-        )
-    
-    return background_tasks_status[task_id]
-
-
-@app.get("/ingest/tasks")
-async def list_ingest_tasks():
-    """List all background ingestion tasks"""
-    return {
-        "tasks": list(background_tasks_status.keys()),
-        "status_counts": {
-            "processing": sum(1 for s in background_tasks_status.values() if s.status == "processing"),
-            "completed": sum(1 for s in background_tasks_status.values() if s.status == "completed"),
-            "failed": sum(1 for s in background_tasks_status.values() if s.status == "failed")
-        }
-    }
+# Batch task monitoring endpoints removed - not needed for real-time tracing
 
 
 # Testing endpoints
-@app.post("/ingest/test/langsmith")
-async def test_langsmith_ingestion(db: Session = Depends(get_db)):
-    """Test LangSmith format ingestion with sample data"""
+@app.post("/ingest/recent-logs")
+async def get_recent_logs(
+    request: Optional[Dict[str, Any]] = None,
+    db: Session = Depends(get_db)
+):
+    """Get recent agent logs for dashboard display"""
     
-    sample_langsmith_data = {
-        "id": "test-session-123",
-        "runs": [
-            {
-                "id": "run-1",
-                "name": "ChatOpenAI",
-                "run_type": "llm",
-                "start_time": "2024-01-01T10:00:00Z",
-                "end_time": "2024-01-01T10:00:02Z",
-                "inputs": {
-                    "messages": [
-                        {"type": "human", "content": "I need help with my billing"}
-                    ]
-                },
-                "outputs": {
-                    "content": "I'd be happy to help you with your billing question. Can you tell me more about the specific issue?"
-                },
-                "extra": {
-                    "usage": {"total_tokens": 45}
-                }
-            },
-            {
-                "id": "run-2", 
-                "name": "ChatOpenAI",
-                "run_type": "llm",
-                "start_time": "2024-01-01T10:01:00Z",
-                "end_time": "2024-01-01T10:01:01Z",
-                "inputs": {
-                    "messages": [
-                        {"type": "human", "content": "There's a charge I don't recognize on my account"}
-                    ]
-                },
-                "outputs": {
-                    "content": "Let me look up that charge for you. I can see the transaction details and help explain what it covers."
-                },
-                "extra": {
-                    "usage": {"total_tokens": 38}
-                }
+    limit = 1000
+    if request and "limit" in request:
+        limit = min(request["limit"], 5000)  # Max 5000 for performance
+    
+    try:
+        from sqlalchemy import text
+        
+        # Get recent logs directly from agent_logs
+        query = text("""
+            SELECT 
+                session_id,
+                timestamp,
+                user_input,
+                agent_response,
+                intent,
+                response_time_ms,
+                tool_calls,
+                workflow_step,
+                error_occurred
+            FROM agent_logs
+            WHERE timestamp >= NOW() - INTERVAL '7 days'
+            ORDER BY timestamp DESC
+            LIMIT :limit
+        """)
+        
+        result = db.execute(query, {"limit": limit}).fetchall()
+        
+        logs = []
+        for row in result:
+            log_dict = {
+                "session_id": row[0],
+                "timestamp": row[1].isoformat() if row[1] else None,
+                "user_input": row[2],
+                "agent_response": row[3],
+                "intent": row[4],
+                "response_time_ms": row[5],
+                "tool_calls": row[6],
+                "workflow_step": row[7],
+                "error_occurred": row[8]
             }
-        ]
-    }
-    
-    request = JSONIngestRequest(
-        data=sample_langsmith_data,
-        source="test_langsmith",
-        format_hint="langsmith"
-    )
-    
-    return await ingest_json_logs(request, None, db)
-
-
-@app.post("/ingest/test/generic")
-async def test_generic_json_ingestion(db: Session = Depends(get_db)):
-    """Test generic JSON format ingestion with sample data"""
-    
-    sample_data = [
-        {
-            "session_id": "test-session-456",
-            "timestamp": "2024-01-01T11:00:00Z",
-            "user_input": "I want to cancel my subscription",
-            "agent_response": "I can help you with cancelling your subscription. Let me pull up your account details.",
-            "response_time_ms": 1200,
-            "tokens_used": 32
-        },
-        {
-            "session_id": "test-session-456", 
-            "timestamp": "2024-01-01T11:00:30Z",
-            "user_input": "Yes, please cancel it immediately",
-            "agent_response": "I've successfully cancelled your subscription. You'll retain access until your current billing period ends on January 15th.",
-            "response_time_ms": 800,
-            "tokens_used": 28
+            logs.append(log_dict)
+        
+        return {
+            "success": True,
+            "logs": logs,
+            "count": len(logs),
+            "limit_applied": limit
         }
-    ]
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch recent logs: {str(e)}"
+        )
+
+
+@app.post("/trace/test")
+async def test_trace_endpoint(db: Session = Depends(get_db)):
+    """Test the real-time trace endpoint with sample data"""
     
-    request = JSONIngestRequest(
-        data=sample_data,
-        source="test_generic",
-        format_hint="json"
+    from datetime import datetime
+    import uuid
+    
+    test_session_id = str(uuid.uuid4())
+    
+    # Simulate a real-time trace call
+    sample_trace = TraceRequest(
+        session_id=test_session_id,
+        timestamp=datetime.now().isoformat(),
+        user_input="I need help with my billing",
+        agent_response="I'd be happy to help you with your billing question. Let me look up your account details.",
+        response_time_ms=1200,
+        workflow_step=1,
+        tool_calls='["billing_api", "account_lookup"]',
+        tokens_used=45,
+        error_occurred=False
     )
     
-    return await ingest_json_logs(request, None, db)
+    # Call the trace endpoint
+    from fastapi import BackgroundTasks
+    background_tasks = BackgroundTasks()
+    
+    response = await trace_interaction(sample_trace, background_tasks, db)
+    
+    return {
+        "message": "Real-time trace test completed",
+        "test_session_id": test_session_id,
+        "trace_response": response
+    }
 
 
 if __name__ == "__main__":

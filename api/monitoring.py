@@ -3,12 +3,10 @@ API monitoring and usage tracking endpoints for AgentIQ
 Provides real-time monitoring of token usage and security status
 """
 
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
+from fastapi import APIRouter
 from typing import Dict, Any
 from datetime import datetime
 
-from api.database import get_db
 from api.security import get_usage_stats, check_api_health
 
 monitoring_router = APIRouter(prefix="/api/security", tags=["monitoring"])

@@ -4,7 +4,9 @@
 ---
 
 ## What We Are Building
-AgentIQ runs alongside enterprise AI agents in production. It captures every interaction via a lightweight SDK, evaluates it immediately with LLM judges, surfaces loss patterns with root cause analysis, and delivers structured evaluation data for developer RL loops.
+AgentIQ runs alongside enterprise AI agents in production. It captures every interaction via a lightweight SDK, evaluates every step in real time with LLM judges, gives every interaction a quality score, surfaces one-off and repeating failures with root cause, and provides a fleet view so enterprises can monitor quality across all their agents at once.
+
+**The problem we solve:** Enterprise AI agents run complex multi-step workflows. Unlike traditional software, agents think and act differently in every interaction — standard quality checks aren't built for that. Existing eval and observability tools use sampled data and after-the-fact analysis. They miss failures that happen mid-workflow, including one-off catastrophic failures.
 
 **The product constraint that overrides every other decision:**
 The SDK trace call must never block, never raise, and never slow down the agent it is observing. If AgentIQ is down, the agent keeps running.
@@ -111,8 +113,18 @@ mypy . --strict
 |---|---|---|
 | AgentLog | SDK trace call only | Anything else |
 | SessionSummary | session_builder.py on session end | External code |
-| EvalResult | judge.py background job | Synchronous paths |
+| EvalResult | judge.py background job — includes quality_score 0–100 and dimension scores | Synchronous paths |
 | LossPattern | analyzer.py hourly job | External code |
+
+**Quality score:** Every EvalResult has a `quality_score` (0–100) computed as a weighted average of four dimensions: accuracy, goal_alignment, decision_quality, completeness. Weights are configurable per agent via `AgentQualityConfig` table. Default weights are equal (0.25 each). Developers adjust weights through the dashboard or API. Custom criteria can be added as additional judge prompt rules per agent.
+
+## Scoring Architecture — V1 and V2
+
+**V1 — Fast frontier model:** Use Claude Haiku as the judge. Latency under 2 seconds per interaction. Cheap enough to run on every interaction. Good enough to collect confirmed failure labels from developers.
+
+**V2 — Distilled proprietary judge:** Every failure a developer confirms in the dashboard is a training example. Once enough labeled examples exist (target: 5,000+ confirmed failures across industries), distill a 3B parameter AgentIQ judge from those examples. Fine-tuned on the seven failure taxonomy, four quality dimensions, and industry-specific standards. This model runs in milliseconds, costs a fraction of an API call, and is more accurate on agent failures than any general-purpose model. It is AgentIQ's proprietary asset — impossible to replicate without the dataset.
+
+**Do not train a classifier.** Classifiers work for narrow, fixed-label tasks. AgentIQ needs multi-dimensional quality scoring with explanations across different agent types. That requires generative reasoning capability, not a classifier.
 
 Full schemas: @docs/ARCHITECTURE.md
 

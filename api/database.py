@@ -3,7 +3,7 @@ Shared database configuration and dependency
 """
 
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 import os
 from dotenv import load_dotenv
 
@@ -41,7 +41,7 @@ def initialize_database():
             tables = result.fetchall()
             if tables:
                 print("✅ Database tables created/verified successfully")
-                print(f"📋 Tables available: agent_logs, session_summaries, eval_results, loss_patterns")
+                print("📋 Tables available: agent_logs, session_summaries, eval_results, loss_patterns")
                 return True
             else:
                 print("⚠️  Tables not found after creation attempt")

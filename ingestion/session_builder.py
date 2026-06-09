@@ -4,7 +4,6 @@ Aggregates interactions into sessions with intent, workflow_path, drop_off_step,
 """
 
 from typing import List, Dict, Optional, Tuple, Any
-from datetime import datetime, timezone
 import statistics
 import json
 from dataclasses import dataclass
@@ -125,6 +124,155 @@ class SessionBuilder:
         )
         
         return session_summary, agent_logs
+    
+    async def update_session_summary(self, session_id: str, db) -> None:
+        """
+        Update or create session summary in real-time as new interactions arrive
+        
+        Args:
+            session_id: Session to update
+            db: Database session
+        """
+        try:
+            from sqlalchemy import text
+            from datetime import datetime
+            
+            # Get all interactions for this session
+            interactions_query = text("""
+                SELECT 
+                    user_input, agent_response, timestamp, workflow_step,
+                    tool_calls, response_time_ms, tokens_used, 
+                    error_occurred, error_message, intent
+                FROM agent_logs 
+                WHERE session_id = :session_id 
+                ORDER BY timestamp ASC
+            """)
+            
+            result = db.execute(interactions_query, {"session_id": session_id})
+            interaction_rows = result.fetchall()
+            
+            if not interaction_rows:
+                return
+            
+            # Convert to ParsedInteraction format for existing logic
+            parsed_interactions = []
+            for row in interaction_rows:
+                # Parse tool_calls JSON if present
+                tool_calls = None
+                if row[4]:  # tool_calls column
+                    try:
+                        import json
+                        tool_calls = json.loads(row[4])
+                    except:
+                        tool_calls = []
+                
+                # Create a simple object that matches ParsedInteraction interface
+                class SimpleInteraction:
+                    def __init__(self, **kwargs):
+                        for key, value in kwargs.items():
+                            setattr(self, key, value)
+                
+                parsed_interaction = SimpleInteraction(
+                    session_id=session_id,
+                    user_input=row[0],
+                    agent_response=row[1], 
+                    timestamp=row[2],
+                    workflow_step=row[3] or 1,
+                    tool_calls=tool_calls,
+                    response_time_ms=row[5] or 1000,
+                    tokens_used=row[6] or 50,
+                    error_occurred=row[7] or False,
+                    error_message=row[8],
+                    intent=row[9]  # Already classified intent
+                )
+                parsed_interactions.append(parsed_interaction)
+            
+            # Calculate session metrics using existing methods
+            workflow_analysis = self._analyze_workflow_path(parsed_interactions)
+            completion_analysis = self._analyze_completion_status(parsed_interactions, workflow_analysis)
+            session_metrics = self._calculate_session_metrics(parsed_interactions)
+            
+            # Get intent from first interaction (already classified)
+            primary_intent = parsed_interactions[0].intent if parsed_interactions else None
+            intent_confidence = 0.8 if primary_intent else None  # Default confidence
+            
+            # Calculate success score
+            success_score = self._calculate_success_score(
+                parsed_interactions, 
+                completion_analysis, 
+                session_metrics,
+                None  # No IntentClassification object in real-time mode
+            )
+            
+            # Check if session summary already exists
+            existing_summary_query = text("""
+                SELECT id FROM session_summaries WHERE id = :session_id
+            """)
+            existing = db.execute(existing_summary_query, {"session_id": session_id}).fetchone()
+            
+            if existing:
+                # Update existing summary
+                update_query = text("""
+                    UPDATE session_summaries SET
+                        ended_at = :ended_at,
+                        duration_seconds = :duration_seconds,
+                        total_interactions = :total_interactions,
+                        primary_intent = :primary_intent,
+                        intent_confidence = :intent_confidence,
+                        workflow_completed = :workflow_completed,
+                        drop_off_step = :drop_off_step,
+                        total_tokens = :total_tokens,
+                        avg_response_time_ms = :avg_response_time_ms,
+                        errors_count = :errors_count,
+                        success_score = :success_score
+                    WHERE id = :session_id
+                """)
+                
+                db.execute(update_query, {
+                    "session_id": session_id,
+                    "ended_at": parsed_interactions[-1].timestamp,
+                    "duration_seconds": int((parsed_interactions[-1].timestamp - parsed_interactions[0].timestamp).total_seconds()),
+                    "total_interactions": len(parsed_interactions),
+                    "primary_intent": primary_intent,
+                    "intent_confidence": intent_confidence,
+                    "workflow_completed": completion_analysis["completed"],
+                    "drop_off_step": completion_analysis["drop_off_step"],
+                    "total_tokens": session_metrics["total_tokens"],
+                    "avg_response_time_ms": session_metrics["avg_response_time"],
+                    "errors_count": session_metrics["error_count"],
+                    "success_score": success_score
+                })
+            else:
+                # Create new summary
+                insert_query = text("""
+                    INSERT INTO session_summaries 
+                    (id, started_at, ended_at, duration_seconds, total_interactions,
+                     primary_intent, intent_confidence, workflow_completed, drop_off_step,
+                     total_tokens, avg_response_time_ms, errors_count, success_score)
+                    VALUES (:session_id, :started_at, :ended_at, :duration_seconds, :total_interactions,
+                            :primary_intent, :intent_confidence, :workflow_completed, :drop_off_step,
+                            :total_tokens, :avg_response_time_ms, :errors_count, :success_score)
+                """)
+                
+                db.execute(insert_query, {
+                    "session_id": session_id,
+                    "started_at": parsed_interactions[0].timestamp,
+                    "ended_at": parsed_interactions[-1].timestamp,
+                    "duration_seconds": int((parsed_interactions[-1].timestamp - parsed_interactions[0].timestamp).total_seconds()),
+                    "total_interactions": len(parsed_interactions),
+                    "primary_intent": primary_intent,
+                    "intent_confidence": intent_confidence,
+                    "workflow_completed": completion_analysis["completed"],
+                    "drop_off_step": completion_analysis["drop_off_step"],
+                    "total_tokens": session_metrics["total_tokens"],
+                    "avg_response_time_ms": session_metrics["avg_response_time"],
+                    "errors_count": session_metrics["error_count"],
+                    "success_score": success_score
+                })
+            
+        except Exception as e:
+            # Log error but don't raise - real-time updates should be best effort
+            print(f"⚠️  Failed to update session summary for {session_id}: {e}")
     
     def _analyze_workflow_path(self, interactions: List[ParsedInteraction]) -> WorkflowPath:
         """Analyze the workflow path through the conversation"""

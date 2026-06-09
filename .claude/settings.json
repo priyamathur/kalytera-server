@@ -1,5 +1,16 @@
 {
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 -c \"\nimport sys, json, os\ntry:\n    inp = json.load(sys.stdin)\n    path = inp.get('tool_input', {}).get('file_path', '')\n    root = '/Users/udayshankar/Documents/AgentIQ'\n    rel = os.path.relpath(path, root)\n    depth = len(rel.split(os.sep))\n    blocked = ['_archive', '.git']\n    name = os.path.basename(path)\n    if depth == 1 and path.endswith('.py') and not name in ['config.py', 'setup.py', 'pyproject.toml']:\n        print(f'BLOCK: Creating {name} in project root is not allowed. Place files in the correct module directory.')\n        sys.exit(1)\nexcept: pass\n\""
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Write",

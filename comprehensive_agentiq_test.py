@@ -19,13 +19,9 @@ This validates the enterprise platform vision:
 """
 
 import requests
-import json
 import time
-import pandas as pd
 import sqlite3
-from datetime import datetime, timedelta
-from typing import Dict, List, Any
-import random
+from datetime import datetime
 
 # Configuration
 LOCAL_API = "http://localhost:8000"
@@ -491,7 +487,7 @@ class AgentIQTestSuite:
             self.log_result("Streamlit Dashboard", dashboard_running,
                            "Dashboard: http://localhost:8502")
             if dashboard_running: success_count += 1
-        except Exception as e:
+        except Exception:
             # Dashboard might be on different port
             self.log_result("Streamlit Dashboard", False, 
                            "Dashboard may be on different port or not running")
@@ -589,7 +585,7 @@ class AgentIQTestSuite:
         passed_tests = sum(1 for result in self.test_results.values() if result["success"])
         success_rate = (passed_tests / total_tests) * 100 if total_tests > 0 else 0
         
-        print(f"\n📊 OVERALL RESULTS:")
+        print("\n📊 OVERALL RESULTS:")
         print(f"   Tests Executed: {total_tests}")
         print(f"   Tests Passed: {passed_tests}")
         print(f"   Success Rate: {success_rate:.1f}%")
@@ -624,7 +620,7 @@ class AgentIQTestSuite:
                 print(f"{symbol} {test}")
         
         # Key insights
-        print(f"\n🔍 KEY INSIGHTS:")
+        print("\n🔍 KEY INSIGHTS:")
         
         if success_rate >= 80:
             print("   🎉 AgentIQ platform is PRODUCTION READY!")
@@ -640,7 +636,7 @@ class AgentIQTestSuite:
             print("   ⏳ Not ready for customer demonstrations")
         
         # Technical recommendations
-        print(f"\n🛠️  TECHNICAL RECOMMENDATIONS:")
+        print("\n🛠️  TECHNICAL RECOMMENDATIONS:")
         
         if not self.test_results.get("Production API Health", {}).get("success", False):
             print("   🌐 Set up production deployment monitoring")
@@ -652,7 +648,7 @@ class AgentIQTestSuite:
             print("   📊 Ensure Streamlit dashboard is accessible")
         
         # Business readiness
-        print(f"\n💼 BUSINESS READINESS:")
+        print("\n💼 BUSINESS READINESS:")
         enterprise_ready = all([
             self.test_results.get("Usage Analytics - User Intents", {}).get("success", False),
             self.test_results.get("Drop-off Analysis", {}).get("success", False),
