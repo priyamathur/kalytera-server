@@ -4,10 +4,10 @@ POST /api/trace for real-time agent interaction tracing
 Framework-agnostic webhook receiver that never blocks agents
 """
 
-from fastapi import FastAPI, HTTPException, File, UploadFile, Depends, BackgroundTasks
+from fastapi import FastAPI, HTTPException, Depends, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, validator
-from typing import List, Dict, Any, Optional, Union
+from pydantic import BaseModel, Field
+from typing import Dict, Any, Optional
 from datetime import datetime
 from sqlalchemy.orm import Session
 import logging

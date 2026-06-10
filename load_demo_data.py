@@ -6,7 +6,6 @@ Simulates realistic agent interactions for testing the production system
 import requests
 import time
 import random
-import json
 from datetime import datetime, timedelta
 from typing import List, Dict
 import uuid
@@ -208,7 +207,7 @@ class DemoDataLoader:
             time.sleep(1)
         
         # Final summary
-        print(f"\n🎉 Demo data loading complete!")
+        print("\n🎉 Demo data loading complete!")
         print(f"📊 Total sessions: {num_sessions:,}")
         print(f"📊 Total interactions: {total_interactions:,}")
         print(f"✅ Successful traces: {successful_traces:,}")
@@ -219,7 +218,7 @@ class DemoDataLoader:
             print(f"📈 Overall success rate: {overall_success_rate:.1f}%")
         
         # Test the API endpoints
-        print(f"\n🧪 Testing API endpoints...")
+        print("\n🧪 Testing API endpoints...")
         self.test_api_endpoints()
     
     def test_api_endpoints(self):
@@ -263,7 +262,7 @@ def main():
     try:
         response = requests.get(f"{api_url}/health", timeout=5)
         if response.status_code == 200:
-            print(f"✅ API is responsive")
+            print("✅ API is responsive")
         else:
             print(f"⚠️ API returned {response.status_code}")
             return

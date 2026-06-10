@@ -19,7 +19,7 @@ The trace call:
 - Logs locally for debugging
 """
 
-from .client import trace, configure
+from .client import trace, configure, TraceClient, TraceEvent, shutdown
 
 __version__ = "1.0.0"
-__all__ = ["trace", "configure"]
+__all__ = ["trace", "configure", "TraceClient", "TraceEvent", "shutdown"]

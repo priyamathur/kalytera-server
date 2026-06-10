@@ -7,7 +7,6 @@ import streamlit as st
 import requests
 import pandas as pd
 import plotly.express as px
-import json
 from typing import Dict, Any, Optional
 
 st.set_page_config(

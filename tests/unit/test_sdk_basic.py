@@ -4,8 +4,7 @@ Basic SDK tests - Core constraint verification
 
 import pytest
 import time
-import threading
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from concurrent.futures import ThreadPoolExecutor
 import requests
 

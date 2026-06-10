@@ -5,16 +5,14 @@ AgentIQ SDK Client - Fire-and-forget tracing that never blocks agents
 import asyncio
 import json
 import logging
-import time
 import uuid
 from datetime import datetime
-from typing import Optional, Dict, Any, List
-from dataclasses import dataclass, asdict
+from typing import Optional, List
+from dataclasses import dataclass
 import aiohttp
 import threading
 from queue import Queue
 import os
-from pathlib import Path
 
 # Configure local logging for SDK debugging
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +31,7 @@ class TraceEvent:
     tokens_used: Optional[int] = None
     error_occurred: Optional[bool] = None
     error_message: Optional[str] = None
+    session_ended: Optional[bool] = None
     
     def __post_init__(self):
         if self.timestamp is None:
@@ -57,6 +56,61 @@ class AgentIQConfig:
         self.max_retries = max_retries
         self.enable_local_logging = enable_local_logging
         self.local_log_path = local_log_path
+
+class TraceClient:
+    """Client for sending traces with configurable settings"""
+    def __init__(
+        self,
+        api_endpoint: str = "http://localhost:8000",
+        api_key: Optional[str] = None,
+        timeout_seconds: float = 2.0,
+        enable_local_logging: bool = True,
+        log_dir: Optional[str] = None
+    ):
+        """Initialize TraceClient with custom configuration"""
+        self.config = AgentIQConfig(
+            api_endpoint=api_endpoint,
+            api_key=api_key,
+            timeout_seconds=timeout_seconds,
+            enable_local_logging=enable_local_logging,
+            local_log_path=os.path.join(log_dir or ".", "agentiq_traces.log")
+        )
+        
+    def trace(
+        self,
+        session_id: Optional[str] = None,
+        user_input: Optional[str] = None,
+        agent_response: Optional[str] = None,
+        response_time_ms: Optional[int] = None,
+        workflow_step: Optional[int] = None,
+        tool_calls: Optional[List[str]] = None,
+        tokens_used: Optional[int] = None,
+        error_occurred: Optional[bool] = None,
+        error_message: Optional[str] = None,
+        session_ended: Optional[bool] = None
+    ) -> None:
+        """Instance method that delegates to global trace function"""
+        # Temporarily override global config
+        global _config
+        old_config = _config
+        _config = self.config
+        
+        try:
+            trace(
+                session_id=session_id,
+                user_input=user_input,
+                agent_response=agent_response,
+                response_time_ms=response_time_ms,
+                workflow_step=workflow_step,
+                tool_calls=tool_calls,
+                tokens_used=tokens_used,
+                error_occurred=error_occurred,
+                error_message=error_message,
+                session_ended=session_ended
+            )
+        finally:
+            # Restore original config
+            _config = old_config
 
 # Global SDK configuration
 _config = AgentIQConfig()
@@ -132,7 +186,8 @@ async def _send_trace_async(trace_event: TraceEvent) -> bool:
             "response_time_ms": trace_event.response_time_ms,
             "tokens_used": trace_event.tokens_used,
             "error_occurred": trace_event.error_occurred or False,
-            "error_message": trace_event.error_message
+            "error_message": trace_event.error_message,
+            "session_ended": trace_event.session_ended or False
         }
         
         headers = {"Content-Type": "application/json"}
@@ -206,15 +261,16 @@ def _ensure_background_worker():
         logger.debug("Started AgentIQ background worker thread")
 
 def trace(
-    session_id: str,
-    user_input: str,
-    agent_response: str,
-    response_time_ms: int,
+    session_id: Optional[str] = None,
+    user_input: Optional[str] = None,
+    agent_response: Optional[str] = None,
+    response_time_ms: Optional[int] = None,
     workflow_step: Optional[int] = None,
     tool_calls: Optional[List[str]] = None,
     tokens_used: Optional[int] = None,
     error_occurred: Optional[bool] = None,
-    error_message: Optional[str] = None
+    error_message: Optional[str] = None,
+    session_ended: Optional[bool] = None
 ) -> None:
     """
     Trace a single agent interaction - fire and forget
@@ -251,17 +307,24 @@ def trace(
         # Generate unique ID for this interaction
         interaction_id = str(uuid.uuid4())
         
+        # Validate and sanitize inputs - never fail on bad data
+        safe_session_id = str(session_id) if session_id is not None else f"unknown_{interaction_id[:8]}"
+        safe_user_input = str(user_input) if user_input is not None else ""
+        safe_agent_response = str(agent_response) if agent_response is not None else ""
+        safe_response_time_ms = int(response_time_ms) if isinstance(response_time_ms, (int, float)) and response_time_ms >= 0 else 0
+        
         # Create trace event
         trace_event = TraceEvent(
-            session_id=session_id,
-            user_input=user_input,
-            agent_response=agent_response,
-            response_time_ms=response_time_ms,
+            session_id=safe_session_id,
+            user_input=safe_user_input,
+            agent_response=safe_agent_response,
+            response_time_ms=safe_response_time_ms,
             workflow_step=workflow_step,
             tool_calls=tool_calls,
             tokens_used=tokens_used,
             error_occurred=error_occurred,
-            error_message=error_message
+            error_message=error_message,
+            session_ended=session_ended
         )
         
         # Ensure background worker is running

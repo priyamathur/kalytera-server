@@ -145,7 +145,7 @@ class TestAPIEndpoints:
                     assert "raw_judge_output" not in response_str, f"Endpoint {endpoint} exposes raw_judge_output"
                     assert "judge_response" not in response_str, f"Endpoint {endpoint} exposes raw judge response"
                     
-            except Exception as e:
+            except Exception:
                 # Skip endpoints that aren't available yet
                 continue
 

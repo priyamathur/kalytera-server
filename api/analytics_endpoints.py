@@ -648,7 +648,7 @@ async def get_quality_trend(
         
         return trend_data
         
-    except Exception as e:
+    except Exception:
         # Return empty trend data for graceful failure
         return []
 

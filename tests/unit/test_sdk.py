@@ -5,11 +5,9 @@ Core constraint: SDK trace call must never block, never raise, never slow down t
 
 import pytest
 import time
-import threading
-import requests_mock
+import requests
 from unittest.mock import patch, MagicMock
 from concurrent.futures import ThreadPoolExecutor
-import json
 import tempfile
 import os
 
@@ -141,7 +139,7 @@ class TestSDKDatabaseIntegration:
     def setup_method(self):
         """Setup test database"""
         from api.database import get_db, engine
-        from db.models import Base, AgentLog
+        from db.models import Base
         
         # Create test tables
         Base.metadata.create_all(bind=engine)

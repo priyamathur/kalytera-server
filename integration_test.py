@@ -5,10 +5,9 @@ Tests all major workflows: trace ingestion, evaluation, pattern analysis, dashbo
 
 import requests
 import time
-import json
 import uuid
 from datetime import datetime, timedelta
-from typing import Dict, List, Any
+from typing import Dict, Any
 
 class AgentIQIntegrationTest:
     def __init__(self, api_base_url: str, dashboard_url: str = None):
@@ -346,7 +345,7 @@ class AgentIQIntegrationTest:
                 self.log_test(test_name, False, f"Test crashed: {e}")
         
         # Results summary
-        print(f"\n📊 Integration Test Results")
+        print("\n📊 Integration Test Results")
         print("=" * 50)
         print(f"✅ Passed: {passed_tests}/{total_tests} tests")
         print(f"❌ Failed: {total_tests - passed_tests}/{total_tests} tests")
@@ -355,18 +354,18 @@ class AgentIQIntegrationTest:
         print(f"📈 Success Rate: {success_rate:.1f}%")
         
         # Detailed results
-        print(f"\n📋 Detailed Results:")
+        print("\n📋 Detailed Results:")
         for result in self.test_results:
             status = "✅" if result["success"] else "❌"
             print(f"{status} {result['test']}: {result['message']}")
         
         # Overall assessment
         if success_rate >= 90:
-            print(f"\n🎉 System is ready for production!")
+            print("\n🎉 System is ready for production!")
         elif success_rate >= 75:
-            print(f"\n⚠️  System is mostly functional but has some issues")
+            print("\n⚠️  System is mostly functional but has some issues")
         else:
-            print(f"\n❌ System has significant issues and needs debugging")
+            print("\n❌ System has significant issues and needs debugging")
         
         return {
             "total_tests": total_tests,

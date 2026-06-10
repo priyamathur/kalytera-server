@@ -5,14 +5,8 @@ AgentIQ Streamlit Dashboard - Real-time Agent Monitoring
 
 import streamlit as st
 import requests
-import pandas as pd
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import json
 import time
-from datetime import datetime, timedelta
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 # Page configuration
 st.set_page_config(

@@ -5,7 +5,6 @@ Intent Classifier & Session Builder
 
 import pytest
 from unittest.mock import MagicMock, patch
-from datetime import datetime
 
 
 class TestIntentClassifier:

@@ -175,7 +175,7 @@ class IntentClassifier:
                 continue  # Try next model
         
         # If all Claude models fail, use rule-based fallback as last resort
-        print(f"⚠️  All Claude models failed, using rule-based fallback")
+        print("⚠️  All Claude models failed, using rule-based fallback")
         return self._fallback_classification(analysis_interactions)
     
     def _format_conversation_for_analysis(self, interactions: List[Dict]) -> str:

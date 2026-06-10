@@ -12,6 +12,7 @@ import uuid
 from db.models import SessionSummary, AgentLog
 from evaluation.intent_classifier import IntentClassifier, IntentClassification
 from ingestion.parsers import ParsedInteraction
+from api.database import SessionLocal
 
 
 @dataclass
@@ -135,7 +136,6 @@ class SessionBuilder:
         """
         try:
             from sqlalchemy import text
-            from datetime import datetime
             
             # Get all interactions for this session
             interactions_query = text("""

@@ -62,7 +62,7 @@ def test_sdk_integration():
     )
     print("   ✅ Session end call completed")
     
-    print(f"\n🎉 SDK Integration Test Complete!")
+    print("\n🎉 SDK Integration Test Complete!")
     print("📊 Sent 5 trace calls to AgentIQ")
     print("🔗 Check the dashboard at: http://localhost:8501")
 

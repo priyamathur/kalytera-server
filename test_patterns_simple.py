@@ -5,7 +5,6 @@ Simple pattern analysis test to avoid circular imports
 
 import sys
 sys.path.append('.')
-import asyncio
 import json
 
 def test_pattern_analysis_components():

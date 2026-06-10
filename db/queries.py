@@ -4,7 +4,7 @@ All functions use SQLAlchemy ORM (no raw SQL) and return pandas DataFrames.
 """
 
 from datetime import datetime, timedelta
-from typing import Dict, Any, List
+from typing import Dict, Any
 import pandas as pd  # type: ignore[import-untyped]
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, and_, Integer
