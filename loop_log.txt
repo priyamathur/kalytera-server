@@ -2697,3 +2697,14 @@ FAILED tests/unit/test_sdk.py::TestSDKDatabaseIntegration::test_sdk_05_agentlog_
 FAILED tests/unit/test_sdk.py::TestSDKDatabaseIntegration::test_sdk_06_session_ended_flag_set_correctly
 FAILED tests/unit/test_sdk.py::TestSDKLocalFallback::test_sdk_local_fallback_when_api_down
 ============ 22 failed, 41 passed, 2 skipped, 37 warnings in 30.63s ============
+[22:22:49] AgentIQ loop starting — max 15 sessions
+[22:22:49] Passing: 2/67
+[22:22:49] ─────────────────────────────────────
+[22:22:49] Session 1/15 | 2/67 | BATCH
+  SDK-04: trace() keeps agent running when AgentIQ API is down
+  SDK-05: POST /trace webhook receiver accepts same payload as SDK: SDK-03, SDK-04, SDK-05
+  SDK-04: trace() keeps agent running when AgentIQ API is down
+  SDK-05: POST /trace webhook receiver accepts same payload as SDK
+[22:22:49] Coding:   SDK-03: trace() never raises an exception — fails silently and logs locally
+  SDK-04: trace() keeps agent running when AgentIQ API is down
+  SDK-05: POST /trace webhook receiver accepts same payload as SDK
