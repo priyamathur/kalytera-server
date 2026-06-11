@@ -15,7 +15,6 @@ from sqlalchemy import text
 
 from db.models import LossPattern
 from api.security import key_manager, optimized_claude_client
-from api.database import SessionLocal
 
 
 @dataclass

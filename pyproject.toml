@@ -1,0 +1,7 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["-v", "--tb=short"]
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning:sdk.client"
+]
