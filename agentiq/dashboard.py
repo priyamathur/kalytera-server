@@ -266,6 +266,22 @@ code {
 
 /* ── Plotly charts ── */
 .js-plotly-plot { border-radius: 12px !important; }
+
+/* ── Sidebar collapse/expand toggle — always visible ── */
+[data-testid="collapsedControl"] {
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    background: white !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 0 8px 8px 0 !important;
+    box-shadow: 2px 0 6px rgba(15,23,42,0.08) !important;
+    padding: 8px 4px !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    z-index: 999 !important;
+}
+[data-testid="collapsedControl"] svg { color: #6366f1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
