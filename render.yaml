@@ -26,6 +26,8 @@ services:
           property: connectionString
       - key: PYTHONPATH
         value: .
+      - key: PYTHONUNBUFFERED
+        value: "1"
     autoDeploy: true
 
   # Streamlit Dashboard
