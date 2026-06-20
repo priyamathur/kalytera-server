@@ -1,5 +1,5 @@
 databases:
-  - name: agentiq-db
+  - name: agentiq-postgres
     plan: free
     databaseName: agentiq
     user: agentiq
@@ -22,7 +22,7 @@ services:
         sync: false
       - key: DATABASE_URL
         fromDatabase:
-          name: agentiq-db
+          name: agentiq-postgres
           property: connectionString
       - key: PYTHONPATH
         value: .
@@ -40,7 +40,7 @@ services:
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: agentiq-db
+          name: agentiq-postgres
           property: internalConnectionString
       - key: AGENTIQ_API_ENDPOINT
         value: https://agentiq-api.onrender.com
