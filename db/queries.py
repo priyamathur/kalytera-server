@@ -1,340 +1,403 @@
 """
-Database query functions for analytics engine.
-All functions use SQLAlchemy ORM (no raw SQL) and return pandas DataFrames.
+db/queries.py — all database operations. No SQL outside this file.
 """
+import json
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, List, Optional, Tuple
 
-from datetime import datetime, timedelta
-from typing import Dict, Any
-import pandas as pd  # type: ignore[import-untyped]
+from sqlalchemy import case, distinct, func
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, and_, Integer
 
-from .models import AgentLog, SessionSummary, EvalResult
+from db.models import AgentLog, AgentQualityConfig, EvalResult, LossPattern
 
 
-def get_session_volume(db: Session, agent_id: str, days: int) -> pd.DataFrame:
-    """
-    Get session volume analytics over time.
-    
-    Args:
-        db: Database session
-        agent_id: Agent identifier
-        days: Number of days to look back
-        
-    Returns:
-        DataFrame with columns: date, session_count, interaction_count
-    """
-    start_date = datetime.utcnow() - timedelta(days=days)
-    
-    # Query session summaries for the agent in the date range
-    query = db.query(
-        func.date(SessionSummary.started_at).label('date'),
-        func.count(SessionSummary.id).label('session_count'),
-        func.sum(SessionSummary.total_interactions).label('interaction_count')
-    ).filter(
-        and_(
-            SessionSummary.started_at >= start_date,
-            # Note: agent_id filtering would need to be added to SessionSummary model
-            # For now, using all sessions as the model doesn't have agent_id
-        )
-    ).group_by(
-        func.date(SessionSummary.started_at)
-    ).order_by(
-        func.date(SessionSummary.started_at)
+# ---------------------------------------------------------------------------
+# Tracer / ingestion
+# ---------------------------------------------------------------------------
+
+def insert_agent_log(payload: Dict[str, Any], db: Session) -> AgentLog:
+    """Write one AgentLog row from a tracer payload dict. Returns the inserted row."""
+    tool_calls = payload.get("tool_calls") or []
+    metadata = payload.get("metadata") or {}
+
+    row = AgentLog(
+        id=payload["id"],
+        agent_id=payload["agent_id"],
+        session_id=payload["session_id"],
+        step_number=int(payload["step_number"]),
+        step_name=str(payload["step_name"]),
+        input=str(payload["input"]),
+        output=str(payload["output"]),
+        tool_calls=json.dumps(tool_calls) if tool_calls else None,
+        latency_ms=int(payload.get("latency_ms", 0)),
+        session_ended=bool(payload.get("session_ended", False)),
+        timestamp=_parse_timestamp(payload.get("timestamp")),
+        step_metadata=json.dumps(metadata) if metadata else None,
     )
-    
-    results = query.all()
-    
-    return pd.DataFrame([
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def get_unevaluated_logs(agent_id: str, batch_size: int, db: Session) -> List[AgentLog]:
+    """Return AgentLog rows that have no corresponding EvalResult yet."""
+    evaluated_ids = db.query(EvalResult.log_id).filter(EvalResult.agent_id == agent_id)
+    return (
+        db.query(AgentLog)
+        .filter(
+            AgentLog.agent_id == agent_id,
+            AgentLog.id.notin_(evaluated_ids),
+        )
+        .order_by(AgentLog.timestamp)
+        .limit(batch_size)
+        .all()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Patterns
+# ---------------------------------------------------------------------------
+
+def get_patterns_for_agent(agent_id: str, db: Session) -> List[LossPattern]:
+    """Return all LossPattern rows for an agent, sorted by pct_of_all_failures desc."""
+    return (
+        db.query(LossPattern)
+        .filter(LossPattern.agent_id == agent_id)
+        .order_by(LossPattern.pct_of_all_failures.desc())
+        .all()
+    )
+
+
+# ---------------------------------------------------------------------------
+# Dashboard — Agent Overview
+# ---------------------------------------------------------------------------
+
+def get_quality_trend(
+    agent_id: str, days: int, db: Session
+) -> List[Dict[str, Any]]:
+    """
+    Daily avg overall_score and pass_rate for the last N days.
+    Returns list of {date, avg_score, pass_rate, total} dicts, oldest first.
+    """
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    rows = (
+        db.query(
+            func.date(EvalResult.evaluated_at).label("date"),
+            func.avg(EvalResult.overall_score).label("avg_score"),
+            func.avg(case((EvalResult.passed == True, 1.0), else_=0.0)).label("pass_rate"),  # noqa: E712
+            func.count(EvalResult.id).label("total"),
+        )
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= since,
+            EvalResult.eval_error == False,  # noqa: E712
+        )
+        .group_by(func.date(EvalResult.evaluated_at))
+        .order_by(func.date(EvalResult.evaluated_at))
+        .all()
+    )
+    return [
         {
-            'date': result.date,
-            'session_count': result.session_count or 0,
-            'interaction_count': result.interaction_count or 0
+            "date": str(r.date),
+            "avg_score": round(float(r.avg_score or 0), 3),
+            "pass_rate": round(float(r.pass_rate or 0), 3),
+            "total": int(r.total),
         }
-        for result in results
-    ])
+        for r in rows
+    ]
 
 
-def get_top_intents(db: Session, agent_id: str, days: int) -> pd.DataFrame:
-    """
-    Get top intents by frequency and success rate.
-    
-    Args:
-        db: Database session
-        agent_id: Agent identifier
-        days: Number of days to look back
-        
-    Returns:
-        DataFrame with columns: intent, count, success_rate, avg_quality_score
-    """
-    start_date = datetime.utcnow() - timedelta(days=days)
-    
-    # Join AgentLog with EvalResult to get quality scores
-    query = db.query(
-        AgentLog.intent,
-        func.count(AgentLog.id).label('count'),
-        func.avg(EvalResult.overall_score).label('avg_quality_score')
-    ).outerjoin(
-        EvalResult, AgentLog.id == EvalResult.agent_log_id
-    ).filter(
-        and_(
-            AgentLog.timestamp >= start_date,
-            AgentLog.intent.is_not(None)
-            # Note: agent_id filtering would need to be added to AgentLog model
-        )
-    ).group_by(
-        AgentLog.intent
-    ).order_by(
-        desc('count')
+def get_todays_stats(agent_id: str, db: Session) -> Dict[str, Any]:
+    """Pass rate, total evals, and distinct active failure types for today."""
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
     )
-    
-    results = query.all()
-    
-    # Calculate success rate from SessionSummary
-    intent_success_rates = {}
-    for intent in [r.intent for r in results]:
-        success_query = db.query(
-            func.avg(SessionSummary.success_score).label('success_rate')
-        ).filter(
-            and_(
-                SessionSummary.primary_intent == intent,
-                SessionSummary.started_at >= start_date
+    base = (
+        db.query(EvalResult)
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= today_start,
+            EvalResult.eval_error == False,  # noqa: E712
+        )
+    )
+    total = base.count()
+    passed = base.filter(EvalResult.passed == True).count()  # noqa: E712
+    active_failure_types = (
+        db.query(func.count(func.distinct(EvalResult.failure_type)))
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= today_start,
+            EvalResult.passed == False,  # noqa: E712
+            EvalResult.failure_type.isnot(None),
+        )
+        .scalar()
+        or 0
+    )
+    return {
+        "total": total,
+        "passed": passed,
+        "pass_rate": round(passed / total, 3) if total else 0.0,
+        "active_failure_types": int(active_failure_types),
+    }
+
+
+def get_top_failure_types(
+    agent_id: str, hours: int, db: Session
+) -> List[Tuple[str, int, float]]:
+    """
+    Top failure types in the last N hours by frequency.
+    Returns list of (failure_type, count, pct_of_all_failures) tuples.
+    """
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    rows = (
+        db.query(
+            EvalResult.failure_type,
+            func.count(EvalResult.id).label("cnt"),
+        )
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= since,
+            EvalResult.passed == False,  # noqa: E712
+            EvalResult.failure_type.isnot(None),
+        )
+        .group_by(EvalResult.failure_type)
+        .order_by(func.count(EvalResult.id).desc())
+        .all()
+    )
+    total = sum(r.cnt for r in rows)
+    return [
+        (r.failure_type, int(r.cnt), round(r.cnt / total, 3) if total else 0.0)
+        for r in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Dashboard — Failure Feed
+# ---------------------------------------------------------------------------
+
+def get_recent_eval_failures(
+    agent_id: str, limit: int, db: Session
+) -> List[Tuple[EvalResult, AgentLog]]:
+    """
+    Return recent failed EvalResult rows joined with their AgentLog.
+    Sorted newest first.
+    """
+    rows = (
+        db.query(EvalResult, AgentLog)
+        .join(AgentLog, EvalResult.log_id == AgentLog.id)
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.passed == False,  # noqa: E712
+            EvalResult.eval_error == False,  # noqa: E712
+        )
+        .order_by(EvalResult.evaluated_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [(ev, log) for ev, log in rows]
+
+
+# ---------------------------------------------------------------------------
+# Dashboard — Interaction Detail
+# ---------------------------------------------------------------------------
+
+def get_session_steps(
+    session_id: str, db: Session
+) -> List[Tuple[AgentLog, Optional[EvalResult]]]:
+    """
+    All steps for one session with their eval results, ordered by step_number.
+    Returns list of (AgentLog, EvalResult | None).
+    """
+    logs = (
+        db.query(AgentLog)
+        .filter(AgentLog.session_id == session_id)
+        .order_by(AgentLog.step_number)
+        .all()
+    )
+    evals: Dict[str, EvalResult] = {
+        ev.log_id: ev
+        for ev in db.query(EvalResult)
+        .filter(EvalResult.session_id == session_id)
+        .all()
+    }
+    return [(log, evals.get(log.id)) for log in logs]
+
+
+# ---------------------------------------------------------------------------
+# Dashboard — step-level failure breakdown and session browser
+# ---------------------------------------------------------------------------
+
+def get_failures_by_step(
+    agent_id: str, hours: int, db: Session
+) -> List[Tuple[int, str, int, float]]:
+    """
+    Failure count and rate per (step_number, step_name) for the last N hours.
+    Returns list of (step_number, step_name, failure_count, failure_rate), highest failure_count first.
+    """
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    fail_rows = (
+        db.query(
+            AgentLog.step_number,
+            AgentLog.step_name,
+            func.count(EvalResult.id).label("fail_count"),
+        )
+        .join(EvalResult, EvalResult.log_id == AgentLog.id)
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= since,
+            EvalResult.passed == False,  # noqa: E712
+            EvalResult.eval_error == False,  # noqa: E712
+        )
+        .group_by(AgentLog.step_number, AgentLog.step_name)
+        .order_by(func.count(EvalResult.id).desc())
+        .all()
+    )
+    total_rows = (
+        db.query(
+            AgentLog.step_number,
+            func.count(EvalResult.id).label("total"),
+        )
+        .join(EvalResult, EvalResult.log_id == AgentLog.id)
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= since,
+            EvalResult.eval_error == False,  # noqa: E712
+        )
+        .group_by(AgentLog.step_number)
+        .all()
+    )
+    total_map = {r.step_number: int(r.total) for r in total_rows}
+    return [
+        (
+            int(r.step_number),
+            str(r.step_name),
+            int(r.fail_count),
+            round(r.fail_count / max(total_map.get(r.step_number, r.fail_count), 1), 3),
+        )
+        for r in fail_rows
+    ]
+
+
+def get_recent_failing_sessions(
+    agent_id: str,
+    limit: int,
+    db: Session,
+    failure_types: Optional[List[str]] = None,
+    step_numbers: Optional[List[int]] = None,
+    since_hours: Optional[int] = None,
+    sort_by: str = "newest",
+) -> List[Dict[str, Any]]:
+    """
+    Most recently failed sessions — one entry per session_id.
+    Optional filters: failure_types, step_numbers, since_hours.
+    sort_by: 'newest' | 'score_asc' | 'failure_type'.
+    Returns list of {session_id, failed_at, failure_type, failure_step,
+                     overall_score, failure_reason}.
+    """
+    q = db.query(EvalResult).filter(
+        EvalResult.agent_id == agent_id,
+        EvalResult.passed == False,  # noqa: E712
+        EvalResult.eval_error == False,  # noqa: E712
+    )
+    if since_hours is not None:
+        since = datetime.now(timezone.utc) - timedelta(hours=since_hours)
+        q = q.filter(EvalResult.evaluated_at >= since)
+    if failure_types:
+        q = q.filter(EvalResult.failure_type.in_(failure_types))
+    if step_numbers:
+        q = q.filter(EvalResult.failure_step.in_(step_numbers))
+
+    rows = q.order_by(EvalResult.evaluated_at.desc()).limit(limit * 6).all()
+
+    seen: set = set()
+    result: List[Dict[str, Any]] = []
+    for ev in rows:
+        if ev.session_id not in seen:
+            seen.add(ev.session_id)
+            result.append(
+                {
+                    "session_id": ev.session_id,
+                    "failed_at": ev.evaluated_at,
+                    "failure_type": ev.failure_type,
+                    "failure_step": ev.failure_step,
+                    "overall_score": round(float(ev.overall_score or 0), 3),
+                    "failure_reason": ev.failure_reason,
+                }
             )
-        )
-        success_result = success_query.first()
-        intent_success_rates[intent] = success_result.success_rate if success_result and success_result.success_rate else 0.0
-    
-    return pd.DataFrame([
-        {
-            'intent': result.intent,
-            'count': result.count,
-            'success_rate': intent_success_rates.get(result.intent, 0.0),
-            'avg_quality_score': float(result.avg_quality_score) if result.avg_quality_score else 0.0
-        }
-        for result in results
-    ])
+        if len(result) >= limit * 2:
+            break
+
+    if sort_by == "score_asc":
+        result.sort(key=lambda s: s["overall_score"])
+    elif sort_by == "failure_type":
+        result.sort(key=lambda s: s["failure_type"] or "")
+
+    return result[:limit]
 
 
-def get_top_workflow_paths(db: Session, agent_id: str, days: int) -> pd.DataFrame:
-    """
-    Get most common workflow paths and completion rates.
-    
-    Args:
-        db: Database session
-        agent_id: Agent identifier
-        days: Number of days to look back
-        
-    Returns:
-        DataFrame with columns: workflow_path, session_count, completion_rate, avg_duration
-    """
-    start_date = datetime.utcnow() - timedelta(days=days)
-    
-    # Get workflow paths by analyzing session summaries and their steps
-    query = db.query(
-        SessionSummary.primary_intent,
-        func.count(SessionSummary.id).label('session_count'),
-        func.avg(func.cast(SessionSummary.workflow_completed, Integer)).label('completion_rate'),
-        func.avg(SessionSummary.duration_seconds).label('avg_duration')
-    ).filter(
-        and_(
-            SessionSummary.started_at >= start_date,
-            SessionSummary.primary_intent.is_not(None)
-        )
-    ).group_by(
-        SessionSummary.primary_intent
-    ).order_by(
-        desc('session_count')
+# ---------------------------------------------------------------------------
+# Multi-agent support
+# ---------------------------------------------------------------------------
+
+def get_all_agent_ids(db: Session) -> List[str]:
+    """All distinct agent_ids that have at least one AgentLog, alphabetical."""
+    rows = (
+        db.query(distinct(AgentLog.agent_id))
+        .filter(AgentLog.agent_id.isnot(None), AgentLog.agent_id != "")
+        .order_by(AgentLog.agent_id)
+        .all()
     )
-    
-    results = query.all()
-    
-    return pd.DataFrame([
-        {
-            'workflow_path': result.primary_intent,
-            'session_count': result.session_count,
-            'completion_rate': float(result.completion_rate) if result.completion_rate else 0.0,
-            'avg_duration': float(result.avg_duration) if result.avg_duration else 0.0
-        }
-        for result in results
-    ])
+    return [r[0] for r in rows]
 
 
-def get_dropoff_by_step(db: Session, agent_id: str, days: int) -> pd.DataFrame:
-    """
-    Get dropoff analysis by workflow step.
-    
-    Args:
-        db: Database session
-        agent_id: Agent identifier
-        days: Number of days to look back
-        
-    Returns:
-        DataFrame with columns: workflow_step, sessions_reached, dropoff_count, dropoff_rate
-    """
-    start_date = datetime.utcnow() - timedelta(days=days)
-    
-    # Get step-level analytics from AgentLog
-    step_reaches = db.query(
-        AgentLog.workflow_step,
-        func.count(func.distinct(AgentLog.session_id)).label('sessions_reached')
-    ).filter(
-        AgentLog.timestamp >= start_date
-    ).group_by(
-        AgentLog.workflow_step
-    ).all()
-    
-    # Get dropoff counts from SessionSummary
-    dropoff_counts = db.query(
-        SessionSummary.drop_off_step,
-        func.count(SessionSummary.id).label('dropoff_count')
-    ).filter(
-        and_(
-            SessionSummary.started_at >= start_date,
-            SessionSummary.drop_off_step.is_not(None)
-        )
-    ).group_by(
-        SessionSummary.drop_off_step
-    ).all()
-    
-    # Combine data
-    step_data = {}
-    for reach in step_reaches:
-        step_data[reach.workflow_step] = {'sessions_reached': reach.sessions_reached, 'dropoff_count': 0}
-    
-    for dropoff in dropoff_counts:
-        if dropoff.drop_off_step in step_data:
-            step_data[dropoff.drop_off_step]['dropoff_count'] = dropoff.dropoff_count
-        else:
-            step_data[dropoff.drop_off_step] = {'sessions_reached': 0, 'dropoff_count': dropoff.dropoff_count}
-    
-    return pd.DataFrame([
-        {
-            'workflow_step': step,
-            'sessions_reached': data['sessions_reached'],
-            'dropoff_count': data['dropoff_count'],
-            'dropoff_rate': data['dropoff_count'] / data['sessions_reached'] if data['sessions_reached'] > 0 else 0.0
-        }
-        for step, data in sorted(step_data.items())
-    ])
-
-
-def get_tool_usage(db: Session, agent_id: str, days: int) -> pd.DataFrame:
-    """
-    Get tool usage analytics and success rates.
-    
-    Args:
-        db: Database session
-        agent_id: Agent identifier
-        days: Number of days to look back
-        
-    Returns:
-        DataFrame with columns: tool_name, usage_count, success_rate, avg_quality_score
-    """
-    start_date = datetime.utcnow() - timedelta(days=days)
-    
-    # Get tool usage from AgentLog where tool_calls is not None
-    logs_with_tools = db.query(AgentLog).filter(
-        and_(
-            AgentLog.timestamp >= start_date,
-            AgentLog.tool_calls.is_not(None),
-            AgentLog.tool_calls != ''
-        )
-    ).all()
-    
-    # Parse tool_calls (assuming JSON string format) and aggregate
-    tool_stats: Dict[str, Dict[str, Any]] = {}
-    
-    for log in logs_with_tools:
-        if log.tool_calls:
-            # Simple parsing - assumes tool names are in the tool_calls string
-            # In production, this would parse JSON properly
-            tools_used = [t.strip() for t in log.tool_calls.split(',') if t.strip()]
-            
-            for tool in tools_used:
-                if tool not in tool_stats:
-                    tool_stats[tool] = {'usage_count': 0, 'error_count': 0, 'log_ids': []}
-                
-                tool_stats[tool]['usage_count'] = tool_stats[tool]['usage_count'] + 1
-                tool_stats[tool]['log_ids'].append(log.id)
-                
-                if log.error_occurred:
-                    tool_stats[tool]['error_count'] = tool_stats[tool]['error_count'] + 1
-    
-    # Get quality scores for tool usage
-    result_data = []
-    for tool_name, stats in tool_stats.items():
-        # Get average quality score for this tool's usage
-        quality_query = db.query(
-            func.avg(EvalResult.overall_score).label('avg_quality_score')
-        ).filter(
-            EvalResult.agent_log_id.in_(stats['log_ids'])
-        )
-        
-        quality_result = quality_query.first()
-        avg_quality = float(quality_result.avg_quality_score) if quality_result and quality_result.avg_quality_score else 0.0
-        
-        usage_count = int(stats['usage_count'])
-        error_count = int(stats['error_count'])
-        success_rate = 1.0 - (error_count / usage_count) if usage_count > 0 else 0.0
-        
-        result_data.append({
-            'tool_name': tool_name,
-            'usage_count': usage_count,
-            'success_rate': success_rate,
-            'avg_quality_score': avg_quality
-        })
-    
-    return pd.DataFrame(result_data).sort_values('usage_count', ascending=False)
-
-
-def get_quality_by_intent(db: Session, agent_id: str, days: int) -> pd.DataFrame:
-    """
-    Get quality metrics broken down by intent type.
-    
-    Args:
-        db: Database session
-        agent_id: Agent identifier
-        days: Number of days to look back
-        
-    Returns:
-        DataFrame with columns: intent, avg_accuracy, avg_relevance, avg_helpfulness, 
-                               avg_goal_alignment, overall_quality, evaluation_count
-    """
-    start_date = datetime.utcnow() - timedelta(days=days)
-    
-    # Join AgentLog with EvalResult to get detailed quality metrics by intent
-    query = db.query(
-        AgentLog.intent,
-        func.avg(EvalResult.accuracy_score).label('avg_accuracy'),
-        func.avg(EvalResult.relevance_score).label('avg_relevance'),
-        func.avg(EvalResult.helpfulness_score).label('avg_helpfulness'),
-        func.avg(EvalResult.goal_alignment_score).label('avg_goal_alignment'),
-        func.avg(EvalResult.overall_score).label('overall_quality'),
-        func.count(EvalResult.id).label('evaluation_count')
-    ).join(
-        EvalResult, AgentLog.id == EvalResult.agent_log_id
-    ).filter(
-        and_(
-            AgentLog.timestamp >= start_date,
-            AgentLog.intent.is_not(None)
-        )
-    ).group_by(
-        AgentLog.intent
-    ).order_by(
-        desc('overall_quality')
+def get_session_and_latency_stats(agent_id: str, hours: int, db: Session) -> Dict[str, Any]:
+    """Distinct session count and avg step latency for the last N hours."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    session_count = (
+        db.query(func.count(distinct(AgentLog.session_id)))
+        .filter(AgentLog.agent_id == agent_id, AgentLog.timestamp >= since)
+        .scalar()
+        or 0
     )
-    
-    results = query.all()
-    
-    return pd.DataFrame([
-        {
-            'intent': result.intent,
-            'avg_accuracy': float(result.avg_accuracy) if result.avg_accuracy else 0.0,
-            'avg_relevance': float(result.avg_relevance) if result.avg_relevance else 0.0,
-            'avg_helpfulness': float(result.avg_helpfulness) if result.avg_helpfulness else 0.0,
-            'avg_goal_alignment': float(result.avg_goal_alignment) if result.avg_goal_alignment else 0.0,
-            'overall_quality': float(result.overall_quality) if result.overall_quality else 0.0,
-            'evaluation_count': result.evaluation_count
-        }
-        for result in results
-    ])
+    avg_latency = (
+        db.query(func.avg(AgentLog.latency_ms))
+        .filter(AgentLog.agent_id == agent_id, AgentLog.timestamp >= since)
+        .scalar()
+        or 0
+    )
+    avg_score = (
+        db.query(func.avg(EvalResult.overall_score))
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= since,
+            EvalResult.eval_error == False,  # noqa: E712
+        )
+        .scalar()
+        or 0
+    )
+    return {
+        "session_count": int(session_count),
+        "avg_latency_ms": int(avg_latency),
+        "avg_score": round(float(avg_score) * 100, 1),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _parse_timestamp(value: Any) -> datetime:
+    if isinstance(value, datetime):
+        return value
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _float_type() -> Any:
+    from sqlalchemy import Float
+    return Float

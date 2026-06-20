@@ -6,7 +6,7 @@ services:
     plan: free
     databaseName: agentiq
     databaseUser: agentiq
-    
+
   # Main FastAPI Application
   - type: web
     name: agentiq-api
@@ -15,25 +15,21 @@ services:
     runtime: python
     pythonVersion: 3.11.9
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn api.ingest_endpoints:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /health
     envVars:
       - key: ANTHROPIC_API_KEY
-        value: your_anthropic_api_key_here
+        sync: false
+      - key: AGENTIQ_API_KEY
+        sync: false
       - key: DATABASE_URL
         fromDatabase:
           name: agentiq-db
           property: connectionString
       - key: PYTHONPATH
         value: .
-      - key: JUDGE_MODEL
-        value: claude-3-haiku-20240307
-      - key: JUDGE_PASS_THRESHOLD
-        value: 0.7
-      - key: EVALUATION_BATCH_SIZE
-        value: 5
     autoDeploy: true
-    
+
   # Streamlit Dashboard
   - type: web
     name: agentiq-dashboard
@@ -42,10 +38,10 @@ services:
     runtime: python
     pythonVersion: 3.11.9
     buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run dashboard/main.py --server.port $PORT --server.address 0.0.0.0
+    startCommand: streamlit run agentiq/dashboard.py --server.port $PORT --server.address 0.0.0.0
     envVars:
-      - key: API_BASE_URL
-        value: https://agentiq-api-z9it.onrender.com
+      - key: AGENTIQ_API_ENDPOINT
+        value: https://agentiq-api.onrender.com
       - key: PYTHONPATH
         value: .
     autoDeploy: true

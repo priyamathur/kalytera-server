@@ -1,172 +1,206 @@
 # AgentIQ — CLAUDE.md
-# Read this fully before every session. Keep it open while working.
+# Read this fully before every session.
 
 ---
 
 ## What We Are Building
-AgentIQ runs alongside enterprise AI agents in production. It captures every interaction via a lightweight SDK, evaluates every step in real time with LLM judges, gives every interaction a quality score, surfaces one-off and repeating failures with root cause, and provides a fleet view so enterprises can monitor quality across all their agents at once.
+AgentIQ runs alongside enterprise AI agents in production. It captures every interaction via a lightweight SDK, evaluates every step in real time with an LLM judge, and surfaces failures with root cause so developers can find and fix problems in minutes.
 
-**The problem we solve:** Enterprise AI agents run complex multi-step workflows. Unlike traditional software, agents think and act differently in every interaction — standard quality checks aren't built for that. Existing eval and observability tools use sampled data and after-the-fact analysis. They miss failures that happen mid-workflow, including one-off catastrophic failures.
+**The one constraint that overrides every other decision:**
+`agentiq.trace()` must never block, never raise, and never slow down the agent it is observing. If AgentIQ is down, the agent keeps running.
 
-**The product constraint that overrides every other decision:**
-The SDK trace call must never block, never raise, and never slow down the agent it is observing. If AgentIQ is down, the agent keeps running.
+---
 
-See @docs/ARCHITECTURE.md for full system design.
+## Module Structure — Exactly This
+
+```
+agentiq/
+├── __init__.py      # exposes init(), watch(), trace()
+├── tracer.py        # Component 1 — interceptor (DONE)
+├── prompts.py       # Component 2a — judge prompt, build_prompt() only
+├── judge.py         # Component 2b — scorer using Claude Haiku
+├── analyzer.py      # Component 3a — loss pattern detection (hourly job)
+├── dashboard.py     # Component 3b — Streamlit, 3 views
+├── config.py        # env vars and defaults
+db/
+├── models.py        # four tables only (see below)
+├── queries.py       # all SQL here, nowhere else
+tests/
+├── test_tracer.py   # Component 1 tests
+├── test_judge.py    # Component 2 tests
+├── test_analyzer.py # Component 3 tests
+api/
+└── main.py          # FastAPI: POST /trace, GET /agents/{id}/patterns
+requirements.txt
+CLAUDE.md
+```
 
 ---
 
 ## Commands
 ```bash
-# Development
 uvicorn api.main:app --reload --port 8000
-streamlit run dashboard/app.py --server.port 8501
+streamlit run agentiq/dashboard.py --server.port 8501
 
-# Database
-alembic upgrade head          # Apply migrations
-alembic revision --autogenerate -m "description"  # New migration
+alembic upgrade head
+alembic revision --autogenerate -m "description"
 
-# Testing
-pytest tests/unit/            # Unit tests — run after every change
-pytest tests/integration/     # Integration tests — run before every PR
-pytest tests/calibration/     # Judge calibration — run before touching prompts.py
-pytest --cov=. --cov-report=term-missing  # Coverage report — target 80% minimum
+pytest tests/test_tracer.py -v
+pytest tests/test_judge.py -v
+pytest tests/ -v
 
-# Linting and type checking — run before every commit
 ruff check .
 mypy . --strict
 ```
 
 ---
 
-## Workflow — Follow This Every Time
+## Build Order — One File Per Session
 
-### Before writing any code
-1. **Use plan mode** (Shift+Tab twice) for any task touching more than two files, any schema change, or any refactor. Review and approve the plan before execution. A wrong plan costs hours. A plan review costs 30 seconds.
-2. **Read the relevant spec** before touching protected files — see the table at the bottom.
-3. **Create a branch** — never work directly on main.
+| # | File | Task | Done? |
+|---|------|------|-------|
+| 1 | `agentiq/tracer.py` | Interceptor — `trace()` + `@watch` | ✓ |
+| 2 | `agentiq/prompts.py` | Judge prompt — `build_prompt()` | ✓ |
+| 3 | `agentiq/judge.py` | Scorer — Claude Haiku, writes EvalResult | ✓ |
+| 4 | `agentiq/analyzer.py` | Pattern detection — hourly job, writes LossPattern | ✓ |
+| 5 | `api/main.py` | Two endpoints: POST /trace, GET /agents/{id}/patterns | ✓ |
+| 6 | `agentiq/dashboard.py` | Streamlit, 3 views | ✓ |
+| 7 | `seed_data.py` | 500 demo sessions, all 7 failure types | ✓ |
 
-### While writing code
-4. **One task per session.** Multi-task prompts produce partially broken output across all tasks. Do one thing completely, verify it works, then move to the next.
-5. **Run tests after every meaningful change** — not just at the end.
-6. **Clear context** (`/clear`) when switching to a different part of the codebase. Context degradation is the primary failure mode.
-
-### Before committing
-7. **Run the full lint + typecheck + unit test sequence.** All must pass.
-8. **Review every file you changed.** Unreviewed AI-generated code is technical debt with a short fuse.
-9. **Never commit secrets, keys, or credentials** under any circumstances.
+**One task per session. Never two.**
 
 ---
 
-## Code Quality — Non-Negotiable
+## The Exact Prompt for Each Session
+```
+Read CLAUDE.md fully.
+Read claude-progress.txt last 10 lines.
 
-### No spaghetti code
-- **Single responsibility.** Every function does one thing. If you need to use "and" to describe what a function does, split it.
-- **No functions longer than 40 lines.** If it's longer, it's doing too much.
-- **No files longer than 300 lines.** If it's longer, it needs to be split into modules.
-- **No deeply nested logic.** Maximum 3 levels of nesting. Use early returns to flatten conditionals.
-- **No magic numbers or strings.** Every constant lives in `config.py` with a descriptive name.
-- **No business logic in API routes.** Routes call service functions. Service functions contain logic.
-- **No raw SQL outside `db/queries.py`.** Every database operation is a named function there.
-- **No direct model imports in routes.** Routes talk to services. Services talk to the database layer.
+TASK: Build agentiq/<filename>
 
-### Type safety
-- **Type hints on every function signature and every class attribute.** No exceptions.
-- **Pydantic models for all API request and response schemas.** Validate at the boundary.
-- **mypy --strict must pass** before any commit. Fix type errors — do not suppress them with `# type: ignore` without a comment explaining why.
+[paste requirements from spec]
 
-### Error handling
-- **Never silently swallow exceptions.** Log with context. Either handle it or re-raise it.
-- **Exception in the SDK trace path:** log locally and continue. Never raise to the agent.
-- **Exception in background jobs:** log with full context, increment error counter, continue to next item.
-- **Exception in API routes:** return structured error response `{"error": "message", "code": "ERROR_CODE"}`. Never expose stack traces to clients.
+When done:
+1. Run: pytest tests/test_<name>.py -v
+2. All tests must pass
+3. Append to claude-progress.txt: DONE: <file> | [what you built] | [test names]
+4. git commit -am 'feat: <file> — <one-line description>'
+```
 
 ---
 
-## Testing — Required, Not Optional
+## Data Model — Four Tables Only
 
-### Unit tests
-- **Every function with business logic gets a unit test.** Mock all dependencies.
-- **Test the unhappy path** — null inputs, empty lists, wrong types, boundary values.
-- **Test file lives next to the source file** or mirrors the path in `tests/unit/`.
-- **Naming:** `test_{function_name}_{scenario}` — e.g. `test_classify_intent_empty_input`.
+### AgentLog — written by tracer.py only
+| Field | Type | Notes |
+|-------|------|-------|
+| id | UUID | primary key |
+| agent_id | str | set by agentiq.init() |
+| session_id | str | groups steps of one workflow run |
+| step_number | int | position in workflow (1, 2, 3…) |
+| step_name | str | human label e.g. 'retrieve_policy' |
+| input | str | what was sent to agent at this step |
+| output | str | what the agent responded |
+| tool_calls | jsonb | [{name, input, output, success, latency_ms}] |
+| latency_ms | int | |
+| session_ended | bool | True if last step |
+| timestamp | timestamptz | |
+| metadata | jsonb | developer-provided context |
 
-### Integration tests
-- **Every API endpoint gets an integration test** with a real test database.
-- **Every background job gets an integration test** verifying idempotency.
-- **Every database query function gets an integration test** with realistic data volumes.
+### EvalResult — written by judge.py only
+| Field | Type | Notes |
+|-------|------|-------|
+| id | UUID | |
+| log_id | UUID | FK to AgentLog |
+| session_id | str | denormalized |
+| agent_id | str | denormalized |
+| accuracy | float | 0.0–1.0 |
+| goal_alignment | float | 0.0–1.0 |
+| decision_quality | float | 0.0–1.0 |
+| completeness | float | 0.0–1.0 |
+| overall_score | float | weighted average |
+| passed | bool | overall_score >= pass_threshold |
+| failure_type | str | null if passed |
+| failure_step | int | step where failure originated |
+| failure_reason | str | one plain English sentence |
+| confidence | float | judge's confidence |
+| eval_error | bool | True if judge failed twice |
+| evaluated_at | timestamptz | |
 
-### Calibration tests — only for `evaluation/`
-- Run before AND after any change to `evaluation/prompts.py`.
-- Target: >85% accuracy on failure type classification against labeled test set.
-- If accuracy drops below 85%, revert the change immediately.
+### LossPattern — written by analyzer.py only
+| Field | Type | Notes |
+|-------|------|-------|
+| id | UUID | |
+| agent_id | str | |
+| pattern_type | str | intent \| workflow_step \| tool_call |
+| pattern_value | str | 'billing_dispute' or 'step_3' |
+| failure_count | int | |
+| total_count | int | |
+| failure_rate | float | |
+| pct_of_all_failures | float | KEY metric |
+| root_cause | str | one plain English sentence |
+| is_worsening | bool | failure rate up vs prior 7 days |
+| first_seen | timestamptz | |
+| last_seen | timestamptz | |
 
-### Coverage
-- **Minimum 80% line coverage overall.** Check with `pytest --cov`.
-- **100% coverage on `evaluation/`, `patterns/`, `causal/`** — these are the core IP.
+### AgentQualityConfig — written by dashboard only
+| Field | Type | Default |
+|-------|------|---------|
+| agent_id | str | primary key |
+| industry | str | 'default' |
+| weight_accuracy | float | 0.35 |
+| weight_goal_alignment | float | 0.35 |
+| weight_decision | float | 0.15 |
+| weight_completeness | float | 0.15 |
+| pass_threshold | float | 0.70 |
+
+---
+
+## Judge Scoring Rules
+- `overall_score` = weighted average of 4 dimensions
+- Default weights: accuracy 0.35, goal_alignment 0.35, decision_quality 0.15, completeness 0.15
+- `passed` = true if `overall_score >= 0.7`
+- `failure_reason` must be one plain English sentence — never a JSON dump
+- On malformed JSON response: retry once with simplified prompt. On second failure: set `eval_error=True`
+
+## Failure Taxonomy — 7 Types (Do Not Add Without Team Discussion)
+`wrong_answer` | `tool_failure` | `goal_drift` | `incomplete` | `hallucination` | `context_loss` | `loop`
+
+---
+
+## API — Two Endpoints Only
+- `POST /trace` — receives AgentLog payload, writes to DB
+- `GET /agents/{agent_id}/patterns` — returns LossPattern rows for agent
+
+Both routes are async. Auth required. Multi-tenant: every query scoped to `agent_id`.
+
+---
+
+## Dashboard — Three Views Only
+1. **Agent Overview** — quality score trend 7 days, today's pass rate, active failure count, top 3 failure types
+2. **Failure Feed** — real-time feed, auto-refresh 30s, one-off vs repeating patterns
+3. **Interaction Detail** — step-by-step trace, per-step score, failure reason in plain English
 
 ---
 
 ## Architecture Rules
 
-### The four tables — understand before touching any component
-| Table | Written by | Never written by |
-|---|---|---|
-| AgentLog | SDK trace call only | Anything else |
-| SessionSummary | session_builder.py on session end | External code |
-| EvalResult | judge.py background job — includes quality_score 0–100 and dimension scores | Synchronous paths |
-| LossPattern | analyzer.py hourly job | External code |
-
-**Quality score:** Every EvalResult has a `quality_score` (0–100) computed as a weighted average of four dimensions: accuracy, goal_alignment, decision_quality, completeness. Weights are configurable per agent via `AgentQualityConfig` table. Default weights are equal (0.25 each). Developers adjust weights through the dashboard or API. Custom criteria can be added as additional judge prompt rules per agent.
-
-## Scoring Architecture — V1 and V2
-
-**V1 — Fast frontier model:** Use Claude Haiku as the judge. Latency under 2 seconds per interaction. Cheap enough to run on every interaction. Good enough to collect confirmed failure labels from developers.
-
-**V2 — Distilled proprietary judge:** Every failure a developer confirms in the dashboard is a training example. Once enough labeled examples exist (target: 5,000+ confirmed failures across industries), distill a 3B parameter AgentIQ judge from those examples. Fine-tuned on the seven failure taxonomy, four quality dimensions, and industry-specific standards. This model runs in milliseconds, costs a fraction of an API call, and is more accurate on agent failures than any general-purpose model. It is AgentIQ's proprietary asset — impossible to replicate without the dataset.
-
-**Do not train a classifier.** Classifiers work for narrow, fixed-label tasks. AgentIQ needs multi-dimensional quality scoring with explanations across different agent types. That requires generative reasoning capability, not a classifier.
-
-Full schemas: @docs/ARCHITECTURE.md
-
-### Background jobs — two only
-- **Evaluation job:** every 30 minutes, processes unevaluated AgentLog rows in batches of 50.
-- **Pattern job:** every hour, analyzes agents with new EvalResult rows since last run.
-- Both must be idempotent. Running twice = same result as running once.
-- Both must log start time, end time, and row counts.
-
-### API conventions
-- Async routes everywhere: `async def`.
-- Cursor-based pagination only — no offset pagination on large tables.
-- All SQL in `db/queries.py`. Never inline SQL in routes or services.
-- Multi-tenant from day one — every query scoped to authenticated agent_id.
-- Full API spec: @docs/ARCHITECTURE.md
-
----
-
-## Three Protected Files — Read the Spec Before Touching
-
-| File | Why protected | Read before touching |
-|---|---|---|
-| `evaluation/prompts.py` | Core IP. Changes affect every eval result. | @docs/JUDGE.md |
-| Failure taxonomy (7 types) | Published research. Public interface. | @docs/TAXONOMY.md |
-| Pattern export schema | Public interface. Breaking change = versioning required. | @docs/PATTERNS.md |
-
----
+- **tracer.py:** fire and forget. Queue size 500. On failure: log to `~/.agentiq/errors.log`. Never raise.
+- **judge.py:** background async job only — never in the trace path. Claude Haiku model.
+- **analyzer.py:** hourly job, idempotent, runs after 5+ failures for a pattern.
+- **SQL:** all in `db/queries.py`. No inline SQL anywhere else.
+- **Routes:** call service functions. No business logic in routes.
+- **Types:** type hints everywhere. `mypy --strict` must pass.
 
 ## What Not To Do
-
-- ❌ Do not add synchronous calls to the SDK trace path
-- ❌ Do not evaluate logs synchronously during the trace call
-- ❌ Do not run pattern analysis per eval result — it runs on a schedule
-- ❌ Do not use offset pagination — use cursor-based
-- ❌ Do not put logic in API routes — routes call services
+- ❌ Do not raise in `trace()` or `@watch`
+- ❌ Do not evaluate logs in the trace path
+- ❌ Do not expose `failure_reason` raw judge JSON to API clients
+- ❌ Do not add a new failure type without team discussion
 - ❌ Do not write SQL outside `db/queries.py`
-- ❌ Do not expose `raw_judge_output` in customer-facing API responses
-- ❌ Do not add a new failure type without a team discussion and research review
-- ❌ Do not commit without running lint + typecheck + unit tests
-- ❌ Do not suppress mypy errors without a documented reason
+- ❌ Do not commit without running tests + ruff + mypy
 
 ---
 
-## Stack Quick Reference
-Python 3.11 · FastAPI · PostgreSQL + SQLAlchemy (async) · Alembic · Claude Sonnet 4.6 · Streamlit · asyncio · Pydantic v2 · pytest · ruff · mypy · Railway
+## Stack
+Python 3.11 · FastAPI · PostgreSQL + SQLAlchemy (async) · Alembic · Claude Haiku · Streamlit · aiohttp · Pydantic v2 · pytest · ruff · mypy

@@ -1,5 +1,11 @@
 """
-Shared database configuration and dependency
+Shared database configuration and dependency.
+
+Two modes (set DATABASE_URL env var to switch):
+  SQLite     — default, zero config, for local dev and demos
+               DATABASE_URL=sqlite:///./agentiq.db  (or leave unset)
+  PostgreSQL — for production
+               DATABASE_URL=postgresql://user:pass@host:5432/dbname
 """
 
 from sqlalchemy import create_engine
@@ -13,11 +19,12 @@ load_dotenv(override=True)
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./agentiq.db")
 print(f"🔍 Connecting to database: {DATABASE_URL[:30]}...")
 
-# Create engine with SQLite settings for Railway
+# SQLite: no thread checks needed (single-process demo)
+# PostgreSQL: pool_pre_ping reconnects stale connections dropped by the server
 if "sqlite" in DATABASE_URL:
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
-    engine = create_engine(DATABASE_URL)
+    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
