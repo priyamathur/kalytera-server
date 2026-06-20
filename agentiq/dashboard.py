@@ -704,10 +704,11 @@ def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
                 or q in log.step_name.lower()
             ]
 
+        _plural = "s" if len(filtered) != 1 else ""
+        _match = f' matching "{search}"' if search.strip() else ""
         st.markdown(
             f'<p style="font-size:12px;color:#94a3b8;margin:8px 0 12px">'
-            f'{len(filtered)} failure{"s" if len(filtered) != 1 else ""}'
-            f'{"" if not search.strip() else f" matching \"{search}\""}'
+            f'{len(filtered)} failure{_plural}{_match}'
             f' · auto-refreshes every {AUTO_REFRESH_S}s</p>',
             unsafe_allow_html=True,
         )
