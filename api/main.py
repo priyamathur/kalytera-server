@@ -166,14 +166,20 @@ def _run_seed() -> None:
         db.close()
 
 
-@asynccontextmanager
-async def _lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
+async def _startup_bg() -> None:
+    """DB init + optional seed — runs as a background task after server is up."""
     loop = asyncio.get_running_loop()
-    # Run DB init in a thread so it never blocks the event loop during startup.
     await loop.run_in_executor(None, initialize_database)
     if os.getenv("SEED_ON_STARTUP", "").lower() == "true":
         await loop.run_in_executor(None, _run_seed)
+
+
+@asynccontextmanager
+async def _lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
+    # yield immediately so uvicorn binds the port and Render's health check passes.
+    # All heavy work runs as background tasks after the server is accepting requests.
     tasks = [
+        asyncio.create_task(_startup_bg()),
         asyncio.create_task(_eval_loop()),
         asyncio.create_task(_analysis_loop()),
     ]
