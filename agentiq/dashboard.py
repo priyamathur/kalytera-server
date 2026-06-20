@@ -12,10 +12,11 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
+import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
-# Page config must be the first Streamlit call
 st.set_page_config(
     page_title="AgentIQ",
     page_icon="⚡",
@@ -130,21 +131,24 @@ def _db():  # type: ignore[return]
     return sessionmaker(bind=_engine())()
 
 
-# ── db.queries imports (must be before sidebar code that calls them) ──────────
+# ── Imports ───────────────────────────────────────────────────────────────────
 from db.queries import (  # noqa: E402
     get_all_agent_ids,
     get_failures_by_step,
+    get_latency_values,
     get_patterns_for_agent,
     get_quality_trend,
     get_recent_eval_failures,
     get_recent_failing_sessions,
+    get_score_buckets,
     get_session_and_latency_stats,
     get_session_steps,
     get_todays_stats,
     get_top_failure_types,
+    search_eval_failures,
 )
 
-# ── Handle nav redirects: pop but don't set widget key before it renders ──────
+# ── Nav redirect (pop before sidebar renders, set index from it) ──────────────
 _pending_nav: Optional[str] = st.session_state.pop("_nav_to", None)
 
 # ── Global CSS ────────────────────────────────────────────────────────────────
@@ -152,7 +156,7 @@ st.markdown("""
 <style>
 /* ── Reset ── */
 #MainMenu, footer, header { visibility: hidden; }
-.block-container { padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1280px; }
+.block-container { padding-top: 1.5rem; padding-bottom: 3rem; max-width: 1400px; }
 
 /* ── Sidebar ── */
 section[data-testid="stSidebar"] {
@@ -165,82 +169,61 @@ section[data-testid="stSidebar"] span,
 section[data-testid="stSidebar"] label,
 section[data-testid="stSidebar"] div { color: #94a3b8 !important; }
 section[data-testid="stSidebar"] [data-baseweb="select"] > div {
-    background: #1e293b !important;
-    border-color: #334155 !important;
+    background: #1e293b !important; border-color: #334155 !important;
 }
 section[data-testid="stSidebar"] [data-baseweb="select"] * { color: #e2e8f0 !important; }
 section[data-testid="stSidebar"] hr { border-color: #1e293b !important; }
 section[data-testid="stSidebar"] [data-testid="stRadio"] > div { gap: 2px !important; }
 section[data-testid="stSidebar"] [data-testid="stRadio"] label {
-    padding: 9px 14px !important;
-    border-radius: 8px !important;
-    font-size: 13px !important;
-    font-weight: 500 !important;
-    width: 100% !important;
-    cursor: pointer !important;
-    transition: all 0.12s !important;
+    padding: 9px 14px !important; border-radius: 8px !important;
+    font-size: 13px !important; font-weight: 500 !important;
+    width: 100% !important; cursor: pointer !important; transition: all 0.12s !important;
 }
 section[data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
     background: #1e293b !important;
 }
 section[data-testid="stSidebar"] input[type="radio"]:checked + div p {
-    color: #f1f5f9 !important;
-    font-weight: 700 !important;
+    color: #f1f5f9 !important; font-weight: 700 !important;
 }
 
 /* ── Page background ── */
-.stApp { background: #f8fafc !important; }
+.stApp { background: #f1f5f9 !important; }
 
 /* ── Metric cards ── */
 [data-testid="stMetric"] {
-    background: white !important;
-    border-radius: 14px !important;
-    padding: 20px 22px 16px !important;
-    border: 1px solid #e2e8f0 !important;
+    background: white !important; border-radius: 14px !important;
+    padding: 20px 22px 16px !important; border: 1px solid #e2e8f0 !important;
     box-shadow: 0 1px 3px rgba(15,23,42,0.06) !important;
 }
 [data-testid="stMetricLabel"] > div {
-    font-size: 11px !important;
-    font-weight: 700 !important;
-    color: #64748b !important;
-    text-transform: uppercase !important;
+    font-size: 11px !important; font-weight: 700 !important;
+    color: #64748b !important; text-transform: uppercase !important;
     letter-spacing: 0.08em !important;
 }
 [data-testid="stMetricValue"] > div {
-    font-size: 32px !important;
-    font-weight: 800 !important;
-    color: #0f172a !important;
-    letter-spacing: -0.03em !important;
+    font-size: 30px !important; font-weight: 800 !important;
+    color: #0f172a !important; letter-spacing: -0.03em !important;
     line-height: 1.1 !important;
 }
 [data-testid="stMetricDelta"] { font-size: 12px !important; font-weight: 600 !important; }
 
 /* ── Bordered containers ── */
 [data-testid="stVerticalBlockBorderWrapper"] {
-    border-radius: 14px !important;
-    border: 1px solid #e2e8f0 !important;
-    background: white !important;
-    box-shadow: 0 1px 3px rgba(15,23,42,0.04) !important;
+    border-radius: 14px !important; border: 1px solid #e2e8f0 !important;
+    background: white !important; box-shadow: 0 1px 3px rgba(15,23,42,0.04) !important;
 }
 
 /* ── Buttons ── */
 .stButton > button {
-    border-radius: 8px !important;
-    font-size: 12px !important;
-    font-weight: 600 !important;
-    height: 34px !important;
-    border: 1px solid #e2e8f0 !important;
-    background: white !important;
-    color: #475569 !important;
-    letter-spacing: 0.01em !important;
-    transition: all 0.12s !important;
-    box-shadow: 0 1px 2px rgba(15,23,42,0.04) !important;
+    border-radius: 8px !important; font-size: 12px !important;
+    font-weight: 600 !important; height: 34px !important;
+    border: 1px solid #e2e8f0 !important; background: white !important;
+    color: #475569 !important; letter-spacing: 0.01em !important;
+    transition: all 0.12s !important; box-shadow: 0 1px 2px rgba(15,23,42,0.04) !important;
 }
 .stButton > button:hover {
-    background: #f8fafc !important;
-    border-color: #94a3b8 !important;
-    color: #0f172a !important;
-    box-shadow: 0 2px 6px rgba(15,23,42,0.08) !important;
+    background: #f8fafc !important; border-color: #94a3b8 !important;
+    color: #0f172a !important; box-shadow: 0 2px 6px rgba(15,23,42,0.08) !important;
 }
 
 /* ── Headings ── */
@@ -251,7 +234,7 @@ h2 { font-size: 15px !important; font-weight: 700 !important; color: #1e293b !im
 h3 { font-size: 13px !important; font-weight: 600 !important; color: #334155 !important; }
 
 /* ── Divider ── */
-hr { border: none !important; border-top: 1px solid #f1f5f9 !important; margin: 20px 0 !important; }
+hr { border: none !important; border-top: 1px solid #e2e8f0 !important; margin: 20px 0 !important; }
 
 /* ── Caption ── */
 .stCaption p { font-size: 12px !important; color: #94a3b8 !important; }
@@ -261,11 +244,8 @@ summary { font-size: 13px !important; font-weight: 600 !important; color: #47556
 
 /* ── Code ── */
 code {
-    font-size: 11px !important;
-    background: #f1f5f9 !important;
-    padding: 1px 6px !important;
-    border-radius: 4px !important;
-    color: #475569 !important;
+    font-size: 11px !important; background: #f1f5f9 !important;
+    padding: 1px 6px !important; border-radius: 4px !important; color: #475569 !important;
 }
 
 /* ── Download button ── */
@@ -274,11 +254,14 @@ code {
 /* ── Alert boxes ── */
 [data-testid="stAlert"] { border-radius: 10px !important; font-size: 13px !important; }
 
-/* ── Dataframe ── */
-[data-testid="stDataFrame"] { border-radius: 10px !important; overflow: hidden !important; }
-
 /* ── Text input ── */
 .stTextInput input { border-radius: 8px !important; font-size: 13px !important; border-color: #e2e8f0 !important; }
+
+/* ── Search input ── */
+.search-box input { font-size: 13px !important; }
+
+/* ── Plotly charts ── */
+.js-plotly-plot { border-radius: 12px !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -290,10 +273,10 @@ with st.sidebar:
     st.markdown(
         """
         <div style="padding:24px 16px 20px">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-            <div style="background:#6366f1;width:34px;height:34px;border-radius:9px;
-                        display:flex;align-items:center;justify-content:center;
-                        font-size:20px;flex-shrink:0">⚡</div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+            <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);width:34px;height:34px;
+                        border-radius:9px;display:flex;align-items:center;justify-content:center;
+                        font-size:20px;flex-shrink:0;box-shadow:0 2px 8px rgba(99,102,241,0.4)">⚡</div>
             <div>
               <div style="font-size:19px;font-weight:900;color:#f8fafc;letter-spacing:-0.03em">AgentIQ</div>
               <div style="font-size:10px;color:#475569;font-weight:600;letter-spacing:0.08em;
@@ -341,32 +324,35 @@ with st.sidebar:
     _nav_idx = (
         _NAV_OPTIONS.index(_pending_nav)
         if _pending_nav in _NAV_OPTIONS
-        else _NAV_OPTIONS.index(st.session_state.get("view", _NAV_OPTIONS[0]))
-        if st.session_state.get("view") in _NAV_OPTIONS
-        else 0
+        else (
+            _NAV_OPTIONS.index(st.session_state.get("view", _NAV_OPTIONS[0]))
+            if st.session_state.get("view") in _NAV_OPTIONS
+            else 0
+        )
     )
     view: str = st.radio(
-        "nav",
-        _NAV_OPTIONS,
-        index=_nav_idx,
-        key="view",
-        label_visibility="collapsed",
+        "nav", _NAV_OPTIONS, index=_nav_idx, key="view", label_visibility="collapsed",
     )
 
     if "Trace" in view:
         st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
         st.text_input(
-            "jump",
-            value="",
-            key="manual_sid",
-            placeholder="Paste session ID…",
+            "jump", value="", key="manual_sid", placeholder="Paste session ID…",
             label_visibility="collapsed",
         )
 
     st.markdown('<hr style="margin:20px 0 12px"/>', unsafe_allow_html=True)
     st.markdown(
         '<p style="font-size:11px;color:#334155;padding:0 4px;line-height:1.7">'
-        'Evals every 30s<br>Patterns hourly</p>',
+        'Evals every 30s&nbsp;·&nbsp;Patterns hourly</p>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div style="height:4px"/>', unsafe_allow_html=True)
+    st.markdown(
+        '<a href="http://localhost:8000/docs" target="_blank" '
+        'style="font-size:11px;color:#475569;text-decoration:none;padding:0 4px">'
+        '→ API docs</a>',
         unsafe_allow_html=True,
     )
 
@@ -392,11 +378,29 @@ def _section_head(label: str, sub: str = "") -> None:
     st.markdown(f'<h2 style="margin:20px 0 8px">{label}{sub_html}</h2>', unsafe_allow_html=True)
 
 
+def _plotly_defaults(fig: go.Figure, height: int = 220) -> go.Figure:
+    fig.update_layout(
+        height=height,
+        margin=dict(l=0, r=0, t=8, b=0),
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        font=dict(family="Inter, -apple-system, sans-serif", size=12, color="#475569"),
+        xaxis=dict(gridcolor="#f1f5f9", linecolor="#e2e8f0", showline=True),
+        yaxis=dict(gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1,
+            font=dict(size=11),
+        ),
+        hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#e2e8f0"),
+    )
+    return fig
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 1 — Overview
 # ═══════════════════════════════════════════════════════════════════════════════
 def _show_overview(agent_id: str) -> None:
-    _page_header("Agent Overview", "Quality metrics and failure patterns for the last 24 hours")
+    _page_header("Agent Overview", "Quality, latency, and failure breakdown for the last 24 hours")
 
     db = _db()
     try:
@@ -406,6 +410,8 @@ def _show_overview(agent_id: str) -> None:
         top_types = get_top_failure_types(agent_id, 24, db)
         step_hot = get_failures_by_step(agent_id, 24, db)
         patterns = get_patterns_for_agent(agent_id, db)
+        latencies = get_latency_values(agent_id, 24, db)
+        score_buckets = get_score_buckets(agent_id, 24, db)
     finally:
         db.close()
 
@@ -415,18 +421,19 @@ def _show_overview(agent_id: str) -> None:
     if failures_24h == 0 and stats["total"] > 0:
         st.success("No failures in the last 24 hours — your agent is healthy.", icon="✅")
 
-    # ── KPIs ────────────────────────────────────────────────────────────────
-    k1, k2, k3, k4 = st.columns(4)
-    k1.metric("Sessions (24h)", extra["session_count"],
-              help="Distinct agent sessions in the last 24h")
+    # ── KPI row ─────────────────────────────────────────────────────────────
+    k1, k2, k3, k4, k5 = st.columns(5)
+    k1.metric("Sessions (24h)", extra["session_count"])
     k2.metric("Pass Rate", f"{pass_pct:.0f}%",
-              delta=f"{stats['passed']} passed · {failures_24h} failed",
-              help="% of steps scoring ≥ 70")
-    k3.metric("Avg Score", f"{extra['avg_score']:.0f}/100",
-              help="Weighted avg: accuracy 35%, goal 35%, decision 15%, completeness 15%")
-    k4.metric("Avg Latency", f"{extra['avg_latency_ms']} ms",
-              help="Mean step execution time")
+              delta=f"{stats['passed']} passed · {failures_24h} failed")
+    k3.metric("Avg Score", f"{extra['avg_score']:.0f}/100")
+    k4.metric("Avg Latency", f"{extra['avg_latency_ms']} ms")
 
+    # Latency P99
+    p99 = int(np.percentile(latencies, 99)) if latencies else 0
+    k5.metric("P99 Latency", f"{p99} ms", help="99th percentile step latency")
+
+    # Color pass rate
     color = "#16a34a" if pass_pct >= 70 else "#dc2626"
     st.markdown(
         f"<style>[data-testid='stMetric']:nth-child(2) "
@@ -434,15 +441,86 @@ def _show_overview(agent_id: str) -> None:
         unsafe_allow_html=True,
     )
 
-    # ── Trend ───────────────────────────────────────────────────────────────
-    _section_head("Quality Trend", f"last {TREND_DAYS} days")
-    if trend:
-        df = pd.DataFrame(trend)
-        df["Score %"] = (df["avg_score"] * 100).round(1)
-        df["Pass Rate %"] = (df["pass_rate"] * 100).round(1)
-        st.line_chart(df.set_index("date")[["Score %", "Pass Rate %"]], height=200)
-    else:
-        st.caption("No evaluation data yet.")
+    # ── Two main charts ──────────────────────────────────────────────────────
+    _section_head("Trend & Distribution", f"last {TREND_DAYS} days quality, last 24h scores")
+    ch1, ch2 = st.columns([3, 2])
+
+    with ch1:
+        if trend:
+            df_t = pd.DataFrame(trend)
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=df_t["date"], y=(df_t["avg_score"] * 100).round(1),
+                name="Avg Score", mode="lines+markers",
+                line=dict(color="#6366f1", width=2.5),
+                marker=dict(size=5),
+                hovertemplate="%{y:.0f}/100<extra>Avg Score</extra>",
+            ))
+            fig.add_trace(go.Scatter(
+                x=df_t["date"], y=(df_t["pass_rate"] * 100).round(1),
+                name="Pass Rate %", mode="lines+markers",
+                line=dict(color="#22c55e", width=2, dash="dot"),
+                marker=dict(size=5),
+                hovertemplate="%{y:.0f}%<extra>Pass Rate</extra>",
+            ))
+            fig.add_hline(y=70, line_dash="dash", line_color="#ef4444", line_width=1,
+                          annotation_text="Pass threshold", annotation_position="right",
+                          annotation_font_size=10, annotation_font_color="#ef4444")
+            _plotly_defaults(fig, 200).update_layout(yaxis=dict(range=[0, 105]))
+            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.caption("No evaluation data yet.")
+
+    with ch2:
+        if score_buckets:
+            df_b = pd.DataFrame(score_buckets)
+            colors = [
+                "#ef4444" if b < 50 else "#f97316" if b < 70 else "#22c55e"
+                for b in df_b["bucket"]
+            ]
+            fig2 = go.Figure(go.Bar(
+                x=df_b["range"], y=df_b["count"],
+                marker_color=colors,
+                text=df_b["count"], textposition="outside",
+                textfont=dict(size=11, color="#475569"),
+                hovertemplate="%{x}: %{y} sessions<extra></extra>",
+            ))
+            _plotly_defaults(fig2, 200).update_layout(
+                yaxis_title="sessions",
+                xaxis=dict(tickfont=dict(size=10)),
+            )
+            st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+        else:
+            st.caption("No score data yet.")
+
+    # ── Latency percentiles ──────────────────────────────────────────────────
+    if latencies:
+        _section_head("Latency Profile", "step execution time distribution")
+        arr = np.array(latencies)
+        pcts = [50, 75, 90, 95, 99]
+        vals = [int(np.percentile(arr, p)) for p in pcts]
+
+        fig3 = go.Figure(go.Bar(
+            x=[f"P{p}" for p in pcts], y=vals,
+            marker_color=["#6366f1", "#8b5cf6", "#f59e0b", "#f97316", "#ef4444"],
+            text=[f"{v:,} ms" for v in vals],
+            textposition="outside",
+            textfont=dict(size=11, color="#475569"),
+            hovertemplate="%{x}: %{y} ms<extra></extra>",
+        ))
+        _plotly_defaults(fig3, 160).update_layout(
+            yaxis_title="ms",
+            bargap=0.4,
+            xaxis=dict(tickfont=dict(size=12, color="#0f172a")),
+        )
+        pcol1, pcol2 = st.columns([2, 3])
+        with pcol1:
+            pc1, pc2, pc3 = st.columns(3)
+            pc1.metric("P50", f"{vals[0]} ms")
+            pc2.metric("P95", f"{vals[3]} ms")
+            pc3.metric("P99", f"{vals[4]} ms")
+        with pcol2:
+            st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
 
     # ── Failure breakdown ────────────────────────────────────────────────────
     _section_head("Failure Breakdown", "last 24h")
@@ -478,15 +556,23 @@ def _show_overview(agent_id: str) -> None:
             unsafe_allow_html=True,
         )
         if top_types:
-            rows2 = [{"Type": ft, "Count": cnt, "Share": pct} for ft, cnt, pct in top_types]
-            st.dataframe(
-                pd.DataFrame(rows2),
-                column_config={
-                    "Share": st.column_config.ProgressColumn(
-                        "Share", format="%.0f%%", min_value=0, max_value=1),
-                },
-                hide_index=True, use_container_width=True,
+            # Donut chart
+            fig_d = go.Figure(go.Pie(
+                labels=[ft for ft, _, _ in top_types],
+                values=[cnt for _, cnt, _ in top_types],
+                hole=0.55,
+                marker_colors=[_ft_color(ft)[0] for ft, _, _ in top_types],
+                textinfo="label+percent",
+                textfont=dict(size=11),
+                hovertemplate="%{label}: %{value}<extra></extra>",
+            ))
+            fig_d.update_layout(
+                height=180, margin=dict(l=0, r=0, t=0, b=0),
+                paper_bgcolor="white",
+                font=dict(family="Inter, sans-serif", size=11),
+                showlegend=False,
             )
+            st.plotly_chart(fig_d, use_container_width=True, config={"displayModeBar": False})
         else:
             st.caption("No failures in the last 24h.")
 
@@ -546,11 +632,14 @@ def _show_overview(agent_id: str) -> None:
 # VIEW 2 — Failure Feed
 # ═══════════════════════════════════════════════════════════════════════════════
 @st.fragment(run_every=AUTO_REFRESH_S)
-def _failure_feed_fragment(agent_id: str) -> None:
+def _failure_feed_fragment(agent_id: str, search_query: str) -> None:
     db = _db()
     try:
         patterns = get_patterns_for_agent(agent_id, db)
-        recent = get_recent_eval_failures(agent_id, 50, db)
+        if search_query.strip():
+            recent = search_eval_failures(agent_id, search_query.strip(), 50, db)
+        else:
+            recent = get_recent_eval_failures(agent_id, 50, db)
     finally:
         db.close()
 
@@ -581,7 +670,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
         )
 
     if recent:
-        with st.expander("All failures — flat table", expanded=False):
+        with st.expander("Flat table view", expanded=False):
             tbl = [
                 {
                     "Session": log.session_id[:28] + "…",
@@ -595,7 +684,8 @@ def _failure_feed_fragment(agent_id: str) -> None:
             ]
             st.dataframe(pd.DataFrame(tbl), hide_index=True, use_container_width=True)
 
-    if patterns:
+    # Only show patterns section when not searching
+    if patterns and not search_query.strip():
         st.markdown(
             '<h2 style="margin:16px 0 4px">Recurring Patterns</h2>'
             '<p style="font-size:12px;color:#94a3b8;margin:0 0 12px">'
@@ -604,19 +694,23 @@ def _failure_feed_fragment(agent_id: str) -> None:
         )
         for p in patterns:
             _render_pattern_card(p)
-
-    if patterns and recent:
-        st.markdown('<hr/>', unsafe_allow_html=True)
+        if recent:
+            st.markdown('<hr/>', unsafe_allow_html=True)
 
     if recent:
-        st.markdown(
+        label = (
+            f'<h2 style="margin:0 0 4px">Search Results</h2>'
+            f'<p style="font-size:12px;color:#94a3b8;margin:0 0 12px">'
+            f'{len(recent)} failures matching "{search_query}"</p>'
+            if search_query.strip() else
             '<h2 style="margin:0 0 4px">Recent Failures</h2>'
-            '<p style="font-size:12px;color:#94a3b8;margin:0 0 12px">'
-            'Latest failed evaluations</p>',
-            unsafe_allow_html=True,
+            '<p style="font-size:12px;color:#94a3b8;margin:0 0 12px">Latest failed evaluations</p>'
         )
-        for ev, log in recent[:15]:
+        st.markdown(label, unsafe_allow_html=True)
+        for ev, log in recent[:20]:
             _render_failure_card(ev, log)
+    elif search_query.strip():
+        st.caption(f'No failures matching "{search_query}"')
 
 
 def _render_pattern_card(p: Any) -> None:
@@ -716,13 +810,98 @@ def _render_failure_card(ev: Any, log: Any) -> None:
 
 
 def _show_failure_feed(agent_id: str) -> None:
-    _page_header("Failure Feed", "Real-time failures and recurring patterns — auto-refreshes every 30s")
-    _failure_feed_fragment(agent_id)
+    _page_header("Failure Feed", "Real-time failures and recurring patterns")
+
+    # Search bar
+    search = st.text_input(
+        "search_label",
+        value=st.session_state.get("_feed_search", ""),
+        placeholder="🔍  Search failure reasons…  (e.g. 'timeout', 'context', 'billing')",
+        key="_feed_search",
+        label_visibility="collapsed",
+    )
+
+    _failure_feed_fragment(agent_id, search)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 3 — Trace Viewer
 # ═══════════════════════════════════════════════════════════════════════════════
+def _build_waterfall(steps: List[Tuple[Any, Optional[Any]]]) -> Optional[go.Figure]:
+    """Build a Plotly Gantt/waterfall chart from session steps."""
+    if not steps:
+        return None
+
+    # Compute cumulative start times
+    cumulative = 0
+    rows_data = []
+    for log, ev in steps:
+        latency = max(log.latency_ms or 0, 1)
+        passed = ev.passed if ev else True
+        failed = ev is not None and not ev.passed
+        rows_data.append({
+            "step": f"Step {log.step_number} · {log.step_name}",
+            "start": cumulative,
+            "end": cumulative + latency,
+            "latency": latency,
+            "passed": passed,
+            "failed": failed,
+            "score": int(round(ev.overall_score * 100)) if ev else None,
+        })
+        cumulative += latency
+
+    fig = go.Figure()
+    total_ms = cumulative
+
+    for row in rows_data:
+        color = "#ef4444" if row["failed"] else "#22c55e"
+        score_text = f" · {row['score']}/100" if row["score"] is not None else ""
+
+        fig.add_trace(go.Bar(
+            name=row["step"],
+            x=[row["latency"]],
+            y=[row["step"]],
+            base=[row["start"]],
+            orientation="h",
+            marker=dict(
+                color=color,
+                opacity=0.85,
+                line=dict(color="white", width=1),
+            ),
+            text=f"{row['latency']} ms{score_text}",
+            textposition="inside" if row["latency"] > total_ms * 0.08 else "outside",
+            textfont=dict(size=11, color="white" if row["latency"] > total_ms * 0.08 else color),
+            hovertemplate=(
+                f"<b>{row['step']}</b><br>"
+                f"Latency: {row['latency']} ms<br>"
+                f"Start: {row['start']} ms<br>"
+                + (f"Score: {row['score']}/100" if row['score'] is not None else "Pending eval")
+                + "<extra></extra>"
+            ),
+            showlegend=False,
+        ))
+
+    fig.update_layout(
+        height=max(160, len(rows_data) * 36 + 40),
+        barmode="overlay",
+        plot_bgcolor="white",
+        paper_bgcolor="white",
+        margin=dict(l=0, r=0, t=8, b=0),
+        font=dict(family="Inter, sans-serif", size=11, color="#475569"),
+        xaxis=dict(
+            title="Time (ms)", gridcolor="#f1f5f9", linecolor="#e2e8f0",
+            showline=True, zeroline=False,
+        ),
+        yaxis=dict(
+            autorange="reversed",
+            gridcolor="#f1f5f9",
+            tickfont=dict(size=11),
+        ),
+        hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#e2e8f0"),
+    )
+    return fig
+
+
 def _build_diagnosis(
     steps: List[Tuple[Any, Optional[Any]]],
 ) -> Optional[Dict[str, str]]:
@@ -746,7 +925,7 @@ def _build_diagnosis(
 
 
 def _show_trace(agent_id: str, session_id: str) -> None:
-    _page_header("Trace Viewer", "Step-by-step agent trace with per-step scores and diagnosis")
+    _page_header("Trace Viewer", "Step-by-step waterfall trace with scores and diagnosis")
 
     if not session_id:
         _show_session_browser(agent_id)
@@ -771,8 +950,9 @@ def _show_trace(agent_id: str, session_id: str) -> None:
     session_score = int(round(min(ev.overall_score for ev in all_evals) * 100)) if all_evals else 0
     is_failed = bool(failed_steps)
     score_color = "#dc2626" if is_failed else "#16a34a"
-    status_label = "FAILED" if is_failed else "PASSED"
+    total_ms = sum(log.latency_ms or 0 for log, _ in steps)
 
+    # Session banner
     st.markdown(
         f"""
         <div style="background:white;border:1px solid #e2e8f0;border-radius:14px;
@@ -781,10 +961,10 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                     box-shadow:0 1px 3px rgba(15,23,42,0.05)">
           <div>
             <div style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:0.08em;
-                        text-transform:uppercase;margin-bottom:4px">Session ID</div>
+                        text-transform:uppercase;margin-bottom:4px">Session</div>
             <code style="font-size:13px;color:#1e293b;background:transparent;padding:0">{session_id}</code>
             <div style="font-size:12px;color:#94a3b8;margin-top:6px">
-              {len(steps)} steps · {len(failed_steps)} failed
+              {len(steps)} steps · {len(failed_steps)} failed · {total_ms:,} ms total
             </div>
           </div>
           <div style="text-align:right">
@@ -794,41 +974,61 @@ def _show_trace(agent_id: str, session_id: str) -> None:
               <span style="font-size:18px;font-weight:400;color:#94a3b8">/100</span>
             </div>
             <div style="font-size:12px;font-weight:700;color:{score_color};
-                        letter-spacing:0.06em">{status_label}</div>
+                        letter-spacing:0.06em">{"FAILED" if is_failed else "PASSED"}</div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
+    # ── Waterfall chart ──────────────────────────────────────────────────────
+    _section_head("Execution Waterfall", "step timing — width = latency")
+    waterfall = _build_waterfall(steps)
+    if waterfall:
+        st.plotly_chart(
+            waterfall, use_container_width=True, config={"displayModeBar": False}
+        )
+        # Legend
+        st.markdown(
+            '<div style="display:flex;gap:16px;margin:-8px 0 12px;font-size:11px;color:#64748b">'
+            '<span><span style="background:#22c55e;border-radius:3px;display:inline-block;width:12px;height:12px;vertical-align:middle"></span> Passed</span>'
+            '<span><span style="background:#ef4444;border-radius:3px;display:inline-block;width:12px;height:12px;vertical-align:middle"></span> Failed</span>'
+            '</div>',
+            unsafe_allow_html=True,
+        )
+
+    # ── Step details ──────────────────────────────────────────────────────────
+    _section_head("Step Details", "expand to see input/output")
+
     for log, ev in steps:
         passed = ev.passed if ev is not None else True
         score = int(round(ev.overall_score * 100)) if ev else None
         border = "#ef4444" if (ev and not passed) else "#22c55e" if (ev and passed) else "#e2e8f0"
         step_bg = "#fef2f2" if (ev and not passed) else "white"
-        ev_badge_html = ""
-        if score is not None:
-            ev_badge_html = f'&nbsp;&nbsp;{_score_chip(score, passed)}'
+        ev_badge_html = f'&nbsp;&nbsp;{_score_chip(score, passed)}' if score is not None else ""
+        ft_html = ""
+        if ev and not ev.passed:
+            ft_html = (
+                f'<div style="font-size:12px;color:#64748b;margin-top:6px">'
+                f'{_badge((ev.failure_type or "unknown"), "11px")}'
+                f'&nbsp;&nbsp;{ev.failure_reason or ""}'
+                f'</div>'
+            )
 
         st.markdown(
             f"""
             <div style="background:{step_bg};border:1px solid #e2e8f0;border-left:4px solid {border};
-                        border-radius:0 12px 12px 0;padding:14px 18px;margin:8px 0">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:{'8px' if ev and not passed else '0'}">
+                        border-radius:0 12px 12px 0;padding:14px 18px;margin:6px 0">
+              <div style="display:flex;justify-content:space-between;align-items:center">
                 <div>
                   <span style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;
                                letter-spacing:0.08em">Step {log.step_number}</span>
                   <span style="font-size:15px;font-weight:700;color:#1e293b;margin-left:10px">{log.step_name}</span>
+                  <span style="font-size:11px;color:#94a3b8;margin-left:10px">{log.latency_ms:,} ms</span>
                 </div>
                 {ev_badge_html}
               </div>
-              {
-                f'<div style="font-size:12px;color:#64748b;margin-top:2px">'
-                f'{_badge((ev.failure_type or "unknown"), "11px")}'
-                f'&nbsp;&nbsp;{ev.failure_reason or ""}'
-                f'</div>'
-                if ev and not ev.passed else ""
-              }
+              {ft_html}
             </div>
             """,
             unsafe_allow_html=True,
@@ -841,10 +1041,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
             sc3.metric("Decision", f"{ev.decision_quality * 100:.0f}")
             sc4.metric("Completeness", f"{ev.completeness * 100:.0f}")
 
-        with st.expander(
-            f"Input / Output  ·  {log.latency_ms} ms",
-            expanded=False,
-        ):
+        with st.expander(f"Input / Output  ·  {log.latency_ms:,} ms", expanded=False):
             ic, oc = st.columns(2)
             with ic:
                 st.markdown(
@@ -852,14 +1049,14 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                     'text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Input</p>',
                     unsafe_allow_html=True,
                 )
-                st.code(log.input[:1000] + ("…" if len(log.input) > 1000 else ""), language=None)
+                st.code(log.input[:1200] + ("…" if len(log.input) > 1200 else ""), language=None)
             with oc:
                 st.markdown(
                     '<p style="font-size:10px;font-weight:700;color:#64748b;'
                     'text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Output</p>',
                     unsafe_allow_html=True,
                 )
-                st.code(log.output[:1000] + ("…" if len(log.output) > 1000 else ""), language=None)
+                st.code(log.output[:1200] + ("…" if len(log.output) > 1200 else ""), language=None)
             if log.tool_calls:
                 try:
                     tools = json.loads(log.tool_calls) if isinstance(log.tool_calls, str) else log.tool_calls
@@ -873,6 +1070,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                 except (json.JSONDecodeError, TypeError):
                     pass
 
+    # ── Diagnosis ─────────────────────────────────────────────────────────────
     diag = _build_diagnosis(steps)
     if diag:
         st.markdown(
@@ -881,7 +1079,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                         padding:20px 24px;margin-top:16px;
                         box-shadow:0 1px 3px rgba(15,23,42,0.05)">
               <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;
-                          letter-spacing:0.08em;margin-bottom:10px">Diagnosis</div>
+                          letter-spacing:0.08em;margin-bottom:10px">Root Cause</div>
               <div style="font-size:14px;color:#475569;margin-bottom:16px;line-height:1.7">
                 {diag['what']}
               </div>

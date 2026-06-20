@@ -384,6 +384,69 @@ def get_session_and_latency_stats(agent_id: str, hours: int, db: Session) -> Dic
 
 
 # ---------------------------------------------------------------------------
+# Dashboard — Latency / score distributions + search
+# ---------------------------------------------------------------------------
+
+def get_latency_values(agent_id: str, hours: int, db: Session) -> List[int]:
+    """Raw step latency_ms values for computing percentiles in-process."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    rows = (
+        db.query(AgentLog.latency_ms)
+        .filter(
+            AgentLog.agent_id == agent_id,
+            AgentLog.timestamp >= since,
+            AgentLog.latency_ms > 0,
+        )
+        .all()
+    )
+    return [int(r[0]) for r in rows]
+
+
+def get_score_buckets(agent_id: str, hours: int, db: Session) -> List[Dict[str, Any]]:
+    """Score distribution: count of evals per 10-point bucket (0-9, 10-19, … 90-100)."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    rows = (
+        db.query(EvalResult.overall_score)
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= since,
+            EvalResult.eval_error == False,  # noqa: E712
+        )
+        .all()
+    )
+    buckets: Dict[int, int] = {i: 0 for i in range(0, 100, 10)}
+    for (score,) in rows:
+        if score is not None:
+            bucket = min(int(float(score) * 100) // 10 * 10, 90)
+            buckets[bucket] = buckets.get(bucket, 0) + 1
+    return [
+        {"range": f"{k}–{k+9}", "count": v, "bucket": k}
+        for k, v in sorted(buckets.items())
+        if v > 0
+    ]
+
+
+def search_eval_failures(
+    agent_id: str, query_text: str, limit: int, db: Session
+) -> List[Tuple["EvalResult", "AgentLog"]]:
+    """Full-text search over failure_reason. Returns (EvalResult, AgentLog) pairs."""
+    rows = (
+        db.query(EvalResult, AgentLog)
+        .join(AgentLog, EvalResult.log_id == AgentLog.id)
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.passed == False,  # noqa: E712
+            EvalResult.eval_error == False,  # noqa: E712
+            EvalResult.failure_reason.ilike(f"%{query_text}%"),
+        )
+        .order_by(EvalResult.evaluated_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [(ev, log) for ev, log in rows]
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
