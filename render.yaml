@@ -1,12 +1,10 @@
-services:
-  # PostgreSQL Database
-  - type: pserv
-    name: agentiq-db
-    env: postgresql
+databases:
+  - name: agentiq-db
     plan: free
     databaseName: agentiq
-    databaseUser: agentiq
+    user: agentiq
 
+services:
   # Main FastAPI Application
   - type: web
     name: agentiq-api
