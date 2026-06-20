@@ -25,7 +25,9 @@ else:
     # External Render URLs contain ".render.com" and require SSL.
     # Internal Render URLs (short hostnames, no domain) and local dev don't need SSL.
     _needs_ssl = ".render.com" in DATABASE_URL and "sslmode=" not in DATABASE_URL
-    _connect_args: dict = {"sslmode": "require"} if _needs_ssl else {}
+    _connect_args: dict = {"connect_timeout": 10}
+    if _needs_ssl:
+        _connect_args["sslmode"] = "require"
     engine = create_engine(
         DATABASE_URL,
         connect_args=_connect_args,

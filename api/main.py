@@ -168,9 +168,10 @@ def _run_seed() -> None:
 
 @asynccontextmanager
 async def _lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
-    initialize_database()
+    loop = asyncio.get_running_loop()
+    # Run DB init in a thread so it never blocks the event loop during startup.
+    await loop.run_in_executor(None, initialize_database)
     if os.getenv("SEED_ON_STARTUP", "").lower() == "true":
-        loop = asyncio.get_event_loop()
         await loop.run_in_executor(None, _run_seed)
     tasks = [
         asyncio.create_task(_eval_loop()),
