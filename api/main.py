@@ -147,9 +147,31 @@ async def _analysis_loop() -> None:
             logger.error("[analysis_loop] error: %s", exc)
 
 
+def _run_seed() -> None:
+    """Run seed_data only if SEED_ON_STARTUP=true and DB is empty."""
+    from db.models import AgentLog
+    db = SessionLocal()
+    try:
+        count = db.query(AgentLog).count()
+        if count > 0:
+            logger.info("[seed] DB already has %d rows — skipping", count)
+            return
+        logger.info("[seed] DB is empty — running seed_data")
+        import seed_data
+        seed_data.main()
+        logger.info("[seed] done")
+    except Exception as exc:
+        logger.error("[seed] failed: %s", exc)
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def _lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
     initialize_database()
+    if os.getenv("SEED_ON_STARTUP", "").lower() == "true":
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, _run_seed)
     tasks = [
         asyncio.create_task(_eval_loop()),
         asyncio.create_task(_analysis_loop()),
