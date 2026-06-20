@@ -13,18 +13,18 @@ from sqlalchemy.orm import sessionmaker
 import os
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv()  # env vars already set in the environment take precedence over .env
 
 # Database setup - Use SQLite with persistent storage for Railway
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./agentiq.db")
 print(f"🔍 Connecting to database: {DATABASE_URL[:30]}...")
 
-# SQLite: no thread checks needed (single-process demo)
-# PostgreSQL: pool_pre_ping reconnects stale connections dropped by the server
 if "sqlite" in DATABASE_URL:
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
-    engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+    # Render PostgreSQL requires SSL; append sslmode=require if not already present
+    pg_url = DATABASE_URL if "sslmode=" in DATABASE_URL else DATABASE_URL + "?sslmode=require"
+    engine = create_engine(pg_url, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
