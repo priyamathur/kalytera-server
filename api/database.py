@@ -22,13 +22,10 @@ print(f"🔍 Connecting to database: {DATABASE_URL[:30]}...")
 if "sqlite" in DATABASE_URL:
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
-    # Internal Render hostnames (*.internal) don't use SSL — they're on a private network.
-    # External URLs require sslmode=require unless already specified.
-    _internal = ".internal" in DATABASE_URL
-    if _internal or "sslmode=" in DATABASE_URL:
-        _connect_args: dict = {}
-    else:
-        _connect_args = {"sslmode": "require"}
+    # External Render URLs contain ".render.com" and require SSL.
+    # Internal Render URLs (short hostnames, no domain) and local dev don't need SSL.
+    _needs_ssl = ".render.com" in DATABASE_URL and "sslmode=" not in DATABASE_URL
+    _connect_args: dict = {"sslmode": "require"} if _needs_ssl else {}
     engine = create_engine(
         DATABASE_URL,
         connect_args=_connect_args,
