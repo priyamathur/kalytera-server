@@ -21,7 +21,7 @@ st.set_page_config(
     page_title="AgentIQ",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",
 )
 
 # ── Design tokens ─────────────────────────────────────────────────────────────
@@ -268,20 +268,22 @@ code {
 .js-plotly-plot { border-radius: 12px !important; }
 
 /* ── Sidebar collapse/expand toggle — always visible ── */
-[data-testid="collapsedControl"] {
+[data-testid="collapsedControl"],
+button[kind="header"],
+.st-emotion-cache-1dp5vir,
+section[data-testid="stSidebarCollapsedControl"] {
     display: flex !important;
     visibility: visible !important;
     opacity: 1 !important;
+    pointer-events: auto !important;
     background: white !important;
     border: 1px solid #e2e8f0 !important;
     border-radius: 0 8px 8px 0 !important;
-    box-shadow: 2px 0 6px rgba(15,23,42,0.08) !important;
-    padding: 8px 4px !important;
-    top: 50% !important;
-    transform: translateY(-50%) !important;
-    z-index: 999 !important;
+    box-shadow: 2px 0 8px rgba(99,102,241,0.15) !important;
+    z-index: 999999 !important;
 }
-[data-testid="collapsedControl"] svg { color: #6366f1 !important; }
+[data-testid="collapsedControl"] svg,
+section[data-testid="stSidebarCollapsedControl"] svg { color: #6366f1 !important; }
 </style>
 """, unsafe_allow_html=True)
 
