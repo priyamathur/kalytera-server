@@ -22,9 +22,19 @@ print(f"🔍 Connecting to database: {DATABASE_URL[:30]}...")
 if "sqlite" in DATABASE_URL:
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
-    # Render PostgreSQL requires SSL; append sslmode=require if not already present
-    pg_url = DATABASE_URL if "sslmode=" in DATABASE_URL else DATABASE_URL + "?sslmode=require"
-    engine = create_engine(pg_url, pool_pre_ping=True)
+    # Internal Render hostnames (*.internal) don't use SSL — they're on a private network.
+    # External URLs require sslmode=require unless already specified.
+    _internal = ".internal" in DATABASE_URL
+    if _internal or "sslmode=" in DATABASE_URL:
+        _connect_args: dict = {}
+    else:
+        _connect_args = {"sslmode": "require"}
+    engine = create_engine(
+        DATABASE_URL,
+        connect_args=_connect_args,
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
