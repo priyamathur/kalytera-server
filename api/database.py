@@ -41,7 +41,10 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 def initialize_database():
     """Initialize database tables if they don't exist"""
     try:
-        from db.models import Base
+        from db.models import (  # noqa: F401 — import all models so Base.metadata is fully populated
+            Base, AgentLog, EvalResult, LossPattern, AgentQualityConfig,
+            Organization, User, ApiKey, UsageRecord,
+        )
         print("🔧 Creating database tables...")
         Base.metadata.create_all(bind=engine)
         
@@ -57,7 +60,8 @@ def initialize_database():
             tables = result.fetchall()
             if tables:
                 print("✅ Database tables created/verified successfully")
-                print("📋 Tables available: agent_logs, session_summaries, eval_results, loss_patterns")
+                all_tables = ", ".join(sorted(Base.metadata.tables.keys()))
+                print(f"📋 Tables available: {all_tables}")
                 return True
             else:
                 print("⚠️  Tables not found after creation attempt")
