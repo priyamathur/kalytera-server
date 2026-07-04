@@ -108,15 +108,19 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)):
         # Stripe not configured yet — return key at free tier, note upgrade pending
         return {**base_response, "status": "active", "note": f"Stripe not configured for {req.plan} — you're on free tier for now."}
 
-    checkout = stripe.checkout.Session.create(
-        mode="subscription",
-        payment_method_types=["card"],
-        line_items=[{"price": plan_cfg["stripe_price_id"], "quantity": 1}],
-        client_reference_id=org.id,
-        customer_email=req.email,
-        success_url=req.success_url or "https://kalytera.ai/welcome",
-        cancel_url=req.cancel_url or "https://kalytera.ai/pricing",
-    )
+    try:
+        checkout = stripe.checkout.Session.create(
+            mode="subscription",
+            payment_method_types=["card"],
+            line_items=[{"price": plan_cfg["stripe_price_id"], "quantity": 1}],
+            client_reference_id=org.id,
+            customer_email=req.email,
+            success_url=req.success_url or "https://kalytera.dev/welcome",
+            cancel_url=req.cancel_url or "https://kalytera.dev/pricing",
+        )
+    except Exception as exc:
+        logger.error("Stripe checkout error: %s", exc)
+        raise HTTPException(status_code=502, detail=f"Stripe error: {exc}")
 
     return {
         **base_response,
