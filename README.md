@@ -1,307 +1,207 @@
-# 🧠 AgentIQ - Production-Ready AI Agent Performance Intelligence
+# Kalytera
 
-**The complete platform for monitoring, testing, and optimizing any AI agent in production.**
+Real-time quality monitoring and failure detection for production AI agents.
 
----
-
-## 🚀 **What You Get**
-
-**AgentIQ is a finished product that agents can immediately use to build and test.** No more low-level work - just integrate and get instant insights.
-
-### ✅ **Production-Ready SDK**
-- **One-line integration**: `iq.track(user_input, agent_response)`
-- **Non-blocking monitoring**: Never slows down your agent
-- **Auto-batching**: Efficient data transmission
-- **Error-safe**: Agent keeps running even if AgentIQ is down
-
-### ✅ **Autonomous Testing Framework**
-- **Comprehensive test suites**: Coding, Customer Service, Data Science, Sales
-- **Automated evaluation**: LLM judges score every response
-- **Performance grading**: A+ to F grades with specific recommendations
-- **Continuous monitoring**: Real-time health checks
-
-### ✅ **Enterprise Dashboard**
-- **Clear agent identification**: See exactly which agents are monitored
-- **Evaluation coverage**: Prominent display of sample percentages
-- **Key metrics at top**: Quality scores, success rates, performance indicators
-- **Actionable insights**: Specific developer recommendations with priorities
+Kalytera sits alongside your agent, scores every interaction with an LLM judge, and surfaces recurring failure patterns with root cause so your team can find and fix problems in minutes — not days.
 
 ---
 
-## 📦 **Complete Installation**
+## Install
 
 ```bash
-# 1. Clone AgentIQ
-git clone <repo>
-cd AgentIQ
-
-# 2. API is already deployed at:
-# https://agentiq-api-z9it.onrender.com
-
-# 3. Dashboard is running at:
-# http://localhost:8509
+pip install kalytera
 ```
 
-**That's it. AgentIQ is ready for production use.**
+Only dependency: `aiohttp`. Does not require the Kalytera server to be running at import time.
 
 ---
 
-## 🎯 **5-Minute Quick Start**
+## Quickstart (3 lines)
 
-### **Step 1: Monitor Any Agent (2 lines of code)**
 ```python
-from agentiq_sdk import AgentIQ
+import kalytera
 
-# Initialize once
-iq = AgentIQ(agent_id="my-awesome-agent")
+kalytera.configure(api_key="your-api-key", api_endpoint="https://your-kalytera-host")
 
-# Monitor any interaction (non-blocking)
-iq.track(
-    user_input="How do I fix this bug?", 
-    agent_response="Here's how to fix it..."
+kalytera.trace(
+    session_id="session-123",     # groups all steps of one conversation
+    step_number=1,
+    step_name="classify_intent",  # meaningful label — appears in the dashboard
+    input="I need to cancel my subscription",
+    output="I can help with that. Can I ask why?",
 )
-
-# Get real-time insights
-insights = iq.get_insights()
-performance_score = iq.get_performance_score()  # 0.0 - 1.0
-recommendations = iq.get_recommendations()
 ```
 
-### **Step 2: Test Agent Performance (1 line)**
-```python
-from agent_testing_framework import AgentTester
-
-# Test any agent function
-def my_agent(user_input: str) -> str:
-    return "Agent response here"
-
-# Run comprehensive tests
-tester = AgentTester("my-agent")
-tester.register_agent(my_agent)
-results = tester.run_full_test_suite()
-
-# Get performance report
-report = tester.generate_performance_report()
-print(report)  # Detailed A+ to F grade with recommendations
-```
-
-### **Step 3: View Enterprise Dashboard**
-**URL: http://localhost:8509**
-
-- ✅ **Agent identification**: See which agents are being evaluated
-- ✅ **Evaluation coverage**: 1.8% (3 of 171 interactions evaluated)  
-- ✅ **Key metrics**: Quality scores, success rates, performance indicators
-- ✅ **Actionable insights**: Specific developer recommendations
+`trace()` returns immediately. It never raises. If the Kalytera server is unreachable, your agent keeps running and events are queued locally.
 
 ---
 
-## 🏭 **Production Examples**
+## Full API reference
 
-### **Coding Agent Integration**
-```python
-class CodingAgent:
-    def __init__(self):
-        self.agentiq = AgentIQ(agent_id="production-coding-agent")
-    
-    def respond(self, user_input: str) -> str:
-        response = self.generate_response(user_input)
-        
-        # Track with AgentIQ (non-blocking)
-        self.agentiq.track(user_input, response)
-        
-        return response
-```
+### `kalytera.configure()`
 
-### **Customer Service Agent**
-```python
-class CustomerServiceAgent:
-    def __init__(self):
-        self.agentiq = AgentIQ(agent_id="customer-service-agent")
-    
-    def handle_request(self, customer_input: str) -> str:
-        response = self.generate_response(customer_input)
-        
-        # Automatic performance monitoring
-        self.agentiq.track(customer_input, response)
-        
-        return response
-```
-
-### **Autonomous Testing**
-```python
-# Test any agent automatically
-tester = AgentTester("production-agent")
-tester.register_agent(my_agent_function)
-
-# Run full test suite
-results = tester.run_full_test_suite()
-# Output: Pass rate: 85.2% (Grade: A)
-
-# Continuous monitoring
-tester.continuous_monitoring(interval_minutes=60)
-```
-
----
-
-## 📊 **What AgentIQ Monitors**
-
-### **Usage Analytics**
-- Session volumes and patterns
-- Intent classification across all agent types
-- Workflow completion rates
-- Response times and performance
-
-### **Quality Assessment** 
-- **LLM-as-a-Judge evaluation**: Autonomous scoring of every response
-- Quality scores by agent type and intent
-- Failure pattern detection
-- Root cause analysis
-
-### **Performance Insights**
-- **Real-time recommendations**: Specific actions to improve agent performance
-- A+ to F grading system
-- Critical issue identification
-- Developer action items with priorities
-
-### **Loss Pattern Analysis**
-- Dropout detection in agent workflows  
-- High-impact failure identification
-- Recommended fixes for common problems
-
----
-
-## 🎯 **Agent Testing Framework**
-
-### **Comprehensive Test Suites**
-- **Coding Agents**: Debug errors, write functions, optimize code
-- **Customer Service**: Handle complaints, billing issues, account recovery
-- **Data Science**: Analyze data, create visualizations, generate insights
-- **Sales/BDR**: Qualify leads, handle objections, close deals
-- **General**: Basic reasoning, explanations, problem-solving
-
-### **Automated Evaluation**
-```python
-# Example test results
-🏆 AGENT PERFORMANCE REPORT
-Agent ID: my-coding-agent
-
-📊 OVERALL PERFORMANCE
-• Tests Run: 12
-• Pass Rate: 85.2% (10/12)
-• Average Quality: 0.82/1.0
-• Average Response Time: 1,200ms
-
-🎯 RECOMMENDATIONS
-1. 🔴 PRIORITY: Improve data_science performance (60% pass rate)
-2. ⚡ Optimize response times for complex queries
-3. 📈 Continue monitoring - overall performance is solid
-
-🎓 OVERALL GRADE: A
-```
-
----
-
-## 🏢 **Enterprise Features**
-
-### **Multi-Agent Monitoring**
-- Monitor coding assistants, customer service, data science, sales, marketing agents
-- Unified dashboard showing performance across all agent types
-- Comparative analysis and benchmarking
-
-### **Production-Safe Integration**
-- **Non-blocking tracking**: Never impacts agent performance
-- **Error-resilient**: Agent continues working even if AgentIQ is down
-- **Efficient batching**: Minimal network overhead
-- **Auto-retry logic**: Handles network failures gracefully
-
-### **Actionable Developer Insights**
-- **Specific recommendations**: "Improve customer_service responses (quality: 0.65)"
-- **Priority levels**: Critical, High, Medium with timelines
-- **Expected impact**: "Could improve 1,500 interactions/month"
-- **Root cause analysis**: Identify exactly what needs fixing
-
----
-
-## 🔗 **Complete System**
-
-### **1. AgentIQ SDK** (`agentiq_sdk.py`)
-- Production-ready Python SDK
-- One-line agent integration
-- Real-time performance insights
-- Non-blocking monitoring
-
-### **2. Testing Framework** (`agent_testing_framework.py`) 
-- Autonomous agent testing
-- Comprehensive test suites
-- A+ to F performance grading
-- Continuous monitoring
-
-### **3. Enterprise Dashboard** (http://localhost:8509)
-- Professional monitoring interface
-- Clear agent identification
-- Key metrics prominently displayed
-- Actionable developer insights
-
-### **4. Production API** (https://agentiq-api-z9it.onrender.com)
-- Deployed and ready for use
-- High availability monitoring
-- Real-time data processing
-- Secure agent data handling
-
----
-
-## 📈 **Immediate Value**
-
-### **For Developers**
-- **Zero setup time**: Works immediately with any agent
-- **Clear performance metrics**: Know exactly how your agent is performing  
-- **Specific improvements**: Get actionable recommendations, not vague scores
-- **Production confidence**: Test thoroughly before deployment
-
-### **For Enterprises**
-- **Multi-agent visibility**: Monitor all AI agents from one dashboard
-- **Performance benchmarking**: Compare agents and identify top performers
-- **Risk mitigation**: Catch performance degradation before it impacts users
-- **ROI measurement**: Prove business impact of agent improvements
-
-### **For Product Teams**
-- **User experience insights**: See where agents fail and frustrate users
-- **Optimization roadmap**: Clear priority list of improvements
-- **Quality assurance**: Automated testing prevents regressions
-- **Competitive advantage**: Higher quality agents = better user experience
-
----
-
-## 🚀 **Ready for Production**
-
-**AgentIQ is a complete, finished product.** Your agents can start using it immediately:
+Call once at startup before the first trace.
 
 ```python
-# 1. Install (copy 3 files)
-# agentiq_sdk.py, agent_testing_framework.py, complete_agentiq_example.py
-
-# 2. Integrate (2 lines)
-from agentiq_sdk import AgentIQ
-iq = AgentIQ(agent_id="your-agent")
-iq.track(user_input, agent_response)
-
-# 3. Test (1 line)
-from agent_testing_framework import AgentTester
-AgentTester("your-agent").run_full_test_suite()
-
-# 4. Monitor (dashboard)
-# http://localhost:8509
+kalytera.configure(
+    api_key="your-api-key",              # required in production; omit for local dev
+    api_endpoint="http://localhost:8000", # defaults to http://localhost:8000
+    agent_id="billing-agent",            # optional; auto-generated if not set
+)
 ```
 
-**No more low-level work. No more building infrastructure. AgentIQ handles everything so you can focus on building great agents.**
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `api_key` | str | `""` | Authentication key. Set `KALYTERA_API_KEY` env var as an alternative. |
+| `api_endpoint` | str | `http://localhost:8000` | URL of your Kalytera API. Set `KALYTERA_API_ENDPOINT` env var as an alternative. |
+| `agent_id` | str | auto | Identifies this agent in the dashboard. Use a stable name like `"billing-agent"`. |
 
 ---
 
-## 📞 **Support**
+### `kalytera.trace()`
 
-- **API Endpoint**: https://agentiq-api-z9it.onrender.com
-- **Enterprise Dashboard**: http://localhost:8509  
-- **Complete Examples**: `python3 complete_agentiq_example.py`
-- **Production Ready**: Copy 3 files and start monitoring
+Call after every agent step — one call per turn in a multi-step workflow.
 
-**AgentIQ: The finished product for AI agent performance intelligence.**
+```python
+kalytera.trace(
+    session_id="session-123",         # required — same ID groups all steps of one conversation
+    step_number=2,                    # required — position in workflow (1, 2, 3…)
+    step_name="check_eligibility",    # required — human label shown in dashboard
+    input="Is this order refundable?",
+    output="Yes, within the 45-day window.",
+    tool_calls=[                      # optional — list of tool invocations at this step
+        {"name": "policy_lookup", "input": {"product": "headphones"}, "success": True, "latency_ms": 230}
+    ],
+    metadata={"intent": "refund"},    # optional — any extra context
+)
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `session_id` | str | yes | Groups all steps of one conversation. |
+| `step_number` | int | yes | Step position (1, 2, 3…). |
+| `step_name` | str | yes | Short label shown in the Trace Viewer (e.g. `"classify_intent"`). |
+| `input` | str | yes | What the user (or prior step) sent to the agent. |
+| `output` | str | yes | What the agent responded. |
+| `tool_calls` | list | no | List of tool invocations at this step. |
+| `metadata` | dict | no | Any additional context. |
+
+---
+
+### `@kalytera.watch` decorator
+
+Zero-config alternative. Wraps a function and captures input, output, and latency automatically.
+
+```python
+@kalytera.watch
+def handle_request(user_input: str) -> str:
+    return your_agent_logic(user_input)
+```
+
+---
+
+## Environment variables
+
+All parameters can be set via environment variables instead of in code.
+
+| Variable | Equivalent to |
+|---|---|
+| `KALYTERA_API_KEY` | `api_key` in `configure()` |
+| `KALYTERA_API_ENDPOINT` | `api_endpoint` in `configure()` |
+
+```bash
+export KALYTERA_API_KEY=your-api-key
+export KALYTERA_API_ENDPOINT=https://your-kalytera-host
+```
+
+---
+
+## Multi-step conversation example
+
+```python
+import kalytera
+
+kalytera.configure(api_key="your-key", api_endpoint="https://your-kalytera-host")
+
+def handle_refund_request(session_id: str, user_message: str):
+    # Step 1 — classify
+    intent = classify(user_message)
+    kalytera.trace(
+        session_id=session_id, step_number=1, step_name="classify_intent",
+        input=user_message, output=intent,
+    )
+
+    # Step 2 — look up account
+    account = fetch_account(session_id)
+    kalytera.trace(
+        session_id=session_id, step_number=2, step_name="fetch_account",
+        input="Retrieve account for session",
+        output=str(account),
+        tool_calls=[{"name": "account_api", "success": account is not None, "latency_ms": 340}],
+    )
+
+    # Step 3 — respond
+    response = generate_response(intent, account)
+    kalytera.trace(
+        session_id=session_id, step_number=3, step_name="generate_response",
+        input=intent, output=response,
+    )
+    return response
+```
+
+Kalytera evaluates each step in the background. Quality scores appear in the dashboard within 30 seconds.
+
+---
+
+## Hosting options
+
+### Option 1 — Kalytera Cloud (SaaS)
+Get an API key from your Kalytera admin. Set it in `configure()` or via env var. No infrastructure needed.
+
+### Option 2 — Self-hosted (Docker)
+For teams that want data on their own infrastructure:
+
+```bash
+git clone https://github.com/priyamathur/AgentIQ
+cd AgentIQ
+cp .env.example .env        # fill in ANTHROPIC_API_KEY and POSTGRES_PASSWORD
+docker compose up           # starts API + dashboard + database
+```
+
+Your API endpoint: `http://localhost:8000`
+
+### Option 3 — Enterprise (Kubernetes / VPC)
+Helm chart for AWS EKS, GCP GKE, or Azure AKS. Data never leaves your VPC.
+
+```bash
+helm install kalytera ./helm/kalytera \
+  --set secrets.anthropicApiKey=sk-ant-... \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host=kalytera.internal.company.com
+```
+
+Contact [priya@kalytera.ai](mailto:priya@kalytera.ai) for the enterprise deployment guide.
+
+---
+
+## What Kalytera monitors
+
+Every step is scored on four dimensions by an LLM judge (Claude):
+
+| Dimension | Weight | What it measures |
+|---|---|---|
+| Accuracy | 35% | Did the agent get the facts right? |
+| Goal alignment | 35% | Did the agent stay on the user's actual request? |
+| Decision quality | 15% | Was the action taken the right one? |
+| Completeness | 15% | Did the response fully address the request? |
+
+A step passes when the weighted score is ≥ 70. Failing steps surface in the dashboard within 30 seconds.
+
+**7 failure types detected:**
+`wrong_answer` · `tool_failure` · `goal_drift` · `hallucination` · `context_loss` · `incomplete` · `loop`
+
+---
+
+## License
+
+MIT

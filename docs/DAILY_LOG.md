@@ -1,4 +1,4 @@
-# AgentIQ Daily Log
+# Kalytera Daily Log
 
 ---
 ## 2026-05-15 Daily Update
@@ -14,7 +14,7 @@
 - None
 
 **Tomorrow's priority:**
-- TASK-001: Build agentiq.trace() SDK entry point with async fire-and-forget
+- TASK-001: Build kalytera.trace() SDK entry point with async fire-and-forget
 
 **Blockers:**
 - None

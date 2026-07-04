@@ -87,7 +87,7 @@ def client() -> Generator[TestClient, None, None]:
 
 @pytest.fixture()
 def authed_client(monkeypatch: pytest.MonkeyPatch) -> Generator[TestClient, None, None]:
-    monkeypatch.setenv("AGENTIQ_API_KEY", "test-secret")
+    monkeypatch.setenv("KALYTERA_API_KEY", "test-secret")
 
     def _get_db_override() -> Generator[MagicMock, None, None]:
         yield _mock_db_noop()
@@ -168,7 +168,7 @@ def test_post_trace_invalid_step_number_returns_422(client: TestClient) -> None:
 # ---------------------------------------------------------------------------
 
 def test_post_trace_no_key_configured_allows_all(client: TestClient) -> None:
-    """When AGENTIQ_API_KEY is not set, any request passes (dev mode)."""
+    """When KALYTERA_API_KEY is not set, any request passes (dev mode)."""
     with patch("api.main.insert_agent_log"):
         r = client.post("/trace", json=_trace_payload())
     assert r.status_code == 201

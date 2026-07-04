@@ -1,18 +1,18 @@
-# AgentIQ Deployment Guide
+# Kalytera Deployment Guide
 
-This guide covers deploying AgentIQ to production using Railway (recommended) or other cloud platforms.
+This guide covers deploying Kalytera to production using Railway (recommended) or other cloud platforms.
 
 ## 🚀 Railway Deployment (Recommended)
 
 ### Prerequisites
 - Railway account ([railway.app](https://railway.app))
-- GitHub repository with AgentIQ code
+- GitHub repository with Kalytera code
 - Anthropic API key (optional, for full evaluation features)
 
 ### Quick Deploy
 
 1. **One-Click Deploy**:
-   [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/agentiq)
+   [![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/kalytera)
 
 2. **Manual Deploy**:
    ```bash
@@ -38,24 +38,24 @@ DATABASE_URL=postgresql://user:pass@host:port/db
 # Optional (with defaults)
 EVALUATION_BATCH_SIZE=10
 EVALUATION_INTERVAL_MINUTES=30
-AGENTIQ_TOPIC_KEYWORDS={"billing":["charge","bill"],"refunds":["refund","return"]}
+KALYTERA_TOPIC_KEYWORDS={"billing":["charge","bill"],"refunds":["refund","return"]}
 ```
 
 ### Services Configuration
 
-AgentIQ deploys as two services:
+Kalytera deploys as two services:
 
 **API Service** (`railway.toml`):
 ```toml
 [[services]]
-name = "agentiq-api"
+name = "kalytera-api"
 startCommand = "uvicorn api.ingest_endpoints:app --host 0.0.0.0 --port $PORT"
 ```
 
 **Dashboard Service**:
 ```toml
 [[services]] 
-name = "agentiq-dashboard"
+name = "kalytera-dashboard"
 startCommand = "streamlit run dashboard/main.py --server.port $PORT --server.address 0.0.0.0"
 ```
 
@@ -204,7 +204,7 @@ curl https://your-deployment-url.com/patterns/health
 python -c "from api.database import SessionLocal; db = SessionLocal(); print('DB OK')"
 
 # Check logs
-railway logs --service agentiq-api
+railway logs --service kalytera-api
 ```
 
 **Evaluation System Unavailable**:
@@ -213,16 +213,16 @@ railway logs --service agentiq-api
 curl -X GET "https://your-deployment-url.com/evaluation/health"
 
 # Check environment variable
-railway variables --service agentiq-api
+railway variables --service kalytera-api
 ```
 
 **Dashboard Connection Issues**:
 ```bash
 # Update API base URL in dashboard
-export AGENTIQ_API_URL=https://your-api-url.com
+export KALYTERA_API_URL=https://your-api-url.com
 
 # Check dashboard logs
-railway logs --service agentiq-dashboard
+railway logs --service kalytera-dashboard
 ```
 
 ### Performance Optimization
@@ -303,4 +303,4 @@ python test_integration.py https://your-url.com
 curl https://your-url.com/health
 ```
 
-Your AgentIQ deployment should be live and processing agent interactions within 5 minutes! 🚀
+Your Kalytera deployment should be live and processing agent interactions within 5 minutes! 🚀

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive AgentIQ Platform Test Suite
+Comprehensive Kalytera Platform Test Suite
 Tests the complete 7-day roadmap implementation matching the one-pager vision:
 
 ✅ DAY 1: Foundation - All 4 tables, 500 sessions, 5 intent types
@@ -26,9 +26,9 @@ from datetime import datetime
 # Configuration
 LOCAL_API = "http://localhost:8000"
 PRODUCTION_API = "https://agentiq-api-z9it.onrender.com"
-DATABASE_PATH = "agentiq.db"
+DATABASE_PATH = "kalytera.db"
 
-class AgentIQTestSuite:
+class KalyteraTestSuite:
     def __init__(self, api_url: str = LOCAL_API):
         self.api_url = api_url
         self.test_results = {}
@@ -623,15 +623,15 @@ class AgentIQTestSuite:
         print("\n🔍 KEY INSIGHTS:")
         
         if success_rate >= 80:
-            print("   🎉 AgentIQ platform is PRODUCTION READY!")
+            print("   🎉 Kalytera platform is PRODUCTION READY!")
             print("   🏢 Meets enterprise vision requirements from one-pager")
             print("   🚀 Ready for customer demonstrations and deployment")
         elif success_rate >= 60:
-            print("   🟡 AgentIQ platform is MOSTLY FUNCTIONAL")
+            print("   🟡 Kalytera platform is MOSTLY FUNCTIONAL")
             print("   🔧 Some components need attention before full deployment")
             print("   📋 Focus on failed tests for production readiness")
         else:
-            print("   🔴 AgentIQ platform needs SIGNIFICANT WORK")
+            print("   🔴 Kalytera platform needs SIGNIFICANT WORK")
             print("   🛠️  Core functionality requires debugging")
             print("   ⏳ Not ready for customer demonstrations")
         
@@ -663,18 +663,18 @@ class AgentIQTestSuite:
             print("   🔄 Still developing core enterprise features")
             print("   📈 Focus on usage analytics completion")
         
-        print(f"\n🌟 AgentIQ Platform Status: {'ENTERPRISE READY' if success_rate >= 75 else 'IN DEVELOPMENT'}")
+        print(f"\n🌟 Kalytera Platform Status: {'ENTERPRISE READY' if success_rate >= 75 else 'IN DEVELOPMENT'}")
         print("=" * 80)
 
 def main():
-    """Run comprehensive AgentIQ test suite"""
-    print("🚀 Starting Comprehensive AgentIQ Platform Test Suite")
+    """Run comprehensive Kalytera test suite"""
+    print("🚀 Starting Comprehensive Kalytera Platform Test Suite")
     print("Testing complete 7-day roadmap implementation...")
     print("Validating enterprise vision from one-pager...")
     
     # Test local system first
     print(f"\n🔗 Testing Local System: {LOCAL_API}")
-    local_tester = AgentIQTestSuite(LOCAL_API)
+    local_tester = KalyteraTestSuite(LOCAL_API)
     
     # Run all test phases
     day1_success = local_tester.test_day1_foundation()
@@ -691,7 +691,7 @@ def main():
     # Test production if local is working
     if day1_success and day2_success:
         print(f"\n🌐 Testing Production System: {PRODUCTION_API}")
-        prod_tester = AgentIQTestSuite(PRODUCTION_API)
+        prod_tester = KalyteraTestSuite(PRODUCTION_API)
         prod_tester.test_day67_production_deployment()
 
 if __name__ == "__main__":

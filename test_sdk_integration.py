@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Test AgentIQ SDK Integration
+Test Kalytera SDK Integration
 """
 
 import time
@@ -12,7 +12,7 @@ from sdk.client import trace
 def test_sdk_integration():
     """Test the SDK integration with timing"""
     
-    print("🧪 Testing AgentIQ SDK Integration")
+    print("🧪 Testing Kalytera SDK Integration")
     print("=" * 50)
     
     # Test 1: Basic trace call with timing
@@ -63,7 +63,7 @@ def test_sdk_integration():
     print("   ✅ Session end call completed")
     
     print("\n🎉 SDK Integration Test Complete!")
-    print("📊 Sent 5 trace calls to AgentIQ")
+    print("📊 Sent 5 trace calls to Kalytera")
     print("🔗 Check the dashboard at: http://localhost:8501")
 
 if __name__ == "__main__":

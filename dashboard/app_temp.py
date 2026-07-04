@@ -1,5 +1,5 @@
 """
-AgentIQ Streamlit Dashboard - Real-time Agent Monitoring
+Kalytera Streamlit Dashboard - Real-time Agent Monitoring
 3 Core Views: Agent Overview, Failure Feed, Interaction Detail + Quality Config
 """
 
@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 
 # Page configuration
 st.set_page_config(
-    page_title="AgentIQ - Real-time Agent Monitoring",
+    page_title="Kalytera - Real-time Agent Monitoring",
     page_icon=">", 
     layout="wide",
     initial_sidebar_state="expanded"

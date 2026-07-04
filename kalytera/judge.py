@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Optional
 
 import anthropic
 
-from agentiq.prompts import (
+from kalytera.prompts import (
     EXPECTED_KEYS,
     FAILURE_TYPES,
     StepContext,

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>AgentIQ — Demo</title>
+<title>Althea — Demo</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -262,9 +262,9 @@
         </div>
         <div class="term-body">
           <div class="term-line" id="s1-l1"><span class="prompt-char">$</span> <span class="typed" id="s1-l1-text"></span><span class="cursor-blink" id="s1-cursor1"></span></div>
-          <div class="term-line" id="s1-l2"><span class="out-dim">Collecting agentiq</span></div>
-          <div class="term-line" id="s1-l3"><span class="out-dim">Installing collected packages: agentiq</span></div>
-          <div class="term-line" id="s1-l4"><span class="out-green">Successfully installed agentiq-0.1.0</span></div>
+          <div class="term-line" id="s1-l2"><span class="out-dim">Collecting althea-ai</span></div>
+          <div class="term-line" id="s1-l3"><span class="out-dim">Installing collected packages: althea-ai</span></div>
+          <div class="term-line" id="s1-l4"><span class="out-green">Successfully installed althea_ai-0.1.0</span></div>
           <div class="term-line" id="s1-l5">&nbsp;</div>
           <div class="term-line" id="s1-l6"><span class="prompt-char">$</span> <span class="typed" id="s1-l6-text"></span><span class="cursor-blink" id="s1-cursor2"></span></div>
         </div>
@@ -284,10 +284,10 @@
           <div class="code-line" id="c1"><span class="ln">1</span><span class="com"># your existing agent — unchanged</span></div>
           <div class="code-line" id="c2"><span class="ln">2</span><span class="kw">import</span> openai</div>
           <div class="code-line" id="c3"><span class="ln">3</span></div>
-          <div class="code-line" id="c4"><span class="ln">4</span><span class="kw">import</span> agentiq  <span class="com"># ← one import</span></div>
-          <div class="code-line" id="c5"><span class="ln">5</span>agentiq.init(api_key=<span class="str">"sk-aiq-..."</span>)  <span class="com"># ← one line</span></div>
+          <div class="code-line" id="c4"><span class="ln">4</span><span class="kw">import</span> althea  <span class="com"># ← one import</span></div>
+          <div class="code-line" id="c5"><span class="ln">5</span>althea.init(api_key=<span class="str">"sk-althea-..."</span>)  <span class="com"># ← one line</span></div>
           <div class="code-line" id="c6"><span class="ln">6</span></div>
-          <div class="code-line" id="c7"><span class="ln">7</span><span class="kw">@</span>agentiq.watch  <span class="com"># ← one decorator</span></div>
+          <div class="code-line" id="c7"><span class="ln">7</span><span class="kw">@</span>althea.watch  <span class="com"># ← one decorator</span></div>
           <div class="code-line" id="c8"><span class="ln">8</span><span class="kw">def</span> <span class="fn">support_agent</span>(user_input):</div>
           <div class="code-line" id="c9"><span class="ln">9</span>    ...  <span class="com"># nothing else changes</span></div>
           <div class="highlight-box" id="hl1" style="left: 18px; top: 119px; width: 740px; height: 64px;"></div>
@@ -307,9 +307,9 @@
         </div>
         <div class="term-body">
           <div class="term-line feed-line show" style="opacity:1"><span class="prompt-char">$</span> python support_agent.py</div>
-          <div class="term-line feed-line" id="f1"><span class="out-green">✓ AgentIQ connected</span></div>
+          <div class="term-line feed-line" id="f1"><span class="out-green">✓ Althea connected</span></div>
           <div class="term-line feed-line" id="f2"><span class="out-dim">  Evaluating every step in real time</span></div>
-          <div class="term-line feed-line" id="f3"><span class="out-dim">  Dashboard: </span><span class="feed-url">https://agentiq.dev/a/sup_8f21</span></div>
+          <div class="term-line feed-line" id="f3"><span class="out-dim">  Dashboard: </span><span class="feed-url">https://althea.dev/a/sup_8f21</span></div>
           <div class="term-line feed-line" id="f4">&nbsp;</div>
           <div class="term-line feed-line" id="f5">Interaction 14 · Score <span class="feed-pass">91/100</span> · <span class="feed-pass">PASSED</span></div>
           <div class="term-line feed-line" id="f6">Interaction 15 · Score <span class="feed-pass">88/100</span> · <span class="feed-pass">PASSED</span></div>
@@ -323,7 +323,7 @@
   <div class="scene" data-scene="4">
     <div class="dash-wrap">
       <div class="dash-topbar">
-        <div class="dash-logo"><div class="dash-logo-dot"></div>AgentIQ</div>
+        <div class="dash-logo"><div class="dash-logo-dot"></div>Althea</div>
         <div class="dash-tabs">
           <div class="dash-tab active">Overview</div>
           <div class="dash-tab">Failure Feed</div>
@@ -348,7 +348,7 @@
   <div class="scene" data-scene="5">
     <div class="dash-wrap">
       <div class="dash-topbar">
-        <div class="dash-logo"><div class="dash-logo-dot"></div>AgentIQ</div>
+        <div class="dash-logo"><div class="dash-logo-dot"></div>Althea</div>
         <div class="dash-tabs">
           <div class="dash-tab">Overview</div>
           <div class="dash-tab active">Failure Feed</div>
@@ -380,7 +380,7 @@
   <div class="scene" data-scene="6">
     <div class="dash-wrap">
       <div class="dash-topbar">
-        <div class="dash-logo"><div class="dash-logo-dot"></div>AgentIQ</div>
+        <div class="dash-logo"><div class="dash-logo-dot"></div>Althea</div>
         <div class="dash-tabs">
           <div class="dash-tab">Overview</div>
           <div class="dash-tab">Failure Feed</div>
@@ -409,7 +409,7 @@
             </div>
           </div>
           <div class="verdict-card" id="verdict">
-            <div class="verdict-label">AgentIQ Verdict</div>
+            <div class="verdict-label">Althea Verdict</div>
             <div class="verdict-score">34/100</div>
             <div style="font-size:11px;color:var(--muted)">accuracy 0.2 · goal_alignment 0.6 · decision_quality 0.3 · completeness 0.7</div>
             <div class="verdict-text">The payment policy API timed out at step 3. Instead of retrying or escalating, the agent told the customer the refund was approved — a claim it had no basis for.</div>
@@ -424,9 +424,9 @@
   <!-- SCENE 7 — END CARD -->
   <div class="scene" data-scene="7">
     <div class="end-wrap">
-      <div class="end-logo"><div class="end-dot"></div>AgentIQ</div>
+      <div class="end-logo"><div class="end-dot"></div>Althea</div>
       <div class="end-tag">Find where your agent fails.<br>Know why. Fix it.</div>
-      <div class="end-cta">agentiq.dev</div>
+      <div class="end-cta">althea.dev</div>
     </div>
   </div>
 
@@ -441,7 +441,7 @@
 
 <script>
 const sceneNames = [
-  "Install agentiq",
+  "Install althea",
   "Two lines of code",
   "Agent runs — live feed",
   "Dashboard — Overview",
@@ -482,7 +482,7 @@ function runScene1() {
   l1text.textContent = ''; l6text.textContent = '';
   document.getElementById('s1-l1').classList.add('show');
 
-  typeText(l1text, 'pip install agentiq', 55, () => {
+  typeText(l1text, 'pip install althea-ai', 55, () => {
     setTimeout(() => {
       document.getElementById('s1-l2').classList.add('show');
       setTimeout(() => {

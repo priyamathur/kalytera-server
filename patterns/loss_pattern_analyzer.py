@@ -16,6 +16,18 @@ from sqlalchemy import text
 from db.models import LossPattern
 from api.security import key_manager, optimized_claude_client
 
+# Declared here so tests can patch 'patterns.loss_pattern_analyzer.SessionLocal'
+# Populated lazily to avoid circular import (api -> pattern_endpoints -> here)
+SessionLocal = None
+
+
+def _get_session_local():
+    global SessionLocal
+    if SessionLocal is None:
+        from api.database import SessionLocal as _SL
+        SessionLocal = _SL
+    return SessionLocal
+
 
 @dataclass
 class FailurePattern:
@@ -67,6 +79,112 @@ class LossPatternAnalyzer:
         else:
             print("⚠️  Claude API unavailable - pattern analysis will be limited")
     
+    async def detect_loss_patterns(self, hours_back: int = 168) -> List[FailurePattern]:
+        """Public interface — opens its own DB session, uses ORM queries, returns FailurePattern list."""
+        _SessionLocal = SessionLocal or _get_session_local()
+        with _SessionLocal() as db:
+            from datetime import datetime, timedelta
+            from db.models import AgentLog
+            cutoff = datetime.now() - timedelta(hours=hours_back)
+            failures = db.query(AgentLog).filter(
+                AgentLog.timestamp >= cutoff
+            ).all()
+            patterns = self._build_patterns_from_failures(failures)
+            for p in patterns:
+                try:
+                    summary = await self._generate_pattern_summary(p)
+                    p.root_cause = summary.get("root_cause", "") or ""
+                    p.suggested_fix = summary.get("suggested_fix") or summary.get(
+                        "improvement_suggestions", [""]
+                    )[0]
+                except Exception:
+                    pass
+            return patterns
+
+    def _build_patterns_from_failures(self, failures: List[Any]) -> List[FailurePattern]:
+        """Group raw failure rows into FailurePattern objects across intent/step/tool dimensions."""
+        if not failures:
+            return []
+
+        total = len(failures)
+        patterns: List[FailurePattern] = []
+        min_count = 3
+
+        # Intent patterns
+        by_intent: Dict[str, list] = defaultdict(list)
+        for f in failures:
+            intent = getattr(f, "intent", None) or "unknown"
+            by_intent[intent].append(f)
+        for intent, group in by_intent.items():
+            if len(group) >= min_count:
+                avg_score = sum(getattr(f, "overall_score", 0) for f in group) / len(group)
+                patterns.append(FailurePattern(
+                    pattern_id=f"intent_{intent}",
+                    pattern_type="intent",
+                    pattern_value=intent,
+                    failure_count=len(group),
+                    total_occurrences=len(group),
+                    failure_rate=len(group) / total,
+                    pct_of_all_failures=round(len(group) / total * 100, 1),
+                    avg_quality_score=round(avg_score, 3),
+                    primary_failure_modes=[],
+                    sample_interactions=[],
+                    root_cause="",
+                ))
+
+        # Step patterns
+        by_step: Dict[str, list] = defaultdict(list)
+        for f in failures:
+            step = getattr(f, "workflow_step", None)
+            if step is not None:
+                by_step[f"step_{step}"].append(f)
+        for step_key, group in by_step.items():
+            if len(group) >= min_count:
+                avg_score = sum(getattr(f, "overall_score", 0) for f in group) / len(group)
+                patterns.append(FailurePattern(
+                    pattern_id=step_key,
+                    pattern_type="workflow_step",
+                    pattern_value=step_key,
+                    failure_count=len(group),
+                    total_occurrences=len(group),
+                    failure_rate=len(group) / total,
+                    pct_of_all_failures=round(len(group) / total * 100, 1),
+                    avg_quality_score=round(avg_score, 3),
+                    primary_failure_modes=[],
+                    sample_interactions=[],
+                    root_cause="",
+                ))
+
+        # Tool patterns
+        by_tool: Dict[str, list] = defaultdict(list)
+        for f in failures:
+            raw = getattr(f, "tool_calls", None) or ""
+            tools = self._extract_tool_names(raw) if raw else []
+            key = tools[0] if tools else "no_tools"
+            by_tool[key].append(f)
+        for tool, group in by_tool.items():
+            if len(group) >= min_count:
+                avg_score = sum(getattr(f, "overall_score", 0) for f in group) / len(group)
+                patterns.append(FailurePattern(
+                    pattern_id=f"tool_{tool}",
+                    pattern_type="tool_call",
+                    pattern_value=tool,
+                    failure_count=len(group),
+                    total_occurrences=len(group),
+                    failure_rate=len(group) / total,
+                    pct_of_all_failures=round(len(group) / total * 100, 1),
+                    avg_quality_score=round(avg_score, 3),
+                    primary_failure_modes=[],
+                    sample_interactions=[],
+                    root_cause="",
+                ))
+
+        return patterns
+
+    async def _generate_pattern_summary(self, pattern: FailurePattern) -> Dict[str, Any]:
+        """Generate root cause and fix for a single pattern (used in tests via patch)."""
+        return await self._analyze_single_pattern(pattern)
+
     async def analyze_patterns(
         self,
         db: Session,

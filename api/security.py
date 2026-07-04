@@ -1,5 +1,5 @@
 """
-Security and API Key Management for AgentIQ
+Security and API Key Management for Kalytera
 Implements secure key handling and token usage optimization
 """
 
@@ -11,7 +11,7 @@ from collections import defaultdict
 import logging
 
 # Configure logging for security events
-security_logger = logging.getLogger("agentiq.security")
+security_logger = logging.getLogger("kalytera.security")
 
 
 class SecureAPIKeyManager:

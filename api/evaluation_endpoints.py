@@ -1,5 +1,5 @@
 """
-Evaluation API endpoints for AgentIQ
+Evaluation API endpoints for Kalytera
 Manage LLM judge evaluations and background processing
 """
 
@@ -42,7 +42,7 @@ async def evaluation_health_check():
             "evaluation_system": "online" if judge else "unavailable (no API key)",
             "anthropic_api": "configured" if judge else "not configured", 
             "background_scheduler": "running" if _evaluation_scheduler and _evaluation_scheduler.is_running else "stopped",
-            "model": "claude-sonnet-4" if judge else None,
+            "model": "claude-sonnet-4-6" if judge else None,
             "status": "healthy"
         }
     except Exception as e:

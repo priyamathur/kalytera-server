@@ -1,5 +1,5 @@
 """
-AgentIQ LLM Judge System Prompts - Core Intellectual Property
+Kalytera LLM Judge System Prompts - Core Intellectual Property
 Comprehensive evaluation framework for agent conversation quality
 """
 

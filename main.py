@@ -1,5 +1,5 @@
 """
-AgentIQ FastAPI application entry point
+Kalytera FastAPI application entry point
 """
 
 from api.ingest_endpoints import app

@@ -1,4 +1,4 @@
-# 🚀 AgentIQ Railway Deployment Guide
+# 🚀 Kalytera Railway Deployment Guide
 
 ## Secure Deployment with Token Optimization
 
@@ -100,8 +100,8 @@ python create_production_demo_data.py --api-url=https://your-api-url.railway.app
 ## 🎯 Expected Deployment URLs
 
 After successful deployment, you'll get:
-- **API**: `https://agentiq-api-xxxx.railway.app`
-- **Dashboard**: `https://agentiq-dashboard-xxxx.railway.app`
+- **API**: `https://kalytera-api-xxxx.railway.app`
+- **Dashboard**: `https://kalytera-dashboard-xxxx.railway.app`
 
 ## 📊 Monitoring & Usage
 
@@ -137,4 +137,4 @@ curl https://your-api-url/api/security/usage
 curl -X POST https://your-api-url/ingest/test/generic
 ```
 
-Your AgentIQ deployment is now secure, cost-optimized, and production-ready! 🎉
+Your Kalytera deployment is now secure, cost-optimized, and production-ready! 🎉

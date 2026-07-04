@@ -1,5 +1,5 @@
 """
-AgentIQ Loss Pattern Analysis System
+Kalytera Loss Pattern Analysis System
 Automated detection and analysis of agent failure patterns with root cause identification
 
 Core Features:
@@ -83,7 +83,7 @@ class LossPatternAnalyzer:
     
     def __init__(self, api_base: str = "https://agentiq-api-z9it.onrender.com"):
         self.api_base = api_base
-        self.logger = logging.getLogger("AgentIQ-LossPatternAnalyzer")
+        self.logger = logging.getLogger("Kalytera-LossPatternAnalyzer")
         
         # Pattern detection thresholds
         self.min_occurrences = 5      # Minimum failures to constitute a pattern

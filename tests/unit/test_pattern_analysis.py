@@ -253,37 +253,121 @@ class TestPatternAnalysisIntegration:
 
     def test_pattern_analysis_api_endpoint(self):
         """Test pattern analysis API endpoint availability"""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from datetime import datetime as dt
         try:
             from fastapi.testclient import TestClient
-            from api.main import app
-            
-            client = TestClient(app)
-            
-            # Test pattern analysis trigger
-            response = client.post("/patterns/analyze", json={"hours_back": 24})
-            
-            # Should not error (even if no data)
-            assert response.status_code in [200, 202], f"Pattern analysis endpoint returned {response.status_code}"
-            
+            # pattern_router lives on the ingest app, not api.main
+            from api.ingest_endpoints import app as ingest_app
+            client = TestClient(ingest_app)
         except ImportError:
-            pytest.skip("FastAPI app not available for integration test")
+            pytest.skip("FastAPI ingest app not available for integration test")
+            return
+
+        mock_result = MagicMock()
+        mock_result.analysis_timestamp = dt.now()
+        mock_result.total_failures = 0
+        mock_result.patterns_detected = []
+        mock_result.key_insights = []
+        mock_result.top_failure_patterns = []
+
+        with patch(
+            "patterns.loss_pattern_analyzer.LossPatternAnalyzer.analyze_patterns",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            response = client.post("/patterns/analyze", params={"hours_back": 24})
+
+        assert response.status_code in [200, 202], f"Pattern analysis endpoint returned {response.status_code}"
 
     def test_pattern_export_endpoint(self):
         """Test pattern export API endpoint"""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from datetime import datetime as dt
         try:
             from fastapi.testclient import TestClient
-            from api.main import app
-            
-            client = TestClient(app)
-            
-            # Test developer export endpoint
-            response = client.get("/patterns/export/developer")
-            
-            # Should return valid JSON (even if empty)
-            assert response.status_code == 200, f"Export endpoint returned {response.status_code}"
-            
-            export_data = response.json()
-            assert "patterns" in export_data, "Export should contain patterns key"
-            
+            from api.ingest_endpoints import app as ingest_app
+            client = TestClient(ingest_app)
         except ImportError:
-            pytest.skip("FastAPI app not available for integration test")
+            pytest.skip("FastAPI ingest app not available for integration test")
+            return
+
+        mock_result = MagicMock()
+        mock_result.analysis_timestamp = dt.now()
+        mock_result.total_failures = 0
+        mock_result.patterns_detected = []
+        mock_result.key_insights = []
+        mock_result.top_failure_patterns = []
+
+        with patch(
+            "patterns.loss_pattern_analyzer.LossPatternAnalyzer.analyze_patterns",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            response = client.get("/patterns/export/developer")
+
+        assert response.status_code == 200, f"Export endpoint returned {response.status_code}"
+        export_data = response.json()
+        assert "patterns" in export_data, "Export should contain patterns key"
+
+
+class TestRunAllIntegration:
+    """Integration test: run_all() creates LossPattern rows from real seeded EvalResult data"""
+
+    def setup_method(self):
+        from api.database import engine
+        from db.models import Base
+        Base.metadata.create_all(bind=engine)
+
+    def test_run_all_creates_patterns(self):
+        """PAT-run_all: seeding 10 failures at step 3 produces a workflow_step pattern"""
+        import uuid
+        from datetime import datetime, timezone
+        from api.database import SessionLocal
+        from db.models import EvalResult, LossPattern
+        from kalytera.analyzer import run_all
+
+        agent_id = "run-all-integration-" + str(uuid.uuid4())[:8]
+        db = SessionLocal()
+        try:
+            # Seed 10 EvalResult rows — all failed at step 3, tool_failure
+            for _ in range(10):
+                db.add(EvalResult(
+                    id=str(uuid.uuid4()),
+                    log_id=str(uuid.uuid4()),
+                    session_id=str(uuid.uuid4()),
+                    agent_id=agent_id,
+                    accuracy=0.2,
+                    goal_alignment=0.2,
+                    decision_quality=0.2,
+                    completeness=0.2,
+                    overall_score=0.2,
+                    passed=False,
+                    failure_type="tool_failure",
+                    failure_step=3,
+                    failure_reason="Payment API timed out at step 3.",
+                    confidence=0.9,
+                    eval_error=False,
+                    evaluated_at=datetime.now(timezone.utc),
+                ))
+            db.commit()
+
+            # Run pattern detection directly — no HTTP, no 1-hour wait
+            run_all(db)
+
+            patterns = db.query(LossPattern).filter(LossPattern.agent_id == agent_id).all()
+            assert len(patterns) >= 1, f"Expected at least one LossPattern for {agent_id}, got 0"
+
+            # workflow_step pattern: pattern_value is "step_3"
+            step_pattern = next(
+                (p for p in patterns if p.pattern_type == "workflow_step" and p.pattern_value == "step_3"),
+                None,
+            )
+            assert step_pattern is not None, "Expected workflow_step=step_3 pattern"
+            assert step_pattern.failure_count >= 5, "Pattern must have >= 5 failures (MIN_FAILURE_COUNT)"
+
+        finally:
+            db.query(LossPattern).filter(LossPattern.agent_id == agent_id).delete()
+            db.query(EvalResult).filter(EvalResult.agent_id == agent_id).delete()
+            db.commit()
+            db.close()

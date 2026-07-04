@@ -2,6 +2,7 @@
 Session builder for computing SessionSummary on ingest
 Aggregates interactions into sessions with intent, workflow_path, drop_off_step, completion status
 """
+from __future__ import annotations
 
 from typing import List, Dict, Optional, Tuple, Any
 import statistics
@@ -9,9 +10,21 @@ import json
 from dataclasses import dataclass
 import uuid
 
-from db.models import SessionSummary, AgentLog
+from db.models import AgentLog
 from evaluation.intent_classifier import IntentClassifier, IntentClassification
 from ingestion.parsers import ParsedInteraction
+
+# Imported lazily at runtime to avoid circular import (api -> ingest_endpoints -> here)
+# Declared here so tests can patch 'ingestion.session_builder.SessionLocal'
+SessionLocal = None
+
+
+def _get_session_local():
+    global SessionLocal
+    if SessionLocal is None:
+        from api.database import SessionLocal as _SL
+        SessionLocal = _SL
+    return SessionLocal
 
 
 @dataclass
@@ -629,6 +642,44 @@ class SessionBuilder:
         
         # Ensure score is between 0.0 and 1.0
         return max(0.0, min(1.0, round(score, 2)))
+
+
+    def build_session_summary(self, agent_log: AgentLog) -> None:
+        """Build or update session data when a session ends. Uses SessionLocal internally."""
+        if not getattr(agent_log, 'session_ended', False):
+            return
+        _SessionLocal = SessionLocal or _get_session_local()
+        with _SessionLocal() as db:
+            logs = db.query(AgentLog).filter(AgentLog.session_id == agent_log.session_id).all()
+            if not logs:
+                return
+            # SessionSummary removed in MVP rewrite — session data served via db/queries.py
+
+    def _create_session_summary(self, session_id: str, logs: list) -> "SessionSummaryData":
+        """Create a SessionSummaryData from a list of AgentLog objects."""
+        completed = any(getattr(log, 'session_ended', False) for log in logs)
+        max_step = max((getattr(log, 'workflow_step', 0) or 0) for log in logs) if logs else 0
+        drop_off_step = max_step if not completed else None
+        workflow_path = " > ".join(
+            f"step_{getattr(log, 'workflow_step', i + 1)}" for i, log in enumerate(logs)
+        )
+        return SessionSummaryData(
+            session_id=session_id,
+            total_interactions=len(logs),
+            completed=completed,
+            drop_off_step=drop_off_step,
+            workflow_path=workflow_path,
+        )
+
+
+@dataclass
+class SessionSummaryData:
+    """Lightweight data container for session summary results"""
+    session_id: str
+    total_interactions: int
+    completed: bool
+    drop_off_step: Optional[int]
+    workflow_path: str
 
 
 class BatchSessionBuilder:

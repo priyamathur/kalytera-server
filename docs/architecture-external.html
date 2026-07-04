@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentIQ — How It Works</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&family=Playfair+Display:ital,wght@0,700;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0d10;
+    --white: #e8ecf0;
+    --accent: #00c8e8;
+    --accent2: #e85555;
+    --accent3: #a8e060;
+    --muted: #4e5a68;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--white); font-family: 'DM Mono', monospace; font-size: 13px; line-height: 1.7; padding: 48px 40px 80px; max-width: 900px; margin: 0 auto; }
+
+  .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 56px; }
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; display: flex; align-items: center; gap: 9px; }
+  .logo-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; }
+  .badge { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+
+  .hero { margin-bottom: 64px; }
+  .kicker { font-size: 10px; letter-spacing: 3px; text-transform: uppercase; color: var(--accent); margin-bottom: 14px; }
+  h1 { font-family: 'Playfair Display', serif; font-weight: 700; font-size: clamp(28px, 4vw, 40px); line-height: 1.15; margin-bottom: 18px; }
+  h1 em { font-style: italic; font-weight: 400; color: var(--accent); }
+  .sub { font-size: 13.5px; line-height: 1.85; color: rgba(232,236,240,0.5); max-width: 580px; }
+
+  .sh { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+  .sh-num { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 10px; color: var(--accent); letter-spacing: 2px; }
+  .sh-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; }
+  .sh-line { flex: 1; height: 1px; background: var(--border); }
+  .section { margin-bottom: 56px; }
+
+  /* ── 3-STEP FLOW ── */
+  .flow { display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr; align-items: center; gap: 0; margin-bottom: 48px; }
+  .flow-box {
+    border: 1px solid var(--border); border-radius: 12px;
+    background: rgba(255,255,255,0.025);
+    padding: 24px 20px;
+  }
+  .flow-box.active { border-color: rgba(0,200,232,0.3); background: rgba(0,200,232,0.04); }
+  .flow-step { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 28px; color: var(--accent); opacity: 0.18; line-height: 1; margin-bottom: 10px; }
+  .flow-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; margin-bottom: 10px; color: var(--white); }
+  .flow-body { font-size: 12px; line-height: 1.65; color: rgba(232,236,240,0.5); }
+  .flow-body code { font-size: 11px; color: var(--accent); background: rgba(0,200,232,0.1); padding: 1px 5px; border-radius: 3px; }
+  .flow-arrow { text-align: center; font-size: 20px; color: var(--muted); }
+
+  /* ── WHAT YOU SEE ── */
+  .outcomes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 48px; }
+  .outcome { padding: 22px 18px; border: 1px solid var(--border); border-radius: 10px; background: rgba(255,255,255,0.02); position: relative; overflow: hidden; }
+  .outcome::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--accent), transparent); }
+  .outcome-icon { font-size: 18px; margin-bottom: 10px; }
+  .outcome-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 12px; margin-bottom: 8px; }
+  .outcome-body { font-size: 11.5px; line-height: 1.65; color: rgba(232,236,240,0.45); }
+  .outcome-example { margin-top: 10px; padding: 10px 12px; background: rgba(0,200,232,0.05); border-left: 2px solid rgba(0,200,232,0.3); border-radius: 0 5px 5px 0; font-size: 11px; line-height: 1.6; color: rgba(232,236,240,0.65); font-style: italic; }
+
+  /* ── VS TABLE ── */
+  .vs { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .vs-head { display: grid; grid-template-columns: 160px 1fr 100px 160px; background: rgba(255,255,255,0.025); }
+  .vs-row { display: grid; grid-template-columns: 160px 1fr 100px 160px; border-top: 1px solid rgba(255,255,255,0.04); }
+  .vs-row.ours { background: rgba(0,200,232,0.04); }
+  .vc { padding: 12px 15px; font-size: 11.5px; }
+  .vh { padding: 10px 15px; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); }
+  .vname { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 12px; color: var(--white); }
+  .vname.ours { color: var(--accent); }
+  .vdesc { color: rgba(232,236,240,0.45); font-size: 11px; line-height: 1.5; border-left: 1px solid rgba(255,255,255,0.04); border-right: 1px solid rgba(255,255,255,0.04); }
+  .vcheck { text-align: center; }
+  .tag { display: inline-block; padding: 3px 9px; border-radius: 4px; font-size: 9.5px; }
+  .tn { background: rgba(232,85,85,0.14); color: var(--accent2); }
+  .ty { background: rgba(168,224,96,0.14); color: var(--accent3); }
+  .tp { background: rgba(255,200,0,0.1); color: #e8c840; }
+  .tg { background: rgba(78,90,104,0.2); color: var(--muted); font-style: italic; }
+
+  /* ── DEPLOYMENT ── */
+  .deploy-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .deploy-card { padding: 22px 18px; border: 1px solid var(--border); border-radius: 10px; }
+  .deploy-card.featured { border-color: rgba(0,200,232,0.3); background: rgba(0,200,232,0.04); }
+  .deploy-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+  .deploy-label.feat { color: var(--accent); }
+  .deploy-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+  .deploy-body { font-size: 11.5px; line-height: 1.65; color: rgba(232,236,240,0.45); }
+  .deploy-note { margin-top: 8px; font-size: 10.5px; color: var(--accent3); }
+
+  .note { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo"><div class="logo-dot"></div>AgentIQ</div>
+  <div class="badge">Seed Stage · Confidential · 2026</div>
+</header>
+
+<div class="hero">
+  <div class="kicker">The agents keep running. The problems keep growing.</div>
+  <h1>You deployed AI agents.<br><em>The quality layer is missing.</em></h1>
+  <p class="sub">AgentIQ is the quality layer that existing observability tools don't have — loss patterns that surface as they form, quality scores calibrated to your industry, and a feedback loop so agents improve continuously without a code push.</p>
+</div>
+
+<!-- HOW IT WORKS -->
+<div class="section">
+  <div class="sh"><div class="sh-num">01</div><div class="sh-title">How AgentIQ Works</div><div class="sh-line"></div></div>
+
+  <div class="flow">
+    <div class="flow-box active">
+      <div class="flow-step">1</div>
+      <div class="flow-title">Connect</div>
+      <div class="flow-body">One line of code. Any framework — LangChain, CrewAI, or fully custom. No rebuilding. No downtime.<br><br>If AgentIQ goes down, your agent keeps running. It's invisible to your users.</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box active">
+      <div class="flow-step">2</div>
+      <div class="flow-title">Score</div>
+      <div class="flow-body">Every interaction evaluated — nothing sampled. Quality defined by your industry and refined by your team.<br><br>Healthcare agents scored on accuracy and safety. Retail agents on task resolution. Coding agents on correctness. Marketing on brand alignment.</div>
+    </div>
+    <div class="flow-arrow">→</div>
+    <div class="flow-box active">
+      <div class="flow-step">3</div>
+      <div class="flow-title">Surface</div>
+      <div class="flow-body">Loss patterns appear in the dashboard as they form. Root cause in plain English. Not "error rate is 23%" — but exactly which step is failing, why, and since when.</div>
+    </div>
+  </div>
+
+  <div class="outcomes">
+    <div class="outcome">
+      <div class="outcome-title">Quality score per interaction</div>
+      <div class="outcome-body">0–100, calibrated to your industry. Scored on four dimensions: accuracy, goal alignment, decision quality, completeness.</div>
+      <div class="outcome-example">"This interaction scored 34 / 100. Goal alignment failed — agent redirected to wrong flow at step 2."</div>
+    </div>
+    <div class="outcome">
+      <div class="outcome-title">Loss patterns with root cause</div>
+      <div class="outcome-body">Automatically grouped by failure type, workflow step, or tool. Root cause in one sentence. No manual log review.</div>
+      <div class="outcome-example">"Billing disputes failing 47% of the time because payment API times out at step 3. Happening since last Tuesday."</div>
+    </div>
+    <div class="outcome">
+      <div class="outcome-title">Feedback loop</div>
+      <div class="outcome-body">Every confirmed failure feeds the improvement cycle. Agents get measurably better. Same failures stop repeating.</div>
+      <div class="outcome-example">"After fixing step 3 timeout: billing dispute pass rate went from 53% → 91% in 48 hours."</div>
+    </div>
+  </div>
+</div>
+
+<!-- COMPETITION -->
+<div class="section">
+  <div class="sh"><div class="sh-num">02</div><div class="sh-title">Why Existing Tools Miss This</div><div class="sh-line"></div></div>
+  <div class="vs">
+    <div class="vs-head">
+      <div class="vh">Tool</div>
+      <div class="vh">What they do</div>
+      <div class="vh" style="text-align:center">100% Coverage</div>
+      <div class="vh" style="text-align:center">Loss Patterns + Feedback Loop</div>
+    </div>
+    <div class="vs-row">
+      <div class="vc"><div class="vname">LangSmith</div><div style="font-size:9px;color:var(--muted)">LangChain · $125M raised</div></div>
+      <div class="vc vdesc">Traces and debugs agent workflows. Samples traffic. No loss patterns or feedback loop.</div>
+      <div class="vc vcheck"><span class="tag tn">Samples</span></div>
+      <div class="vc vcheck"><span class="tag tn">None</span></div>
+    </div>
+    <div class="vs-row">
+      <div class="vc"><div class="vname">Braintrust</div></div>
+      <div class="vc vdesc">AI observability + evals. Samples production. No industry defaults. No feedback loop.</div>
+      <div class="vc vcheck"><span class="tag tn">Samples</span></div>
+      <div class="vc vcheck"><span class="tag tn">None</span></div>
+    </div>
+    <div class="vs-row">
+      <div class="vc"><div class="vname">Maxim AI</div></div>
+      <div class="vc vdesc">Simulation + evals + observability. Complex enterprise sales. Samples production.</div>
+      <div class="vc vcheck"><span class="tag tn">Samples</span></div>
+      <div class="vc vcheck"><span class="tag tp">Partial</span></div>
+    </div>
+    <div class="vs-row">
+      <div class="vc"><div class="vname">Microsoft Foundry</div><div style="font-size:9px;color:var(--muted)">Launched Build 2026</div></div>
+      <div class="vc vdesc">Cross-framework tracing. OpenTelemetry-based. No loss patterns. No feedback loop.</div>
+      <div class="vc vcheck"><span class="tag tp">Partial</span></div>
+      <div class="vc vcheck"><span class="tag tn">None</span></div>
+    </div>
+    <div class="vs-row">
+      <div class="vc"><div class="vname">Galileo</div><div style="font-size:9px;color:var(--muted)">Acquired · Cisco 2026</div></div>
+      <div class="vc vdesc">GenAI evaluation and hallucination detection. Acquired April 2026. Gap is open.</div>
+      <div class="vc vcheck"><span class="tag tg">Acquired</span></div>
+      <div class="vc vcheck"><span class="tag tg">Gap open</span></div>
+    </div>
+    <div class="vs-row ours">
+      <div class="vc"><div class="vname ours">AgentIQ ✦</div><div style="font-size:9px;color:rgba(0,200,232,0.4)">Seed · 2026</div></div>
+      <div class="vc vdesc" style="color:rgba(232,236,240,0.65)">The quality layer. Loss patterns surface automatically. Every failure feeds the improvement loop. Industry defaults out of the box. Deploys inside your VPC.</div>
+      <div class="vc vcheck"><span class="tag ty">100%</span></div>
+      <div class="vc vcheck"><span class="tag ty">Core</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- DEPLOYMENT -->
+<div class="section">
+  <div class="sh"><div class="sh-num">03</div><div class="sh-title">Data Never Leaves Your Infrastructure</div><div class="sh-line"></div></div>
+  <p style="font-size:12.5px;line-height:1.85;color:rgba(232,236,240,0.5);margin-bottom:20px;max-width:680px">Agent interaction logs contain customer conversations, PII, and proprietary business workflows. AgentIQ deploys inside your own servers — the same infrastructure your agents already run on. One command. No external data transfer. No shared endpoints.</p>
+  <div class="deploy-grid">
+    <div class="deploy-card featured">
+      <div class="deploy-label feat">⭐ Recommended for Enterprise</div>
+      <div class="deploy-title">Self-Hosted via Docker</div>
+      <div class="deploy-body">Your team installs AgentIQ inside your existing servers or cloud account. All data stays inside your network. We provide the installation package — you own the infrastructure.</div>
+      <div class="deploy-note">Setup: 3 steps, ~10 minutes</div>
+    </div>
+    <div class="deploy-card">
+      <div class="deploy-label">Cloud Deploy</div>
+      <div class="deploy-title">AWS / Azure / GCP VPC</div>
+      <div class="deploy-body">Deploy AgentIQ inside your cloud VPC. Your database, your network, your security perimeter. Data never leaves your cloud account.</div>
+    </div>
+    <div class="deploy-card">
+      <div class="deploy-label">Demo Only</div>
+      <div class="deploy-title">Render (Shared Cloud)</div>
+      <div class="deploy-body">AgentIQ's public demo environment. Good for evaluating the product. Not for production data or enterprise deployment.</div>
+    </div>
+  </div>
+</div>
+
+<p class="note">This document is for external audiences — investors, design partners, developers evaluating AgentIQ. It deliberately omits model names, table schemas, queue mechanics, retry logic, and implementation details.</p>
+
+</body>
+</html>

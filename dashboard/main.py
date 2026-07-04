@@ -1,5 +1,5 @@
 """
-AgentIQ Streamlit Dashboard - Comprehensive Agent Observability Platform
+Kalytera Streamlit Dashboard - Comprehensive Agent Observability Platform
 4 Views: Overview, Usage Analytics, Loss Patterns, Interaction Detail
 """
 
@@ -10,7 +10,7 @@ import plotly.express as px
 from typing import Dict, Any, Optional
 
 st.set_page_config(
-    page_title="AgentIQ - Agent Observability Platform",
+    page_title="Kalytera - Agent Observability Platform",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -59,7 +59,7 @@ def make_api_post(endpoint: str, params: Dict = None) -> Optional[Any]:
 
 def render_sidebar():
     """Render sidebar navigation and controls"""
-    st.sidebar.title("🤖 AgentIQ")
+    st.sidebar.title("🤖 Kalytera")
     st.sidebar.markdown("**Agent Observability Platform**")
 
     page = st.sidebar.selectbox(
@@ -105,7 +105,7 @@ def render_sidebar():
 
 def render_overview_page(hours_back: int):
     """Render overview dashboard with key metrics"""
-    st.markdown('<h1 class="main-header">📊 AgentIQ Overview</h1>', unsafe_allow_html=True)
+    st.markdown('<h1 class="main-header">📊 Kalytera Overview</h1>', unsafe_allow_html=True)
 
     # Key metrics from dashboard-summary (returns a dict)
     summary = make_api_get("/analytics/dashboard-summary")
@@ -559,7 +559,7 @@ def main():
 
     st.markdown("---")
     st.markdown(
-        "🤖 **AgentIQ** — Agent observability and loss pattern analysis | "
+        "🤖 **Kalytera** — Agent observability and loss pattern analysis | "
         "[API Docs](http://localhost:8000/docs)"
     )
 

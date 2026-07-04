@@ -1,7 +1,70 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kalytera"
+version = "0.1.1"
+description = "Real-time quality monitoring and failure detection for production AI agents"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+authors = [
+    {name = "Kalytera", email = "priya@kalytera.ai"},
+]
+keywords = ["ai", "agents", "observability", "monitoring", "llm", "evaluation"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "aiohttp>=3.9.0",
+]
+
+[project.optional-dependencies]
+server = [
+    "anthropic>=0.40.0",
+    "fastapi==0.110.0",
+    "uvicorn[standard]==0.27.1",
+    "sqlalchemy==2.0.27",
+    "alembic==1.13.1",
+    "streamlit>=1.37.0",
+    "pandas==2.0.3",
+    "numpy>=1.24.0",
+    "plotly==5.19.0",
+    "psycopg2-binary==2.9.9",
+    "python-dotenv==1.0.1",
+    "pydantic==2.5.3",
+    "python-multipart==0.0.27",
+]
+dev = [
+    "pytest>=8.1.0",
+    "pytest-asyncio>=0.23.0",
+    "requests>=2.31.0",
+    "ruff",
+    "mypy",
+]
+
+[project.urls]
+Homepage = "https://kalytera.ai"
+Documentation = "https://docs.kalytera.ai"
+Repository = "https://github.com/your-org/kalytera"
+"Bug Tracker" = "https://github.com/your-org/kalytera/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["kalytera"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-v", "--tb=short"]
 pythonpath = ["."]
+asyncio_mode = "auto"
 filterwarnings = [
     "ignore::DeprecationWarning:sdk.client"
 ]

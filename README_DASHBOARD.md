@@ -1,8 +1,8 @@
-# AgentIQ Universal Dashboard Deployment
+# Kalytera Universal Dashboard Deployment
 
 ## 🤖 Universal Agent Performance Dashboard
 
-AgentIQ now features a **universal dashboard** that works with **any AI agent type**:
+Kalytera now features a **universal dashboard** that works with **any AI agent type**:
 
 - 👨‍💻 **Coding Assistants**: GitHub Copilot, CodeWhisperer, custom dev tools
 - 🎧 **Customer Service**: Support bots, help desk agents, FAQ assistants  
@@ -15,20 +15,20 @@ AgentIQ now features a **universal dashboard** that works with **any AI agent ty
 
 ### Option 1: Streamlit Cloud (Fastest)
 1. Go to https://share.streamlit.io/
-2. Connect your GitHub repo: `priyamathur/AgentIQ`
+2. Connect your GitHub repo: `priyamathur/Kalytera`
 3. Set main file: `simple_dashboard.py`
-4. Deploy - you'll get a URL like: `https://agentiq-dashboard-xyz.streamlit.app/`
+4. Deploy - you'll get a URL like: `https://kalytera-dashboard-xyz.streamlit.app/`
 
 ### Option 2: Render Dashboard Service
 1. Create new web service on Render
-2. Connect GitHub repo: `priyamathur/AgentIQ`
+2. Connect GitHub repo: `priyamathur/Kalytera`
 3. Build command: `pip install -r dashboard_requirements.txt`
 4. Start command: `streamlit run simple_dashboard.py --server.port $PORT --server.address 0.0.0.0`
-5. Add environment variable: `API_BASE_URL = https://agentiq-api-z9it.onrender.com`
+5. Add environment variable: `API_BASE_URL = https://kalytera-api-z9it.onrender.com`
 
 ### Option 3: Local Testing
 ```bash
-cd /Users/udayshankar/Documents/AgentIQ
+cd /Users/udayshankar/Documents/Kalytera
 pip install streamlit requests pandas plotly
 streamlit run simple_dashboard.py
 ```
@@ -47,7 +47,7 @@ streamlit run simple_dashboard.py
 
 ## Live API Endpoints
 
-Your dashboard connects to: **https://agentiq-api-z9it.onrender.com**
+Your dashboard connects to: **https://kalytera-api-z9it.onrender.com**
 
 All analytics endpoints are working:
 - `/analytics/session-volume` - Session activity over time

@@ -1,5 +1,5 @@
 """
-FastAPI ingest endpoints for AgentIQ
+FastAPI ingest endpoints for Kalytera
 POST /api/trace for real-time agent interaction tracing
 Framework-agnostic webhook receiver that never blocks agents
 """
@@ -27,7 +27,7 @@ session_builder = SessionBuilder(intent_classifier)
 
 # FastAPI app
 app = FastAPI(
-    title="AgentIQ API",
+    title="Kalytera API",
     description="Real-time agent log ingestion and usage analytics platform",
     version="1.0.0"
 )
@@ -76,7 +76,7 @@ class TraceResponse(BaseModel):
     message: str
     processing_time_ms: int
 
-# Batch processing models and functions removed - AgentIQ is real-time only
+# Batch processing models and functions removed - Kalytera is real-time only
 
 
 # Real-time trace endpoint
@@ -148,7 +148,7 @@ async def trace_interaction(
     except Exception as e:
         # Never raise exceptions to the calling agent
         # Log locally and return success to avoid breaking agent
-        logger = logging.getLogger("agentiq.trace")
+        logger = logging.getLogger("kalytera.trace")
         logger.error(f"Trace processing failed for session {trace.session_id}: {e}")
         
         processing_time = int((datetime.now() - start_time).total_seconds() * 1000)
@@ -220,7 +220,7 @@ async def process_trace_background(session_id: str, agent_log_id: str):
                     })
                     
             except Exception as e:
-                logger = logging.getLogger("agentiq.background")
+                logger = logging.getLogger("kalytera.background")
                 logger.error(f"Intent classification failed for session {session_id}: {e}")
         
         # Update session summary
@@ -230,15 +230,15 @@ async def process_trace_background(session_id: str, agent_log_id: str):
         db.close()
         
     except Exception as e:
-        logger = logging.getLogger("agentiq.background")
+        logger = logging.getLogger("kalytera.background")
         logger.error(f"Background trace processing failed for session {session_id}: {e}")
 
 # Endpoints
 @app.get("/")
 async def root():
-    """Root endpoint - AgentIQ API welcome"""
+    """Root endpoint - Kalytera API welcome"""
     return {
-        "message": "AgentIQ API",
+        "message": "Kalytera API",
         "description": "Real-time agent log ingestion and usage analytics platform",
         "version": "1.0.0",
         "endpoints": {
@@ -265,13 +265,13 @@ async def health_check():
 
 
 # BATCH INGESTION ENDPOINTS REMOVED
-# AgentIQ runs alongside agents in real-time, not as a batch log processor
+# Kalytera runs alongside agents in real-time, not as a batch log processor
 # Use the /api/trace endpoint for real-time agent interaction tracing
 
 # @app.post("/ingest/json") - REMOVED: Use /api/trace instead
 # @app.post("/ingest/csv") - REMOVED: Use /api/trace instead
 # 
-# AgentIQ is designed for real-time agent monitoring, not log analysis.
+# Kalytera is designed for real-time agent monitoring, not log analysis.
 # If you need to import historical data, use the SDK in replay mode:
 
 

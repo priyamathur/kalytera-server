@@ -1,5 +1,5 @@
 """
-AgentIQ API — two endpoints only.
+Kalytera API — two endpoints only.
   POST /trace                        — receive AgentLog from tracer
   GET  /agents/{agent_id}/patterns   — return LossPattern rows
 """
@@ -69,7 +69,7 @@ class PatternOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _require_auth(authorization: Optional[str] = Header(default=None)) -> None:
-    expected = os.getenv("AGENTIQ_API_KEY")
+    expected = os.getenv("KALYTERA_API_KEY")
     if not expected:
         return  # dev mode: no key configured, allow all
     if not authorization or not authorization.startswith("Bearer "):
@@ -91,7 +91,7 @@ def _require_auth(authorization: Optional[str] = Header(default=None)) -> None:
 
 def _eval_batch() -> None:
     """Sync: evaluate up to 20 unevaluated logs per agent, across all agents."""
-    from agentiq.judge import evaluate_log
+    from kalytera.judge import evaluate_log
     from db.models import AgentLog
 
     db = SessionLocal()
@@ -112,7 +112,7 @@ def _eval_batch() -> None:
 
 def _analysis_batch() -> None:
     """Sync: run pattern detection across all agents."""
-    from agentiq.analyzer import run_all
+    from kalytera.analyzer import run_all
 
     db = SessionLocal()
     try:
@@ -191,7 +191,7 @@ async def _lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
         await asyncio.gather(*tasks, return_exceptions=True)
 
 
-app = FastAPI(title="AgentIQ", version="1.0.0", docs_url="/docs", lifespan=_lifespan)
+app = FastAPI(title="Kalytera", version="1.0.0", docs_url="/docs", lifespan=_lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -217,7 +217,7 @@ async def post_trace(
     db: Session = Depends(get_db),
 ) -> TraceResponse:
     """
-    Receive one agent step from agentiq.trace().
+    Receive one agent step from kalytera.trace().
     Writes an AgentLog row. Returns immediately.
     """
     insert_agent_log(payload.model_dump(), db)

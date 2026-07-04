@@ -41,3 +41,27 @@ Thumbs.db
 # Deployment scripts (keep local)
 deploy_to_render.py
 auto_deploy.py
+
+# Internal dev logs and session files
+loop_log.txt
+claude-progress.txt
+tasks.md
+.claude/
+
+# Build artifacts
+dist/
+*.egg-info/
+build/
+
+# Old branding / internal planning docs
+agentiq-*.docx
+agentiq-*.html
+agentiq-*.md
+agentiq-site.html
+agentiq-dev-landing.html
+
+# Large demo/test data scripts (not for public SDK)
+load_100k.py
+
+# Streamlit local secrets (safe, but keep local)
+.streamlit/secrets.toml

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AgentIQ — For ML Engineers Building Agents</title>
+<title>Althea — For ML Engineers Building Agents</title>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -19,6 +19,7 @@
     --border-a: rgba(0,200,232,0.18);
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body {
     background: var(--bg);
     color: var(--white);
@@ -26,6 +27,11 @@
     font-weight: 300;
     font-size: 13.5px;
     line-height: 1.7;
+  }
+  .section[id] { scroll-margin-top: 84px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
   }
 
   /* NAV */
@@ -52,8 +58,8 @@
   }
   .nav-dot { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
   .nav-links { display: flex; gap: 28px; align-items: center; }
-  .nav-link { font-size: 11px; color: var(--muted); letter-spacing: 0.5px; text-decoration: none; cursor: default; }
-  .nav-link:hover { color: var(--muted); }
+  .nav-link { font-size: 11px; color: var(--muted); letter-spacing: 0.5px; text-decoration: none; cursor: pointer; transition: color 0.2s ease; }
+  .nav-link:hover { color: var(--accent); }
   .nav-cta {
     font-family: 'Syne', sans-serif;
     font-weight: 700;
@@ -65,9 +71,10 @@
     color: var(--accent);
     text-decoration: none;
     background: rgba(0,200,232,0.06);
-    cursor: default;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
   }
-  .nav-cta:hover { background: rgba(0,200,232,0.06); }
+  .nav-cta:hover { background: rgba(0,200,232,0.12); border-color: rgba(0,200,232,0.35); }
 
   /* PAGE */
   .page { max-width: 920px; margin: 0 auto; padding: 0 40px 100px; }
@@ -123,8 +130,12 @@
     border-radius: 7px;
     text-decoration: none;
     border: none;
-    cursor: default;
+    cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.2s ease;
+    display: inline-block;
   }
+  .btn-primary:hover { opacity: 0.88; }
+  .btn-primary:active { transform: scale(0.98); }
   .btn-secondary {
     font-family: 'DM Mono', monospace;
     font-weight: 300;
@@ -134,8 +145,33 @@
     border-radius: 7px;
     color: rgba(232,236,240,0.6);
     text-decoration: none;
-    cursor: default;
+    cursor: pointer;
     background: none;
+    transition: border-color 0.2s ease, color 0.2s ease;
+  }
+  .btn-secondary:hover { border-color: var(--border-a); color: var(--white); }
+  .btn-copy {
+    font-variant-ligatures: none;
+    font-size: 12px;
+    appearance: none;
+    -webkit-appearance: none;
+  }
+  .btn-copy.copied { border-color: rgba(168,224,96,0.4); color: var(--accent3); }
+  .pypi-soon {
+    font-size: 10px;
+    color: #e8c840;
+    letter-spacing: 0.3px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .pypi-soon::before {
+    content: '';
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: #e8c840;
+    opacity: 0.8;
   }
   .hero-note { font-size: 10px; color: var(--muted); margin-top: 14px; }
 
@@ -220,6 +256,19 @@
   .value-card.mem::before { background: linear-gradient(90deg, var(--accent3), transparent); }
   .value-card.data::before { background: linear-gradient(90deg, rgba(168,224,96,0.6), transparent); }
   .value-eyebrow { font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .roadmap-badge {
+    display: inline-block;
+    font-family: 'DM Mono', monospace;
+    font-size: 8.5px;
+    letter-spacing: 1px;
+    color: #e8c840;
+    background: rgba(232,200,64,0.1);
+    border: 1px solid rgba(232,200,64,0.25);
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-left: 6px;
+    vertical-align: middle;
+  }
   .value-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; color: var(--white); margin-bottom: 10px; line-height: 1.3; }
   .value-body { font-size: 12px; line-height: 1.7; color: rgba(232,236,240,0.5); }
   .value-body strong { color: rgba(232,236,240,0.8); font-weight: 400; }
@@ -260,6 +309,110 @@
   .wstep-body { font-size: 12px; line-height: 1.65; color: rgba(232,236,240,0.5); }
   .wstep-body strong { color: var(--accent); font-weight: 400; }
   .wstep-body code { background: rgba(0,200,232,0.08); color: var(--accent); padding: 1px 6px; border-radius: 3px; font-size: 11px; }
+
+  /* LIVE DEMO EMBED */
+  .demo-intro {
+    font-size: 13px;
+    line-height: 1.8;
+    color: rgba(232,236,240,0.55);
+    max-width: 620px;
+    margin-bottom: 28px;
+  }
+  .demo-frame-wrap {
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    overflow: hidden;
+    background: #0d1117;
+    box-shadow: 0 40px 100px rgba(0,0,0,0.45);
+  }
+  .demo-frame-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+  .demo-frame-inner {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1280 / 800;
+    /* floor of 640px so content never scales below ~50% (legible terminal text) */
+    min-width: 640px;
+  }
+  .demo-frame-inner iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1280px;
+    height: 800px;
+    border: 0;
+    transform-origin: top left;
+    /* scaled to container width via inline custom property set by JS, floored at 0.5 */
+    transform: scale(var(--demo-scale, 1));
+  }
+  .demo-caption {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 14px;
+    line-height: 1.6;
+  }
+  .demo-scroll-hint {
+    display: none;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 10px;
+    letter-spacing: 0.3px;
+  }
+  @media (max-width: 680px) {
+    .demo-scroll-hint { display: block; }
+  }
+  .demo-fallback {
+    display: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 48px 40px;
+    text-align: left;
+  }
+  .demo-fallback.show { display: flex; }
+  .demo-fallback-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid var(--border-a);
+    color: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    margin-bottom: 6px;
+  }
+  .demo-fallback-title {
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    color: var(--white);
+  }
+  .demo-fallback-body {
+    font-size: 12px;
+    line-height: 1.7;
+    color: rgba(232,236,240,0.5);
+    max-width: 420px;
+  }
+  .demo-fallback-body code {
+    background: rgba(0,200,232,0.08);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+  }
+  .demo-fallback-link {
+    margin-top: 6px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .demo-fallback-link:hover { text-decoration: underline; }
 
   /* ENTERPRISE STRIP */
   .enterprise-strip {
@@ -305,6 +458,8 @@
   }
   .footer-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 14px; display: flex; align-items: center; gap: 7px; }
   .footer-note { font-size: 10px; color: var(--muted); }
+  .footer-link { color: var(--muted); text-decoration: none; transition: color 0.2s ease; }
+  .footer-link:hover { color: var(--accent); }
 
   @media (max-width: 640px) {
     .nav { padding: 16px 20px; }
@@ -323,14 +478,15 @@
 
 <!-- NAV -->
 <nav class="nav">
-  <div class="nav-logo"><div class="nav-dot"></div>AgentIQ</div>
+  <div class="nav-logo"><div class="nav-dot"></div>Althea</div>
   <div class="nav-links">
     <a href="#how" class="nav-link">How it works</a>
+    <a href="#demo" class="nav-link">Demo</a>
     <a href="#features" class="nav-link">Features</a>
     <a href="#compare" class="nav-link">Compare</a>
     <a href="#enterprise" class="nav-link">For enterprises</a>
   </div>
-  <a href="#" class="nav-cta">Request early access →</a>
+  <a href="https://github.com/priyamathur/AgentIQ" class="nav-cta" target="_blank" rel="noopener">View on GitHub →</a>
 </nav>
 
 <div class="page">
@@ -339,28 +495,28 @@
   <div class="hero">
     <div class="hero-badge"><div class="hero-badge-dot"></div>For ML engineers building production agents</div>
     <h1 class="hero-headline">
-      Your agent runs.<br>
-      You find out it <span class="hl">broke at step 3</span><br>
-      when the customer tells you.
+      Know your agent broke<br>
+      <span class="hl">before your customer tells you.</span>
     </h1>
     <p class="hero-sub">
-      AgentIQ scores every step your agent takes — in real time, in production.
-      <strong>You see exactly where quality dropped, catch loops before they cost money,
-      and give your agent memory of past failures so it doesn't repeat them.</strong>
+      Althea scores every step your agent takes — in real time, in production.
+      <strong>See exactly where quality dropped, why it happened, and which failures
+      are costing you the most — the moment they happen, not after a customer complains.</strong>
     </p>
     <div class="hero-actions">
-      <a href="#" class="btn-primary">Get early access</a>
-      <a href="#how" class="btn-secondary">See how it works →</a>
+      <a href="https://github.com/priyamathur/AgentIQ" class="btn-primary" target="_blank" rel="noopener">View on GitHub →</a>
+      <button class="btn-secondary btn-copy" id="copy-install" type="button" data-default="📋  pip install althea-ai" data-copied="✓  Copied to clipboard">📋  pip install althea-ai</button>
+      <span class="pypi-soon">PyPI package launching soon</span>
     </div>
-    <p class="hero-note">Works with LangChain, CrewAI, AutoGen, and any custom framework. One line to instrument.</p>
+    <p class="hero-note">Works with LangChain, CrewAI, AutoGen, and any custom framework. One line to instrument. MIT licensed.</p>
 
     <div class="code-block">
       <span class="comment"># Instrument any agent in one line</span><br>
-      <span class="kw">import</span> agentiq<br><br>
+      <span class="kw">import</span> althea<br><br>
       <span class="comment"># Wrap your existing agent</span><br>
-      agent = <span class="fn">agentiq.trace</span>(your_agent, industry=<span class="str">"healthcare"</span>)<br><br>
-      <span class="comment"># AgentIQ scores every step, detects loops,</span><br>
-      <span class="comment"># and injects failure memory — automatically.</span>
+      agent = <span class="fn">althea.trace</span>(your_agent, industry=<span class="str">"healthcare"</span>)<br><br>
+      <span class="comment"># Althea scores every step and surfaces</span><br>
+      <span class="comment"># the root cause — automatically.</span>
     </div>
   </div>
 
@@ -415,7 +571,7 @@
   <!-- HOW IT WORKS -->
   <div class="section" id="how">
     <div class="sh">
-      <div class="sh-title">How to integrate AgentIQ</div>
+      <div class="sh-title">How to integrate Althea</div>
       <div class="sh-line"></div>
     </div>
 
@@ -425,7 +581,7 @@
         <div>
           <div class="wstep-title">Install</div>
           <div class="wstep-body">
-            <code>pip install agentiq</code><br><br>
+            <code>pip install althea-ai</code><br><br>
             Works with LangChain, CrewAI, AutoGen, LlamaIndex, or any custom agent framework.
             No vendor lock-in. No agent rebuild.
           </div>
@@ -436,10 +592,10 @@
         <div>
           <div class="wstep-title">Wrap your agent</div>
           <div class="wstep-body">
-            <code>agent = agentiq.trace(your_agent, industry="retail")</code><br><br>
+            <code>agent = althea.trace(your_agent, industry="retail")</code><br><br>
             Pass your existing agent object. Set an industry for out-of-the-box scoring defaults —
             healthcare, retail, coding, or marketing.
-            That's it. AgentIQ starts evaluating the moment the agent runs.
+            That's it. Althea starts evaluating the moment the agent runs.
           </div>
         </div>
       </div>
@@ -450,12 +606,44 @@
           <div class="wstep-body">
             Override default scoring dimensions and thresholds via config or the dashboard.
             Set alert channels — Slack, email, webhook.
-            Adjust Failure Memory confidence thresholds.
             <strong>Nothing is required to start getting scores and alerts on day one.</strong>
           </div>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- LIVE DEMO -->
+  <div class="section" id="demo">
+    <div class="sh">
+      <div class="sh-label">00:30</div>
+      <div class="sh-title">See it find a failure</div>
+      <div class="sh-line"></div>
+    </div>
+    <p class="demo-intro">
+      A real customer service agent, instrumented with Althea. Watch a billing refund fail at step 3 —
+      and see the exact root cause surface in real time, no log diving required.
+    </p>
+    <div class="demo-frame-wrap">
+      <div class="demo-frame-scroll">
+        <div class="demo-frame-inner" id="demo-frame-inner">
+          <iframe
+            id="demo-iframe"
+            src="demo.html"
+            title="Althea live product demo"
+            referrerpolicy="no-referrer"
+          ></iframe>
+        </div>
+      </div>
+      <div class="demo-fallback" id="demo-fallback">
+        <div class="demo-fallback-icon">▶</div>
+        <div class="demo-fallback-title">Demo couldn't load here</div>
+        <div class="demo-fallback-body">This usually means <code>demo.html</code> isn't being served from the same location as this page yet.</div>
+        <a href="demo.html" class="demo-fallback-link" target="_blank" rel="noopener">Open the demo directly →</a>
+      </div>
+    </div>
+    <p class="demo-caption">This is the actual dashboard — not a mockup. Every score, step, and root cause shown is generated the way it would be on your agent.</p>
+    <p class="demo-scroll-hint">↔ Scroll to see the full demo on small screens</p>
   </div>
 
   <!-- WHAT YOU GET -->
@@ -473,15 +661,15 @@
         <div class="value-example">Score drops from 91 → 44 at step 3. Root cause: payment API returned null. Time to locate: 8 seconds.</div>
       </div>
       <div class="value-card">
-        <div class="value-eyebrow">Loop detection · Deterministic · Free</div>
+        <div class="value-eyebrow">Loop detection · Deterministic · Free <span class="roadmap-badge">Roadmap</span></div>
         <div class="value-title">Loops flagged before they cost you money</div>
-        <div class="value-body">Step repetition, tool call loops, and runaway API spend are caught automatically on every trace. No LLM call. No added latency. Alerts fire via Slack, email, or webhook immediately.</div>
+        <div class="value-body">Step repetition, tool call loops, and runaway API spend caught automatically on every trace. No LLM call. No added latency. Alerts fire via Slack, email, or webhook immediately.</div>
         <div class="value-example">Loop detected at step 1. Alert fired at 09:14. API spend stopped at $2.40 — not $47,000.</div>
       </div>
       <div class="value-card mem">
-        <div class="value-eyebrow">Failure Memory · No retraining required</div>
+        <div class="value-eyebrow">Failure Memory · No retraining required <span class="roadmap-badge">Roadmap</span></div>
         <div class="value-title">Your agent stops repeating the same mistakes</div>
-        <div class="value-body">Past failures are retrieved and injected into your agent's context before each new interaction. The agent sees what has gone wrong in similar flows — and avoids it. No fine-tuning, no prompt editing, no model update.</div>
+        <div class="value-body">Past failures retrieved and injected into your agent's context before each new interaction. The agent sees what has gone wrong in similar flows — and avoids it. No fine-tuning, no prompt editing, no model update.</div>
         <div class="value-example">"Billing flows: step 3 payment timeout in 34% of cases. Add timeout fallback before calling payment API."</div>
       </div>
       <div class="value-card mem">
@@ -501,7 +689,7 @@
   <!-- COMPARE -->
   <div class="section" id="compare">
     <div class="sh">
-      <div class="sh-title">How AgentIQ compares</div>
+      <div class="sh-title">How Althea compares</div>
       <div class="sh-line"></div>
     </div>
 
@@ -546,15 +734,16 @@
           <td style="padding:14px 16px;text-align:center;"><span style="color:var(--accent2);">✗</span></td>
         </tr>
         <tr style="background:rgba(0,200,232,0.04);border-bottom:1px solid rgba(0,200,232,0.12);">
-          <td style="padding:14px 16px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:700;">AgentIQ ✦</td>
+          <td style="padding:14px 16px;color:var(--accent);font-family:'Syne',sans-serif;font-weight:700;">Althea ✦</td>
           <td style="padding:14px 16px;text-align:center;"><span style="color:var(--accent3);">✓ Every step</span></td>
-          <td style="padding:14px 16px;text-align:center;"><span style="color:var(--accent3);">✓ Built in</span></td>
-          <td style="padding:14px 16px;text-align:center;"><span style="color:var(--accent3);">✓ Built in</span></td>
+          <td style="padding:14px 16px;text-align:center;"><span style="color:#e8c840;">○ Roadmap</span></td>
+          <td style="padding:14px 16px;text-align:center;"><span style="color:#e8c840;">○ Roadmap</span></td>
           <td style="padding:14px 16px;text-align:center;"><span style="color:var(--accent3);">✓ JSONL</span></td>
         </tr>
       </tbody>
     </table>
     </div>
+    <p style="font-size:10.5px;color:var(--muted);margin-top:14px;line-height:1.6;">○ Roadmap — not yet in the open-source release. Per-step scoring, loss patterns, and JSONL export are live today.</p>
   </div>
 
   <!-- ENTERPRISE VALUE -->
@@ -564,7 +753,7 @@
       <div class="sh-line"></div>
     </div>
     <p style="font-size:13px;color:rgba(232,236,240,0.5);margin-bottom:24px;line-height:1.8;">
-      AgentIQ is built for the engineer. But the quality data it generates solves problems for the whole org.
+      Althea is built for the engineer. But the quality data it generates solves problems for the whole org.
     </p>
 
     <div class="enterprise-strip">
@@ -589,19 +778,192 @@
   <!-- CTA -->
   <div class="cta-section">
     <h2 class="cta-headline">Ship agents you can actually trust in production.</h2>
-    <p class="cta-sub">Early access open for teams building agents on LangChain, CrewAI, AutoGen, and custom frameworks.</p>
+    <p class="cta-sub">Open source. Works on LangChain, CrewAI, AutoGen, and custom frameworks. MIT licensed.</p>
     <div class="cta-actions">
-      <a href="#" class="btn-primary">Request early access</a>
-      <a href="#" class="btn-secondary">Read the docs →</a>
+      <a href="https://github.com/priyamathur/AgentIQ" class="btn-primary" target="_blank" rel="noopener">View on GitHub →</a>
+      <a href="https://github.com/priyamathur/AgentIQ#readme" class="btn-secondary" target="_blank" rel="noopener">Read the docs →</a>
     </div>
   </div>
 
   <!-- FOOTER -->
   <footer class="footer">
-    <div class="footer-logo"><div class="nav-dot"></div>AgentIQ</div>
-    <div class="footer-note">agentiq.ai · hello@agentiq.ai</div>
+    <div class="footer-logo"><div class="nav-dot"></div>Althea</div>
+    <div class="footer-note">
+      <a href="https://github.com/priyamathur/AgentIQ" target="_blank" rel="noopener" class="footer-link">GitHub</a>
+      ·
+      <a href="mailto:hello@althea.ai" class="footer-link">hello@althea.ai</a>
+    </div>
   </footer>
 
 </div>
+
+<script>
+  // Scale the fixed 1280x800 demo iframe to fit its responsive container.
+  (function () {
+    var wrap = document.querySelector('.demo-frame-inner');
+    var iframe = wrap ? wrap.querySelector('iframe') : null;
+    if (!wrap || !iframe) return;
+
+    function applyScale() {
+      var scale = wrap.clientWidth / 1280;
+      wrap.style.setProperty('--demo-scale', scale);
+      iframe.style.transform = 'scale(' + scale + ')';
+    }
+
+    applyScale();
+    window.addEventListener('resize', applyScale);
+    if (window.ResizeObserver) {
+      new ResizeObserver(applyScale).observe(wrap);
+    }
+  })();
+
+  // Detect demo.html failing to load and show a graceful fallback instead of a blank/broken iframe.
+  (function () {
+    var iframe = document.getElementById('demo-iframe');
+    var fallback = document.getElementById('demo-fallback');
+    var frameInner = document.getElementById('demo-frame-inner');
+    if (!iframe || !fallback || !frameInner) return;
+
+    var resolved = false;
+
+    function showFallback() {
+      if (resolved) return;
+      resolved = true;
+      fallback.classList.add('show');
+      frameInner.style.display = 'none';
+    }
+
+    // Network-level failure (e.g. file genuinely missing, blocked, CORS).
+    iframe.addEventListener('error', showFallback);
+
+    // Belt-and-suspenders: a 404 page still "loads" successfully in most browsers,
+    // so confirm we can actually see the expected document, not an error page.
+    iframe.addEventListener('load', function () {
+      try {
+        var doc = iframe.contentDocument || iframe.contentWindow.document;
+        if (!doc || !doc.title || doc.title.indexOf('Althea') === -1) {
+          // Title mismatch suggests a host-level error page rather than demo.html itself.
+          // Only treat as failure if we can read it at all (same-origin) and it's clearly wrong.
+          if (doc && doc.body && doc.body.innerText.trim().length > 0 && doc.title.indexOf('Althea') === -1) {
+            showFallback();
+          }
+        } else {
+          resolved = true; // confirmed good load, stop watching
+        }
+      } catch (e) {
+        // Cross-origin or sandboxed — can't inspect, assume it loaded fine.
+        resolved = true;
+      }
+    });
+
+    // Final backstop: if neither load nor error fired within 6s, something's wrong.
+    setTimeout(function () {
+      if (!resolved) showFallback();
+    }, 6000);
+  })();
+
+  // Restart the demo from scene 1 the first time it scrolls into view, so visitors
+  // always see the full install -> failure -> root cause story instead of landing
+  // mid-sequence (or on a frozen first frame if the iframe was loaded off-screen).
+  (function () {
+    var section = document.getElementById('demo');
+    var iframe = document.getElementById('demo-iframe');
+    if (!section || !iframe || !window.IntersectionObserver) return;
+
+    var triggered = false;
+
+    function restartDemo() {
+      if (triggered) return;
+      try {
+        var doc = iframe.contentDocument || iframe.contentWindow.document;
+        var restartBtn = doc.getElementById('btn-restart');
+        var playBtn = doc.getElementById('btn-play');
+        if (restartBtn) {
+          triggered = true;
+          restartBtn.click();
+          // Restart always sets playing=true in demo.html, but make sure the
+          // play button reflects a playing state in case it had been paused.
+          if (playBtn && playBtn.textContent.trim() === '▶') {
+            playBtn.click();
+          }
+        }
+      } catch (e) {
+        // Cross-origin or not yet ready — silently skip, demo still autoplays on its own.
+      }
+    }
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting && entry.intersectionRatio > 0.4) {
+          restartDemo();
+        }
+      });
+    }, { threshold: [0.4] });
+
+    observer.observe(section);
+  })();
+
+  // Click-to-copy install command.
+  (function () {
+    var btn = document.getElementById('copy-install');
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      var text = 'pip install althea-ai';
+      function showCopied() {
+        btn.textContent = btn.getAttribute('data-copied');
+        btn.classList.add('copied');
+        setTimeout(function () {
+          btn.textContent = btn.getAttribute('data-default');
+          btn.classList.remove('copied');
+        }, 1800);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(showCopied).catch(function () {
+          fallbackCopy(text, showCopied);
+        });
+      } else {
+        fallbackCopy(text, showCopied);
+      }
+    });
+
+    function fallbackCopy(text, cb) {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      cb();
+    }
+  })();
+
+  // Highlight the nav link matching the section currently in view.
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.nav-link'));
+    var sections = links
+      .map(function (link) {
+        var id = link.getAttribute('href').slice(1);
+        return { link: link, el: document.getElementById(id) };
+      })
+      .filter(function (s) { return s.el; });
+
+    if (!sections.length || !window.IntersectionObserver) return;
+
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        var match = sections.find(function (s) { return s.el === entry.target; });
+        if (!match) return;
+        if (entry.isIntersecting) {
+          links.forEach(function (l) { l.style.color = ''; });
+          match.link.style.color = 'var(--accent)';
+        }
+      });
+    }, { rootMargin: '-40% 0px -50% 0px' });
+
+    sections.forEach(function (s) { observer.observe(s.el); });
+  })();
+</script>
 </body>
 </html>

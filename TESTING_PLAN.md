@@ -1,4 +1,4 @@
-# AgentIQ Testing Plan
+# Kalytera Testing Plan
 Automated → Manual · June 2026
 
 ## HOW TO USE THIS PLAN
@@ -11,13 +11,13 @@ The SDK trace call must never block, never raise, and never slow down the agent.
 Run with: `pytest tests/ --cov=. --cov-report=term-missing`
 Target: 80% overall coverage. 100% on evaluation/, patterns/. All must pass before any manual testing.
 
-### 1A - SDK — agentiq.trace()
+### 1A - SDK — kalytera.trace()
 Core constraint: never blocks, never raises, never slows the agent
 
 | ID | Test · Description | Expected Result | Type |
 |---|---|---|---|
 | SDK-01 | Trace call returns immediately | Returns in < 5ms. Does not block. | AUTOMATED |
-| SDK-02 | AgentIQ down — agent keeps running | No exception raised. Agent continues. | AUTOMATED |
+| SDK-02 | Kalytera down — agent keeps running | No exception raised. Agent continues. | AUTOMATED |
 | SDK-03 | Invalid inputs — no exception | No exception. Fails silently. Logs locally. | AUTOMATED |
 | SDK-04 | Network timeout — no exception | No exception. Returns within 5ms. | AUTOMATED |
 | SDK-05 | AgentLog written to DB | AgentLog row exists with correct fields. | AUTOMATED |
@@ -99,16 +99,16 @@ The full product experience from a developer's perspective.
 
 **SETUP REQUIRED**: You need a real agent running locally or on Railway. Use the 500-session demo dataset if no real agent is available. This test is about what the developer sees and experiences, not just whether data flows correctly.
 
-**The developer experience test**: Run through this sequence as if you are a developer connecting AgentIQ for the first time. Time each step. If any step takes more than 2 minutes, it is too slow.
+**The developer experience test**: Run through this sequence as if you are a developer connecting Kalytera for the first time. Time each step. If any step takes more than 2 minutes, it is too slow.
 
-1. Add agentiq.trace() to a real agent or demo script. Time to first data: should be under 2 minutes.
+1. Add kalytera.trace() to a real agent or demo script. Time to first data: should be under 2 minutes.
 2. Open the dashboard. Verify: quality scores appear for new interactions within 30 seconds.
 3. Trigger a deliberate failure — use a billing dispute session from the demo dataset.
 4. Verify: failure appears in the Failure Feed within 30 seconds. Failure type is correct.
 5. Wait for pattern analysis to run (or trigger manually). Verify: billing dispute pattern appears with correct root cause and pct_of_all_failures.
 6. Click into a failure from the Failure Feed. Verify: full step-by-step trace visible. Quality score per step visible. Failure reason readable in plain English.
 7. Adjust quality dimension weights for the agent. Verify: quality scores update. Pass/fail threshold changes reflect immediately.
-8. Disconnect AgentIQ (shut down API). Verify: agent continues running without errors or slowdown.
+8. Disconnect Kalytera (shut down API). Verify: agent continues running without errors or slowdown.
 
 ### 2B - Judge Quality — Manual Calibration Review
 Verify the judge is making decisions a developer would agree with.
@@ -121,7 +121,7 @@ Pull 20 random EvalResult rows from the database. For each one, read the interac
 - **8 or more out of 20**: Do not ship. Review prompts.py. Run calibration suite.
 
 **Industry-specific quality check**:
-1. Run a healthcare agent interaction through AgentIQ. Verify: accuracy and safety weighted higher than other dimensions by default.
+1. Run a healthcare agent interaction through Kalytera. Verify: accuracy and safety weighted higher than other dimensions by default.
 2. Run a coding agent interaction. Verify: correctness and completeness weighted higher.
 3. Run a retail agent interaction. Verify: task resolution and tone weighted higher.
 4. Switch the same agent to a different industry profile. Verify: scores change to reflect new weights.
@@ -133,7 +133,7 @@ What the developer actually sees and experiences.
 - Quality score trend is visible and updating in real time.
 - Active failure count is correct — matches count of failed EvalResults in DB.
 - Top failure types are ranked correctly by frequency.
-- A developer who has never seen AgentIQ can understand this view in under 30 seconds.
+- A developer who has never seen Kalytera can understand this view in under 30 seconds.
 
 **Failure Feed view**:
 - New one-off failures appear within 30 seconds of occurring.
@@ -150,11 +150,11 @@ What the developer actually sees and experiences.
 - Developer can click from a pattern card directly to a sample failed interaction.
 
 ### 2D - Critical Failure Scenarios
-The real production failures AgentIQ must catch. Test these manually with real sessions.
+The real production failures Kalytera must catch. Test these manually with real sessions.
 
 **WHY THESE ARE MANUAL**: These scenarios require real multi-step agent interactions with deliberate failure injection. Automated tests use synthetic data. These use realistic production-like sessions to verify the judge catches what it must catch.
 
-| Scenario | How to reproduce | AgentIQ must catch |
+| Scenario | How to reproduce | Kalytera must catch |
 |---|---|---|
 | The $47K loop | Run a session where the agent repeats the same action at steps 3, 4, and 5 with identical outputs. | failure_type = loop detected by step 5. Surfaces in Failure Feed immediately. |
 | The Chevy $1 sale | Run a sales agent session where the agent agrees to an off-script request that violates its business purpose. | failure_type = goal_drift detected. Low goal_alignment score. Surfaces as one-off failure immediately. |
@@ -182,12 +182,12 @@ Everything that must be true before posting in Latent Space, Discord, or HackerN
 - Root cause sentences are specific and readable — not 'error detected'.
 
 **SDK**:
-- agentiq.trace() verified non-blocking with real agent (time < 5ms).
-- Agent keeps running when AgentIQ is shut down.
+- kalytera.trace() verified non-blocking with real agent (time < 5ms).
+- Agent keeps running when Kalytera is shut down.
 - One-line integration works with at least one real agent framework.
 
 **Dashboard**:
-- A developer who has never seen AgentIQ can understand the Failure Feed in under 30 seconds.
+- A developer who has never seen Kalytera can understand the Failure Feed in under 30 seconds.
 - New failures appear within 30 seconds of occurring.
 - Interaction Detail shows step-level quality scores and plain English failure reason.
 
@@ -205,4 +205,4 @@ Everything that must be true before posting in Latent Space, Discord, or HackerN
 | Any automated test fails OR judge accuracy < 80% OR SDK blocks agent | Product not ready. Risk of embarrassing public failure. | ✗ NO-GO — fix blocking issues first. Do not post. |
 
 ## THE MOST IMPORTANT TEST OF ALL
-Connect AgentIQ to a real agent. Open the dashboard. Ask: if my agent had failed overnight, would I have seen it here this morning? If the answer is yes — ship it.
+Connect Kalytera to a real agent. Open the dashboard. Ask: if my agent had failed overnight, would I have seen it here this morning? If the answer is yes — ship it.

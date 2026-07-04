@@ -1,6 +1,6 @@
 # Autonomous Development System Setup
 
-Your AgentIQ autonomous development system is now configured and ready for use.
+Your Kalytera autonomous development system is now configured and ready for use.
 
 ## System Overview
 
@@ -47,7 +47,7 @@ Read `docs/DAILY_LOG.md` to see what was completed and any decisions needed.
 ## Next Steps
 
 1. Run your first autonomous build tonight with: `claude "/daily-build"`
-2. The system will start with TASK-001: Build agentiq.trace() SDK entry point
+2. The system will start with TASK-001: Build kalytera.trace() SDK entry point
 3. Review morning reports and adjust task priorities as needed
 
 The agents will work autonomously while you sleep, following the strict quality standards defined in CLAUDE.md.

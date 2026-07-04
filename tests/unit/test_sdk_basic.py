@@ -30,8 +30,8 @@ def test_sdk_01_trace_call_returns_immediately():
     assert duration_ms < 10, f"trace() took {duration_ms:.2f}ms, must be < 10ms"
 
 
-def test_sdk_02_agentiq_down_agent_keeps_running():
-    """SDK-02: AgentIQ down — agent keeps running"""
+def test_sdk_02_kalytera_down_agent_keeps_running():
+    """SDK-02: Kalytera down — agent keeps running"""
     from sdk.client import trace
     
     # Mock network failure
@@ -47,7 +47,7 @@ def test_sdk_02_agentiq_down_agent_keeps_running():
             # Test passes if no exception is raised
             assert True
         except Exception as e:
-            pytest.fail(f"trace() raised exception when AgentIQ is down: {e}")
+            pytest.fail(f"trace() raised exception when Kalytera is down: {e}")
 
 
 def test_sdk_03_invalid_inputs_no_exception():

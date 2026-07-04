@@ -1,4 +1,4 @@
-# AgentIQ API Endpoints
+# Kalytera API Endpoints
 
 ## Ingestion Endpoints
 

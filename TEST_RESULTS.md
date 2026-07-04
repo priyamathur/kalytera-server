@@ -1,4 +1,4 @@
-# AgentIQ Test Results
+# Kalytera Test Results
 Test execution log and findings
 
 ## Test Execution Started
@@ -24,8 +24,8 @@ Test execution log and findings
    - Trace call returns in < 10ms (allowing safety margin)
    - Core constraint satisfied: SDK does not block
    
-2. **SDK-02**: `test_sdk_02_agentiq_down_agent_keeps_running` - ✅ PASSED  
-   - Agent continues running when AgentIQ API is down
+2. **SDK-02**: `test_sdk_02_kalytera_down_agent_keeps_running` - ✅ PASSED  
+   - Agent continues running when Kalytera API is down
    - No exceptions raised on connection failure
    
 3. **SDK-04**: `test_sdk_04_network_timeout_no_exception` - ✅ PASSED
@@ -129,7 +129,7 @@ Test execution log and findings
 
 **The Developer Experience Test** (as if first-time user):
 
-1. ✅ **SDK Integration**: Added `agentiq.trace()` to test script
+1. ✅ **SDK Integration**: Added `kalytera.trace()` to test script
    - Time to first data: ~30 seconds
    - Integration works with one line of code
    
@@ -149,8 +149,8 @@ Test execution log and findings
    - Step-by-step trace visible in system
    - Quality scoring framework operational
    
-6. ✅ **System Resilience**: AgentIQ disconnection test
-   - Agents continue running when AgentIQ is down
+6. ✅ **System Resilience**: Kalytera disconnection test
+   - Agents continue running when Kalytera is down
    - No exceptions raised to agent code
 
 ### 2B - Judge Quality Assessment
@@ -198,7 +198,7 @@ Test execution log and findings
 
 **Production Resilience**: ✅  
 - Fixed hardcoded fallbacks → proper Claude model fallback chain
-- SDK graceful degradation when AgentIQ is down
+- SDK graceful degradation when Kalytera is down
 - Intent classifier with 5-model fallback before rules
 - Real-time trace ingestion operational
 
@@ -215,7 +215,7 @@ Test execution log and findings
 - Health monitoring endpoints active
 
 **Developer Experience**: ✅
-- One-line SDK integration: `agentiq.trace(...)`
+- One-line SDK integration: `kalytera.trace(...)`
 - Real-time dashboard functional
 - API endpoints validated and working
 - Time to first data: < 30 seconds
@@ -224,7 +224,7 @@ Test execution log and findings
 
 ## 🚀 **FINAL DECISION: GO**
 
-**AgentIQ is ready for launch**
+**Kalytera is ready for launch**
 
 ### **What Works**:
 ✅ **Core constraint met**: SDK never blocks production agents  

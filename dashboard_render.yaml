@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: agentiq-dashboard
+    name: kalytera-dashboard
     env: python
     plan: free
     runtime: python
@@ -9,7 +9,7 @@ services:
     startCommand: cd dashboard && streamlit run main.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
     envVars:
       - key: API_BASE_URL
-        value: https://agentiq-api-z9it.onrender.com
+        value: https://kalytera-api-z9it.onrender.com
       - key: PYTHONPATH
         value: .
     autoDeploy: true

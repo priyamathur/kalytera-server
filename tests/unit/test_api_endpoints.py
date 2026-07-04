@@ -16,87 +16,67 @@ class TestAPIEndpoints:
         """Setup test client"""
         try:
             from api.main import app
+            # Use positional argument for TestClient (correct for current FastAPI version)
             self.client = TestClient(app)
         except ImportError as e:
             pytest.skip(f"FastAPI app not available: {e}")
 
     def test_api_01_post_trace_valid_payload(self):
         """API-01: POST /trace — valid payload"""
+        import uuid
         valid_payload = {
+            "id": str(uuid.uuid4()),
+            "agent_id": "test-agent",
             "session_id": "test_api_session",
+            "step_number": 1,
+            "step_name": "process_request",
+            "input": "I need help with my billing",
+            "output": "I can help you with your billing questions",
+            "latency_ms": 1200,
             "timestamp": datetime.now().isoformat(),
-            "user_input": "I need help with my billing",
-            "agent_response": "I can help you with your billing questions",
-            "response_time_ms": 1200,
-            "workflow_step": 1,
-            "tool_calls": '["billing_api"]'
         }
-        
-        response = self.client.post("/api/trace", json=valid_payload)
-        
-        # Should return success
+
+        response = self.client.post("/trace", json=valid_payload)
+
         assert response.status_code in [200, 201], f"Expected 200/201, got {response.status_code}: {response.text}"
-        
+
         response_data = response.json()
-        assert "status" in response_data or "message" in response_data, "Response should contain status/message"
+        assert "status" in response_data or "id" in response_data, "Response should contain status/id"
 
     def test_api_02_post_trace_missing_required_fields(self):
-        """API-02: POST /trace — missing required fields"""
+        """API-02: POST /trace — missing required fields returns 422"""
         invalid_payload = {
-            "user_input": "test without session_id"
-            # Missing session_id and other required fields
+            "input": "test without required fields"
+            # Missing id, agent_id, session_id, step_number, step_name, output, timestamp
         }
-        
-        response = self.client.post("/api/trace", json=invalid_payload)
-        
-        # Should return validation error
+
+        response = self.client.post("/trace", json=invalid_payload)
+
         assert response.status_code in [400, 422], f"Expected 400/422 for invalid payload, got {response.status_code}"
 
     def test_api_03_get_patterns_with_data(self):
-        """API-03: GET patterns with data"""
-        # First add some data via trace endpoint
-        trace_payload = {
-            "session_id": "pattern_test_session",
-            "timestamp": datetime.now().isoformat(),
-            "user_input": "I have a billing dispute",
-            "agent_response": "Let me help you with that billing issue",
-            "response_time_ms": 800,
-            "workflow_step": 1
-        }
-        
-        # Add trace data
-        self.client.post("/api/trace", json=trace_payload)
-        
-        # Request patterns
-        response = self.client.get("/patterns/export/developer")
-        
-        # Should return patterns data
+        """API-03: GET /agents/{agent_id}/patterns — returns list"""
+        response = self.client.get("/agents/test-agent/patterns")
+
         assert response.status_code == 200, f"Patterns endpoint returned {response.status_code}: {response.text}"
-        
+
         patterns_data = response.json()
-        assert "patterns" in patterns_data, "Response should contain patterns array"
-        assert isinstance(patterns_data["patterns"], list), "Patterns should be an array"
+        assert isinstance(patterns_data, list), "Patterns should be a list"
 
     def test_api_04_get_patterns_empty(self):
-        """API-04: GET patterns — empty"""
-        # Request patterns for clean state
-        response = self.client.get("/patterns/export/developer")
-        
-        # Should return 200 with empty array, not 404
+        """API-04: GET /agents/{agent_id}/patterns — empty returns 200 with list"""
+        response = self.client.get("/agents/no-data-agent/patterns")
+
         assert response.status_code == 200, f"Empty patterns should return 200, got {response.status_code}"
-        
+
         patterns_data = response.json()
-        assert "patterns" in patterns_data, "Response should contain patterns key even when empty"
+        assert isinstance(patterns_data, list), "Should return a list even when empty"
 
     def test_api_05_authentication_missing_api_key(self):
-        """API-05: Authentication — missing API key"""
-        # For now, test that endpoints work without auth (if auth not implemented)
-        # Or test that they return 401 if auth is implemented
-        
-        response = self.client.get("/patterns/export/developer")
-        
-        # Should either work (no auth) or return 401 (auth required)
-        assert response.status_code in [200, 401], f"Expected 200 (no auth) or 401 (auth required), got {response.status_code}"
+        """API-05: GET /agents/{id}/patterns works in dev mode (no KALYTERA_API_KEY set)"""
+        response = self.client.get("/agents/test-agent/patterns")
+
+        assert response.status_code in [200, 401], f"Expected 200 (dev mode) or 401 (key set), got {response.status_code}"
 
     def test_api_06_authentication_multi_tenant_isolation(self):
         """API-06: Authentication — wrong agent_id (Multi-tenant isolation)"""
@@ -157,6 +137,7 @@ class TestHealthAndMonitoring:
         """Setup test client"""
         try:
             from api.main import app
+            # Use positional argument for TestClient (correct for current FastAPI version)
             self.client = TestClient(app)
         except ImportError as e:
             pytest.skip(f"FastAPI app not available: {e}")
@@ -194,6 +175,7 @@ class TestAnalyticsEndpoints:
         """Setup test client"""
         try:
             from api.main import app
+            # Use positional argument for TestClient (correct for current FastAPI version)
             self.client = TestClient(app)
         except ImportError as e:
             pytest.skip(f"FastAPI app not available: {e}")
@@ -235,20 +217,53 @@ class TestEvaluationEndpoints:
         """Setup test client"""
         try:
             from api.main import app
+            # Use positional argument for TestClient (correct for current FastAPI version)
             self.client = TestClient(app)
         except ImportError as e:
             pytest.skip(f"FastAPI app not available: {e}")
 
-    def test_evaluation_batch_endpoint(self):
-        """Test batch evaluation endpoint"""
-        batch_request = {
-            "hours_back": 0.1  # Last 6 minutes
+    def test_evaluate_log_background_job(self):
+        """EVL-batch: evaluate_log() scores an AgentLog and writes EvalResult to DB"""
+        import uuid
+        from unittest.mock import patch
+        from api.database import SessionLocal
+        from kalytera.judge import evaluate_log
+
+        log_id = str(uuid.uuid4())
+
+        # Seed an AgentLog via POST /trace
+        payload = {
+            "id": log_id,
+            "agent_id": "eval-bg-test-agent",
+            "session_id": "eval-bg-session",
+            "step_number": 1,
+            "step_name": "handle_request",
+            "input": "Help me cancel my subscription",
+            "output": "I can help with that.",
+            "latency_ms": 500,
+            "timestamp": datetime.now().isoformat(),
         }
-        
-        response = self.client.post("/evaluation/evaluate-batch", json=batch_request)
-        
-        # Should accept the request (even if no data to evaluate)
-        assert response.status_code in [200, 202], f"Batch evaluation returned {response.status_code}: {response.text}"
+        resp = self.client.post("/trace", json=payload)
+        assert resp.status_code in [200, 201], f"Trace POST failed: {resp.text}"
+
+        # Call evaluate_log() directly, mocking Claude so no real API call
+        good_json = json.dumps({
+            "accuracy": 0.85, "goal_alignment": 0.9, "decision_quality": 0.8,
+            "completeness": 0.85, "overall_score": 0.87, "passed": True,
+            "failure_type": None, "failure_step": None, "failure_reason": None,
+            "confidence": 0.9,
+        })
+        db = SessionLocal()
+        try:
+            with patch("kalytera.judge._call_claude", return_value=good_json):
+                result = evaluate_log(log_id, db)
+        finally:
+            db.close()
+
+        assert result is not None, "evaluate_log should return a result dict"
+        assert "overall_score" in result
+        assert 0.0 <= result["overall_score"] <= 1.0
+        assert result.get("eval_error") is not True
 
     def test_evaluation_failure_stats(self):
         """Test failure statistics endpoint"""
@@ -266,21 +281,42 @@ class TestPatternEndpoints:
         """Setup test client"""
         try:
             from api.main import app
+            # Use positional argument for TestClient (correct for current FastAPI version)
             self.client = TestClient(app)
         except ImportError as e:
             pytest.skip(f"FastAPI app not available: {e}")
 
     def test_pattern_analyze_endpoint(self):
-        """Test pattern analysis trigger"""
-        analyze_request = {
-            "hours_back": 24,
-            "min_pattern_count": 2
-        }
-        
-        response = self.client.post("/patterns/analyze", json=analyze_request)
-        
-        # Should accept analysis request
-        assert response.status_code in [200, 202], f"Pattern analysis returned {response.status_code}: {response.text}"
+        """PAT-analyze: POST /patterns/analyze returns success with pattern data"""
+        from unittest.mock import AsyncMock, MagicMock, patch
+        from datetime import datetime as dt
+        from fastapi.testclient import TestClient as TC
+        # pattern_router is registered on the ingest app, not api.main
+        from api.ingest_endpoints import app as ingest_app
+        ingest_client = TC(ingest_app)
+
+        mock_result = MagicMock()
+        mock_result.analysis_timestamp = dt.now()
+        mock_result.total_failures = 3
+        mock_result.patterns_detected = []
+        mock_result.key_insights = ["Billing disputes are the top failure intent"]
+        mock_result.top_failure_patterns = []
+
+        with patch(
+            "patterns.loss_pattern_analyzer.LossPatternAnalyzer.analyze_patterns",
+            new_callable=AsyncMock,
+            return_value=mock_result,
+        ):
+            response = ingest_client.post(
+                "/patterns/analyze",
+                params={"hours_back": 24, "min_pattern_count": 2},
+            )
+
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+        data = response.json()
+        assert data.get("success") is True
+        assert "total_failures" in data
+        assert "patterns_detected" in data
 
     def test_pattern_insights_endpoint(self):
         """Test pattern insights"""

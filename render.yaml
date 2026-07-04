@@ -1,13 +1,13 @@
 databases:
-  - name: agentiq-postgres
+  - name: kalytera-postgres
     plan: free
-    databaseName: agentiq
-    user: agentiq
+    databaseName: kalytera
+    user: kalytera
 
 services:
   # Main FastAPI Application
   - type: web
-    name: agentiq-api
+    name: kalytera-api
     env: python
     plan: free
     runtime: python
@@ -18,11 +18,11 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
-      - key: AGENTIQ_API_KEY
+      - key: KALYTERA_API_KEY
         sync: false
       - key: DATABASE_URL
         fromDatabase:
-          name: agentiq-postgres
+          name: kalytera-postgres
           property: connectionString
       - key: PYTHONPATH
         value: .
@@ -32,20 +32,20 @@ services:
 
   # Streamlit Dashboard
   - type: web
-    name: agentiq-dashboard
+    name: kalytera-dashboard
     env: python
     plan: free
     runtime: python
     pythonVersion: 3.11.9
     buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run agentiq/dashboard.py --server.port $PORT --server.address 0.0.0.0
+    startCommand: streamlit run kalytera/dashboard.py --server.port $PORT --server.address 0.0.0.0
     envVars:
       - key: DATABASE_URL
         fromDatabase:
-          name: agentiq-postgres
+          name: kalytera-postgres
           property: internalConnectionString
-      - key: AGENTIQ_API_ENDPOINT
-        value: https://agentiq-api.onrender.com
+      - key: KALYTERA_API_ENDPOINT
+        value: https://kalytera-api.onrender.com
       - key: PYTHONPATH
         value: .
     autoDeploy: true

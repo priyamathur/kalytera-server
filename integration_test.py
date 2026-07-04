@@ -1,5 +1,5 @@
 """
-Full integration test for deployed AgentIQ system
+Full integration test for deployed Kalytera system
 Tests all major workflows: trace ingestion, evaluation, pattern analysis, dashboard APIs
 """
 
@@ -9,7 +9,7 @@ import uuid
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
-class AgentIQIntegrationTest:
+class KalyteraIntegrationTest:
     def __init__(self, api_base_url: str, dashboard_url: str = None):
         self.api_base_url = api_base_url.rstrip('/')
         self.dashboard_url = dashboard_url
@@ -313,7 +313,7 @@ class AgentIQIntegrationTest:
     def run_all_tests(self) -> Dict[str, Any]:
         """Run complete integration test suite"""
         
-        print("🧪 AgentIQ Integration Test Suite")
+        print("🧪 Kalytera Integration Test Suite")
         print("=" * 50)
         print(f"🎯 API: {self.api_base_url}")
         if self.dashboard_url:
@@ -390,7 +390,7 @@ def main():
         dashboard_url = sys.argv[2]
     
     # Run tests
-    tester = AgentIQIntegrationTest(api_url, dashboard_url)
+    tester = KalyteraIntegrationTest(api_url, dashboard_url)
     results = tester.run_all_tests()
     
     # Exit with appropriate code

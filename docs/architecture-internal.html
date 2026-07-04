@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AgentIQ — Internal Architecture</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0d10;
+    --white: #e8ecf0;
+    --accent: #00c8e8;
+    --accent2: #e85555;
+    --accent3: #a8e060;
+    --muted: #4e5a68;
+    --border: rgba(255,255,255,0.08);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg); color: var(--white); font-family: 'DM Mono', monospace; font-size: 13px; line-height: 1.6; padding: 48px 40px 80px; max-width: 1080px; margin: 0 auto; }
+
+  /* ── HEADER ── */
+  .header { display: flex; justify-content: space-between; align-items: center; padding-bottom: 20px; border-bottom: 1px solid var(--border); margin-bottom: 48px; }
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 20px; display: flex; align-items: center; gap: 9px; }
+  .logo-dot { width: 7px; height: 7px; background: var(--accent); border-radius: 50%; }
+  .badge { font-size: 10px; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; }
+  h1 { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 20px; margin-bottom: 6px; }
+  .subtitle { font-size: 12px; color: rgba(232,236,240,0.4); margin-bottom: 52px; }
+
+  /* ── DIAGRAM ── */
+  .diagram { display: flex; flex-direction: column; gap: 0; }
+
+  /* layer row */
+  .layer { display: grid; grid-template-columns: 140px 1fr; gap: 0; align-items: stretch; }
+  .layer-label {
+    display: flex; align-items: center; justify-content: flex-end;
+    padding-right: 20px; padding-top: 4px;
+    font-size: 9px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); text-align: right; line-height: 1.4;
+    border-right: 2px solid var(--border);
+  }
+  .layer-content { padding: 0 0 0 20px; }
+
+  /* arrow between layers */
+  .arrow {
+    display: grid; grid-template-columns: 140px 1fr;
+    height: 40px; align-items: center;
+  }
+  .arrow-spacer { border-right: 2px solid var(--border); }
+  .arrow-line {
+    padding-left: 20px; display: flex; align-items: center; gap: 10px;
+    font-size: 10px; color: var(--muted); letter-spacing: 1px;
+  }
+  .arrow-line::before {
+    content: '';
+    display: block; width: 2px; height: 28px;
+    background: linear-gradient(to bottom, var(--muted), transparent);
+    flex-shrink: 0;
+  }
+  .arrow-line span { font-size: 9px; color: var(--accent); letter-spacing: 1.5px; text-transform: uppercase; }
+
+  /* boxes */
+  .box {
+    border: 1px solid var(--border); border-radius: 10px;
+    background: rgba(255,255,255,0.025);
+    padding: 18px 20px; margin-bottom: 0;
+  }
+  .box.accent { border-color: rgba(0,200,232,0.25); background: rgba(0,200,232,0.04); }
+  .box.green  { border-color: rgba(168,224,96,0.2);  background: rgba(168,224,96,0.03); }
+  .box.red    { border-color: rgba(232,85,85,0.2);   background: rgba(232,85,85,0.03); }
+  .box-title {
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px;
+    color: var(--white); margin-bottom: 12px;
+  }
+  .box-title .tag {
+    display: inline-block; margin-left: 8px;
+    font-family: 'DM Mono', monospace; font-weight: 400;
+    font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+    padding: 2px 7px; border-radius: 100px; vertical-align: middle;
+  }
+  .tag-blue { background: rgba(0,200,232,0.12); color: var(--accent); }
+  .tag-green { background: rgba(168,224,96,0.12); color: var(--accent3); }
+  .tag-red { background: rgba(232,85,85,0.12); color: var(--accent2); }
+
+  /* grid inside box */
+  .cols { display: grid; gap: 12px; }
+  .cols-2 { grid-template-columns: 1fr 1fr; }
+  .cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+  .cell {
+    background: rgba(255,255,255,0.03); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px 16px;
+  }
+  .cell-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11.5px; margin-bottom: 8px; color: var(--white); }
+  .cell-sub { font-size: 11px; color: rgba(232,236,240,0.4); line-height: 1.55; }
+  .cell-sub code { font-size: 10.5px; color: var(--accent); background: rgba(0,200,232,0.08); padding: 1px 5px; border-radius: 3px; }
+
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 100px;
+    font-size: 9.5px; margin: 2px 3px 0 0;
+  }
+  .pill-blue { background: rgba(0,200,232,0.1); color: var(--accent); }
+  .pill-green { background: rgba(168,224,96,0.1); color: var(--accent3); }
+  .pill-red { background: rgba(232,85,85,0.1); color: var(--accent2); }
+  .pill-muted { background: rgba(78,90,104,0.2); color: var(--muted); }
+
+  /* ── RULES TABLE ── */
+  .rules { margin-top: 56px; }
+  .sh { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  .sh-num { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 10px; color: var(--accent); letter-spacing: 2px; }
+  .sh-title { font-family: 'Syne', sans-serif; font-weight: 700; font-size: 14px; }
+  .sh-line { flex: 1; height: 1px; background: var(--border); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { text-align: left; padding: 10px 14px; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid var(--border); }
+  td { padding: 11px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); color: rgba(232,236,240,0.6); vertical-align: top; }
+  td:first-child { color: var(--accent2); font-weight: 500; white-space: nowrap; }
+  td code { font-size: 10.5px; color: var(--accent); background: rgba(0,200,232,0.08); padding: 1px 5px; border-radius: 3px; }
+
+  /* timing */
+  .timing { display: flex; flex-direction: column; gap: 1px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 20px; }
+  .t-row { display: grid; grid-template-columns: 90px 1fr; }
+  .t-time { padding: 13px 16px; background: rgba(0,200,232,0.06); border-right: 1px solid var(--border); border-bottom: 1px solid rgba(255,255,255,0.04); font-family: 'Syne', sans-serif; font-weight: 700; font-size: 12px; color: var(--accent); display: flex; align-items: center; }
+  .t-desc { padding: 13px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); color: rgba(232,236,240,0.6); font-size: 12px; display: flex; align-items: center; }
+  .t-row:last-child .t-time, .t-row:last-child .t-desc { border-bottom: none; }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="logo"><div class="logo-dot"></div>AgentIQ</div>
+  <div class="badge">Internal Architecture · Engineering Only</div>
+</header>
+
+<h1>How AgentIQ Works — Full Detail</h1>
+<p class="subtitle">Every component, data path, table, and background loop. Do not share externally.</p>
+
+<div class="diagram">
+
+  <!-- LAYER 1: DEVELOPER -->
+  <div class="layer">
+    <div class="layer-label">Your<br>agent</div>
+    <div class="layer-content">
+      <div class="box accent">
+        <div class="box-title">Developer's Agent Code <span class="tag tag-blue">Any Framework</span></div>
+        <div class="cols cols-2">
+          <div class="cell">
+            <div class="cell-title">agentiq.trace()</div>
+            <div class="cell-sub">Called once per agent step. Passes: <code>session_id</code>, <code>user_input</code>, <code>agent_response</code>, <code>response_time_ms</code>, <code>workflow_step</code></div>
+          </div>
+          <div class="cell">
+            <div class="cell-title">@watch decorator</div>
+            <div class="cell-sub">Wraps any function. Captures input, output, and latency automatically. Generates session IDs.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-spacer"></div>
+    <div class="arrow-line"><span>fire and forget · returns in &lt;1ms · never raises · never blocks</span></div>
+  </div>
+
+  <!-- LAYER 2: SDK -->
+  <div class="layer">
+    <div class="layer-label">SDK</div>
+    <div class="layer-content">
+      <div class="box">
+        <div class="box-title">AgentIQ SDK <span class="tag tag-muted" style="background:rgba(78,90,104,0.2);color:var(--muted)">sdk/client.py · agentiq/tracer.py</span></div>
+        <div class="cols cols-3">
+          <div class="cell">
+            <div class="cell-title">Thread-safe Queue</div>
+            <div class="cell-sub">Max 500 events. <code>put_nowait()</code> — drops silently if full. Backpressure never reaches your agent.</div>
+          </div>
+          <div class="cell">
+            <div class="cell-title">Background Worker Thread</div>
+            <div class="cell-sub">Daemon thread. Dequeues events and dispatches to DB write and HTTP send in parallel.</div>
+          </div>
+          <div class="cell">
+            <div class="cell-title">Local fallback log</div>
+            <div class="cell-sub"><code>agentiq_traces.log</code> written on every event. Backup if DB and API are both unreachable.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-spacer"></div>
+    <div class="arrow-line"><span>two parallel paths — direct DB write + HTTP send</span></div>
+  </div>
+
+  <!-- LAYER 3: API + DB -->
+  <div class="layer">
+    <div class="layer-label">API &amp;<br>Database</div>
+    <div class="layer-content">
+      <div class="cols cols-2" style="gap:12px">
+        <div class="box" style="margin-bottom:0">
+          <div class="box-title">FastAPI <span class="tag tag-muted" style="background:rgba(78,90,104,0.2);color:var(--muted)">api/main.py</span></div>
+          <div class="cols cols-2" style="margin-bottom:0">
+            <div class="cell">
+              <div class="cell-title">POST /trace</div>
+              <div class="cell-sub">Writes AgentLog row. Returns <code>201</code> immediately. Auth: <code>AGENTIQ_API_KEY</code> header.</div>
+            </div>
+            <div class="cell">
+              <div class="cell-title">GET /agents/{id}/patterns</div>
+              <div class="cell-sub">Returns LossPattern rows for one agent. Scoped to <code>agent_id</code> — multi-tenant isolation.</div>
+            </div>
+          </div>
+        </div>
+        <div class="box green" style="margin-bottom:0">
+          <div class="box-title">PostgreSQL <span class="tag tag-green">4 tables only</span></div>
+          <div class="cols cols-2" style="margin-bottom:0">
+            <div class="cell">
+              <div class="cell-title">AgentLog</div>
+              <div class="cell-sub">Written by SDK. One row per agent step. Fields: session_id, step_number, input, output, tool_calls, latency_ms.</div>
+            </div>
+            <div class="cell">
+              <div class="cell-title">EvalResult</div>
+              <div class="cell-sub">Written by judge. Fields: accuracy, goal_alignment, decision_quality, completeness, overall_score, passed, failure_type, failure_reason.</div>
+            </div>
+            <div class="cell">
+              <div class="cell-title">LossPattern</div>
+              <div class="cell-sub">Written by analyzer. Fields: pattern_type, pattern_value, failure_count, pct_of_all_failures, root_cause, is_worsening.</div>
+            </div>
+            <div class="cell">
+              <div class="cell-title">AgentQualityConfig</div>
+              <div class="cell-sub">Written by dashboard. Fields: industry, pass_threshold, weight_accuracy, weight_goal_alignment, weight_decision, weight_completeness.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-spacer"></div>
+    <div class="arrow-line"><span>background loops — never in the trace path</span></div>
+  </div>
+
+  <!-- LAYER 4: BACKGROUND LOOPS -->
+  <div class="layer">
+    <div class="layer-label">Background<br>loops</div>
+    <div class="layer-content">
+      <div class="cols cols-2" style="gap:12px">
+        <div class="box accent" style="margin-bottom:0">
+          <div class="box-title">Eval Loop <span class="tag tag-blue">Every 30 seconds</span></div>
+          <div class="cols" style="margin-bottom:0">
+            <div class="cell">
+              <div class="cell-title">LLM Judge <span style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;font-weight:300"> agentiq/judge.py</span></div>
+              <div class="cell-sub" style="margin-bottom:10px">Fetches up to 20 unevaluated AgentLog rows per agent. Scores each on 4 dimensions: <code>accuracy</code> · <code>goal_alignment</code> · <code>decision_quality</code> · <code>completeness</code></div>
+              <div class="cell-sub" style="margin-bottom:8px"><strong style="color:var(--white)">Scoring:</strong> overall_score = weighted average. Default weights: accuracy 35% · goal_alignment 35% · decision 15% · completeness 15%. pass_threshold = 0.70.</div>
+              <div class="cell-sub"><strong style="color:var(--white)">Failure taxonomy:</strong>
+                <div style="margin-top:6px">
+                  <span class="pill pill-red">wrong_answer</span>
+                  <span class="pill pill-red">tool_failure</span>
+                  <span class="pill pill-red">goal_drift</span>
+                  <span class="pill pill-red">incomplete</span>
+                  <span class="pill pill-red">hallucination</span>
+                  <span class="pill pill-red">context_loss</span>
+                  <span class="pill pill-red">loop</span>
+                </div>
+              </div>
+              <div class="cell-sub" style="margin-top:10px"><strong style="color:var(--white)">On bad JSON:</strong> retry once with simplified prompt. On 2nd failure: <code>eval_error=True</code>.</div>
+            </div>
+          </div>
+        </div>
+        <div class="box" style="margin-bottom:0">
+          <div class="box-title">Analysis Loop <span class="tag tag-muted" style="background:rgba(78,90,104,0.2);color:var(--muted)">Every 60 minutes</span></div>
+          <div class="cols" style="margin-bottom:0">
+            <div class="cell">
+              <div class="cell-title">Pattern Analyzer <span style="font-size:10px;color:var(--muted);font-family:'DM Mono',monospace;font-weight:300"> agentiq/analyzer.py</span></div>
+              <div class="cell-sub" style="margin-bottom:10px">Scans EvalResult rows where <code>passed=False</code> · <code>eval_error=False</code> for the last 7 days.</div>
+              <div class="cell-sub" style="margin-bottom:10px"><strong style="color:var(--white)">Groups failures by:</strong><br>
+                <span class="pill pill-blue">workflow_step</span> (which step number)<br>
+                <span class="pill pill-blue">failure_type</span> (e.g. tool_failure)
+              </div>
+              <div class="cell-sub" style="margin-bottom:10px"><strong style="color:var(--white)">Minimum threshold:</strong> 5 failures required before a LossPattern row is written.</div>
+              <div class="cell-sub" style="margin-bottom:10px"><strong style="color:var(--white)">root_cause:</strong> most common failure_reason string in the group. One plain English sentence.</div>
+              <div class="cell-sub"><strong style="color:var(--white)">is_worsening:</strong> current 7-day failure rate vs prior 7-day window.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow">
+    <div class="arrow-spacer"></div>
+    <div class="arrow-line"><span>dashboard reads from all 4 tables</span></div>
+  </div>
+
+  <!-- LAYER 5: DASHBOARD -->
+  <div class="layer">
+    <div class="layer-label">Dashboard</div>
+    <div class="layer-content">
+      <div class="box green">
+        <div class="box-title">Streamlit Dashboard <span class="tag tag-green">agentiq/dashboard.py · 3 views</span></div>
+        <div class="cols cols-3">
+          <div class="cell">
+            <div class="cell-title">View 1 — Agent Overview</div>
+            <div class="cell-sub">Quality score trend (7 days) · Today's pass rate · Active failure count · Top 3 failure types · Latency p50/p95</div>
+          </div>
+          <div class="cell">
+            <div class="cell-title">View 2 — Failure Feed</div>
+            <div class="cell-sub">Auto-refresh every 30s. One-off failures appear immediately. Repeating patterns grouped with root_cause. Searchable, CSV export.</div>
+          </div>
+          <div class="cell">
+            <div class="cell-title">View 3 — Trace Viewer</div>
+            <div class="cell-sub">Step-by-step waterfall with latency bars. Per-step scores. Failure reason in plain English. Fix recommendation.</div>
+          </div>
+        </div>
+        <div class="cell" style="margin-top:12px">
+          <div class="cell-title">Config Panel — writes to AgentQualityConfig</div>
+          <div class="cell-sub">Adjust dimension weights per agent · Set pass_threshold · Choose industry preset (healthcare · retail · coding · marketing)</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /diagram -->
+
+<!-- TIMING -->
+<div class="rules" style="margin-top:52px">
+  <div class="sh"><div class="sh-num">01</div><div class="sh-title">When does the developer see results?</div><div class="sh-line"></div></div>
+  <div class="timing">
+    <div class="t-row">
+      <div class="t-time">t = 0s</div>
+      <div class="t-desc">Developer calls trace() → event queued → DB written → HTTP sent. Returns to caller in under 1ms.</div>
+    </div>
+    <div class="t-row">
+      <div class="t-time">t = 30s</div>
+      <div class="t-desc">Eval loop fires → Claude Haiku scores new AgentLog rows → EvalResult written → quality scores appear in dashboard.</div>
+    </div>
+    <div class="t-row">
+      <div class="t-time">t = 60 min</div>
+      <div class="t-desc">Analysis loop fires → run_all(db) → LossPattern rows written (if ≥5 failures detected) → loss patterns appear in Failure Feed.</div>
+    </div>
+  </div>
+</div>
+
+<!-- NON-NEGOTIABLE RULES -->
+<div class="rules" style="margin-top:40px">
+  <div class="sh"><div class="sh-num">02</div><div class="sh-title">Non-negotiable constraints</div><div class="sh-line"></div></div>
+  <table>
+    <tr><th>Rule</th><th>Where enforced</th><th>Why</th></tr>
+    <tr><td>trace() never raises</td><td>sdk/client.py — entire body in try/except</td><td>AgentIQ bugs must never take down the developer's agent</td></tr>
+    <tr><td>trace() returns in &lt;1ms</td><td><code>put_nowait()</code> into queue — no network wait</td><td>Same reason</td></tr>
+    <tr><td>Queue drops silently if full</td><td><code>Queue(maxsize=500)</code> + <code>put_nowait()</code></td><td>Backpressure must never reach the agent</td></tr>
+    <tr><td>Eval never runs in trace path</td><td>Background loop only — 30s after trace</td><td>LLM calls are 200–800ms — cannot be in the hot path</td></tr>
+    <tr><td>failure_reason = one English sentence</td><td>Judge prompt — explicitly required</td><td>Raw JSON must never reach dashboard or API clients</td></tr>
+    <tr><td>All SQL in db/queries.py</td><td>Convention + code review</td><td>Single place to audit, optimize, and test all queries</td></tr>
+    <tr><td>Every query scoped to agent_id</td><td>All routes + queries filter by agent_id</td><td>Multi-tenant — one customer cannot see another's data</td></tr>
+  </table>
+</div>
+
+</body>
+</html>

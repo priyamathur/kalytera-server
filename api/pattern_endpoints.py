@@ -1,5 +1,5 @@
 """
-Pattern Analysis API endpoints for AgentIQ
+Pattern Analysis API endpoints for Kalytera
 Export structured pattern data for developer reinforcement learning loops
 """
 

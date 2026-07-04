@@ -1,5 +1,5 @@
 """
-API monitoring and usage tracking endpoints for AgentIQ
+API monitoring and usage tracking endpoints for Kalytera
 Provides real-time monitoring of token usage and security status
 """
 

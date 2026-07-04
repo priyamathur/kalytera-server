@@ -1,7 +1,7 @@
-"""Tests for agentiq/prompts.py — judge prompt construction."""
+"""Tests for kalytera/prompts.py — judge prompt construction."""
 import json
 
-from agentiq.prompts import (
+from kalytera.prompts import (
     EXPECTED_KEYS,
     FAILURE_TYPES,
     StepContext,

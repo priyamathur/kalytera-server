@@ -1,7 +1,7 @@
-# AgentIQ Critical Issues Fix Plan
+# Kalytera Critical Issues Fix Plan
 
 ## 🎯 Overview
-This plan addresses the critical issues identified in the comprehensive test suite that prevent AgentIQ from reaching enterprise readiness. Current status: **50% functional, needs focused fixes to reach 90%+ production readiness.**
+This plan addresses the critical issues identified in the comprehensive test suite that prevent Kalytera from reaching enterprise readiness. Current status: **50% functional, needs focused fixes to reach 90%+ production readiness.**
 
 ---
 
@@ -32,7 +32,7 @@ This plan addresses the critical issues identified in the comprehensive test sui
 - **Files to update**: 
   - `db/models.py` - add failure_category to EvalResult model
   - Create migration script if using Alembic
-- **Test**: Check column exists with `sqlite3 agentiq.db ".schema eval_results"`
+- **Test**: Check column exists with `sqlite3 kalytera.db ".schema eval_results"`
 
 #### Step 1.3: Implement 7-Category Failure Taxonomy
 - **Problem**: Taxonomy not implemented
@@ -133,7 +133,7 @@ This plan addresses the critical issues identified in the comprehensive test sui
 ## 📋 PHASE 4: Integration and Validation (PRIORITY 4)
 
 #### Step 4.1: Run Comprehensive Test Suite Again
-- **Action**: `python3 comprehensive_agentiq_test.py`
+- **Action**: `python3 comprehensive_kalytera_test.py`
 - **Target**: 90%+ success rate across all test categories
 
 #### Step 4.2: Load Enterprise Demo Data

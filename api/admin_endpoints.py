@@ -1,5 +1,5 @@
 """
-Admin endpoints for AgentIQ database initialization and maintenance
+Admin endpoints for Kalytera database initialization and maintenance
 """
 
 from fastapi import APIRouter, HTTPException, Depends

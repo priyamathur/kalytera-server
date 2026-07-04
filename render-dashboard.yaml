@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: agentiq-dashboard
+    name: kalytera-dashboard
     env: python
     plan: free
     runtime: python

@@ -1,14 +1,14 @@
-# 🧪 AgentIQ End-to-End Testing Guide
+# 🧪 Kalytera End-to-End Testing Guide
 
 ## ✅ **Ready for Your Testing - All Systems Functional**
 
-I've completed the comprehensive implementation and testing. Here's your step-by-step guide to validate AgentIQ's enterprise capabilities.
+I've completed the comprehensive implementation and testing. Here's your step-by-step guide to validate Kalytera's enterprise capabilities.
 
 ---
 
 ## 📋 **What's Already Running for You**
 
-- **✅ Production API**: `https://agentiq-api-z9it.onrender.com`
+- **✅ Production API**: `https://kalytera-api-z9it.onrender.com`
 - **✅ 8 Dashboard Variants**: Running on ports 8502-8511
 - **✅ Enterprise Data**: Loaded with multiple agent types
 - **✅ LLM Evaluations**: Active and functional
@@ -21,12 +21,12 @@ I've completed the comprehensive implementation and testing. Here's your step-by
 ### **Step 1: Verify API Health and Data**
 ```bash
 # Test 1A: API Health Check
-curl https://agentiq-api-z9it.onrender.com/health
+curl https://kalytera-api-z9it.onrender.com/health
 
 # Expected: {"status": "healthy", "timestamp": "...", "services": {...}}
 
 # Test 1B: Check Current Data Scale
-curl https://agentiq-api-z9it.onrender.com/analytics/intent-performance
+curl https://kalytera-api-z9it.onrender.com/analytics/intent-performance
 
 # Expected: JSON array with agent types and session counts
 ```
@@ -38,10 +38,10 @@ curl https://agentiq-api-z9it.onrender.com/analytics/intent-performance
 ### **Step 2: Run Comprehensive Test Suite**
 ```bash
 # Test 2A: Full System Validation
-python3 comprehensive_agentiq_test.py
+python3 comprehensive_kalytera_test.py
 
 # Test 2B: System Verification Only
-python3 comprehensive_agentiq_test.py --verify-only
+python3 comprehensive_kalytera_test.py --verify-only
 ```
 
 **✅ Success Criteria**: Test suite should show:
@@ -60,7 +60,7 @@ python3 final_working_loader.py
 # Expected Output:
 # ✅ Generated 291 interactions from 5 enterprise agent types
 # 📦 Loading data in batches...
-# 🎉 AGENTIQ ENTERPRISE DEMO READY!
+# 🎉 KALYTERA ENTERPRISE DEMO READY!
 ```
 
 **✅ Success Criteria**: 
@@ -87,9 +87,9 @@ python3 final_working_loader.py
 #### **4B: Alternative Dashboard Views**
 ```bash
 # Test other dashboard variants:
-# http://localhost:8509 - Enterprise AgentIQ Dashboard
-# http://localhost:8510 - AgentIQ Enterprise Platform
-# http://localhost:8508 - AgentIQ Dashboard
+# http://localhost:8509 - Enterprise Kalytera Dashboard
+# http://localhost:8510 - Kalytera Enterprise Platform
+# http://localhost:8508 - Kalytera Dashboard
 ```
 
 **✅ Success Criteria**: All dashboards load and display agent analytics data.
@@ -99,12 +99,12 @@ python3 final_working_loader.py
 ### **Step 5: Test LLM Evaluation System**
 ```bash
 # Test 5A: Trigger Evaluations
-curl -X POST https://agentiq-api-z9it.onrender.com/evaluation/evaluate-batch \
+curl -X POST https://kalytera-api-z9it.onrender.com/evaluation/evaluate-batch \
   -H "Content-Type: application/json" \
   -d '{"hours_back": 24}'
 
 # Test 5B: Check Evaluation Health
-curl https://agentiq-api-z9it.onrender.com/evaluation/health
+curl https://kalytera-api-z9it.onrender.com/evaluation/health
 ```
 
 **✅ Success Criteria**:
@@ -119,16 +119,16 @@ curl https://agentiq-api-z9it.onrender.com/evaluation/health
 #### **6A: Key Analytics Tests**
 ```bash
 # Intent Performance Analysis
-curl https://agentiq-api-z9it.onrender.com/analytics/intent-performance
+curl https://kalytera-api-z9it.onrender.com/analytics/intent-performance
 
 # Session Volume Tracking  
-curl https://agentiq-api-z9it.onrender.com/analytics/session-volume
+curl https://kalytera-api-z9it.onrender.com/analytics/session-volume
 
 # Quality by Intent Analysis
-curl https://agentiq-api-z9it.onrender.com/analytics/quality-by-intent
+curl https://kalytera-api-z9it.onrender.com/analytics/quality-by-intent
 
 # Drop-off Analysis
-curl https://agentiq-api-z9it.onrender.com/analytics/dropoff-analysis
+curl https://kalytera-api-z9it.onrender.com/analytics/dropoff-analysis
 ```
 
 #### **6B: Verify Data Structure**
@@ -147,7 +147,7 @@ Each endpoint should return:
 #### **7A: Manual Data Ingestion Test**
 ```bash
 # Test single interaction ingestion
-curl -X POST https://agentiq-api-z9it.onrender.com/ingest/json \
+curl -X POST https://kalytera-api-z9it.onrender.com/ingest/json \
   -H "Content-Type: application/json" \
   -d '{
     "data": [{
@@ -164,7 +164,7 @@ curl -X POST https://agentiq-api-z9it.onrender.com/ingest/json \
 #### **7B: Verify Ingestion Success**
 ```bash
 # Check if test data appears in analytics
-curl https://agentiq-api-z9it.onrender.com/analytics/intent-performance | grep -i "test"
+curl https://kalytera-api-z9it.onrender.com/analytics/intent-performance | grep -i "test"
 ```
 
 **✅ Success Criteria**: Manual ingestion succeeds and data appears in analytics.
@@ -183,7 +183,7 @@ python3 final_working_loader.py
 #### **8B: Error Handling Test**
 ```bash
 # Test malformed data handling
-curl -X POST https://agentiq-api-z9it.onrender.com/ingest/json \
+curl -X POST https://kalytera-api-z9it.onrender.com/ingest/json \
   -H "Content-Type: application/json" \
   -d '{"invalid": "data"}'
 
@@ -192,7 +192,7 @@ curl -X POST https://agentiq-api-z9it.onrender.com/ingest/json \
 
 #### **8C: API Documentation Test**
 ```bash
-# Open API docs: https://agentiq-api-z9it.onrender.com/docs
+# Open API docs: https://kalytera-api-z9it.onrender.com/docs
 ```
 
 **✅ Success Criteria**:
@@ -230,7 +230,7 @@ curl -X POST https://agentiq-api-z9it.onrender.com/ingest/json \
 ps aux | grep streamlit
 
 # Restart specific dashboard if needed
-STREAMLIT_TELEMETRY_ENABLED=false python3 -m streamlit run agentiq_mvp_dashboard.py --server.port 8511 --server.headless true
+STREAMLIT_TELEMETRY_ENABLED=false python3 -m streamlit run kalytera_mvp_dashboard.py --server.port 8511 --server.headless true
 ```
 
 ### **If Data Loading Fails:**
@@ -238,7 +238,7 @@ STREAMLIT_TELEMETRY_ENABLED=false python3 -m streamlit run agentiq_mvp_dashboard
 # Test with minimal data first
 python3 -c "
 import requests
-response = requests.post('https://agentiq-api-z9it.onrender.com/ingest/test/generic')
+response = requests.post('https://kalytera-api-z9it.onrender.com/ingest/test/generic')
 print(response.status_code, response.text[:200])
 "
 ```
@@ -246,17 +246,17 @@ print(response.status_code, response.text[:200])
 ### **If API is Unresponsive:**
 ```bash
 # Check API health
-curl -w '%{http_code}' https://agentiq-api-z9it.onrender.com/health
+curl -w '%{http_code}' https://kalytera-api-z9it.onrender.com/health
 ```
 
 ---
 
 ## 📊 **Files Available for Your Testing**
 
-- **`comprehensive_agentiq_test.py`** - Full test suite with 7 comprehensive tests
+- **`comprehensive_kalytera_test.py`** - Full test suite with 7 comprehensive tests
 - **`final_working_loader.py`** - Enterprise data loader (verified working)
 - **`enterprise_scale_loader.py`** - High-volume data generator  
-- **`agentiq_mvp_dashboard.py`** - Primary dashboard interface
+- **`kalytera_mvp_dashboard.py`** - Primary dashboard interface
 - **Multiple dashboard variants** - Different UI approaches for your evaluation
 
 ---
@@ -272,12 +272,12 @@ curl -w '%{http_code}' https://agentiq-api-z9it.onrender.com/health
 - [ ] Manual data ingestion works
 - [ ] System handles error conditions gracefully
 
-**When all checkboxes are ✅, AgentIQ is fully validated and ready for enterprise deployment!**
+**When all checkboxes are ✅, Kalytera is fully validated and ready for enterprise deployment!**
 
 ---
 
 **🔗 Quick Access URLs:**
-- **Production API**: https://agentiq-api-z9it.onrender.com
-- **API Docs**: https://agentiq-api-z9it.onrender.com/docs  
+- **Production API**: https://kalytera-api-z9it.onrender.com
+- **API Docs**: https://kalytera-api-z9it.onrender.com/docs  
 - **Primary Dashboard**: http://localhost:8511
 - **Enterprise Dashboard**: http://localhost:8509

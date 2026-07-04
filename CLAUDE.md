@@ -1,20 +1,20 @@
-# AgentIQ — CLAUDE.md
+# Kalytera — CLAUDE.md
 # Read this fully before every session.
 
 ---
 
 ## What We Are Building
-AgentIQ runs alongside enterprise AI agents in production. It captures every interaction via a lightweight SDK, evaluates every step in real time with an LLM judge, and surfaces failures with root cause so developers can find and fix problems in minutes.
+Kalytera runs alongside enterprise AI agents in production. It captures every interaction via a lightweight SDK, evaluates every step in real time with an LLM judge, and surfaces failures with root cause so developers can find and fix problems in minutes.
 
 **The one constraint that overrides every other decision:**
-`agentiq.trace()` must never block, never raise, and never slow down the agent it is observing. If AgentIQ is down, the agent keeps running.
+`kalytera.trace()` must never block, never raise, and never slow down the agent it is observing. If Kalytera is down, the agent keeps running.
 
 ---
 
 ## Module Structure — Exactly This
 
 ```
-agentiq/
+kalytera/
 ├── __init__.py      # exposes init(), watch(), trace()
 ├── tracer.py        # Component 1 — interceptor (DONE)
 ├── prompts.py       # Component 2a — judge prompt, build_prompt() only
@@ -40,7 +40,7 @@ CLAUDE.md
 ## Commands
 ```bash
 uvicorn api.main:app --reload --port 8000
-streamlit run agentiq/dashboard.py --server.port 8501
+streamlit run kalytera/dashboard.py --server.port 8501
 
 alembic upgrade head
 alembic revision --autogenerate -m "description"
@@ -59,12 +59,12 @@ mypy . --strict
 
 | # | File | Task | Done? |
 |---|------|------|-------|
-| 1 | `agentiq/tracer.py` | Interceptor — `trace()` + `@watch` | ✓ |
-| 2 | `agentiq/prompts.py` | Judge prompt — `build_prompt()` | ✓ |
-| 3 | `agentiq/judge.py` | Scorer — Claude Haiku, writes EvalResult | ✓ |
-| 4 | `agentiq/analyzer.py` | Pattern detection — hourly job, writes LossPattern | ✓ |
+| 1 | `kalytera/tracer.py` | Interceptor — `trace()` + `@watch` | ✓ |
+| 2 | `kalytera/prompts.py` | Judge prompt — `build_prompt()` | ✓ |
+| 3 | `kalytera/judge.py` | Scorer — Claude Haiku, writes EvalResult | ✓ |
+| 4 | `kalytera/analyzer.py` | Pattern detection — hourly job, writes LossPattern | ✓ |
 | 5 | `api/main.py` | Two endpoints: POST /trace, GET /agents/{id}/patterns | ✓ |
-| 6 | `agentiq/dashboard.py` | Streamlit, 3 views | ✓ |
+| 6 | `kalytera/dashboard.py` | Streamlit, 3 views | ✓ |
 | 7 | `seed_data.py` | 500 demo sessions, all 7 failure types | ✓ |
 
 **One task per session. Never two.**
@@ -76,7 +76,7 @@ mypy . --strict
 Read CLAUDE.md fully.
 Read claude-progress.txt last 10 lines.
 
-TASK: Build agentiq/<filename>
+TASK: Build kalytera/<filename>
 
 [paste requirements from spec]
 
@@ -95,7 +95,7 @@ When done:
 | Field | Type | Notes |
 |-------|------|-------|
 | id | UUID | primary key |
-| agent_id | str | set by agentiq.init() |
+| agent_id | str | set by kalytera.init() |
 | session_id | str | groups steps of one workflow run |
 | step_number | int | position in workflow (1, 2, 3…) |
 | step_name | str | human label e.g. 'retrieve_policy' |
@@ -185,7 +185,7 @@ Both routes are async. Auth required. Multi-tenant: every query scoped to `agent
 
 ## Architecture Rules
 
-- **tracer.py:** fire and forget. Queue size 500. On failure: log to `~/.agentiq/errors.log`. Never raise.
+- **tracer.py:** fire and forget. Queue size 500. On failure: log to `~/.kalytera/errors.log`. Never raise.
 - **judge.py:** background async job only — never in the trace path. Claude Haiku model.
 - **analyzer.py:** hourly job, idempotent, runs after 5+ failures for a pattern.
 - **SQL:** all in `db/queries.py`. No inline SQL anywhere else.

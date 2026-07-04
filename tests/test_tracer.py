@@ -1,14 +1,14 @@
-"""Tests for agentiq/tracer.py — Component 1."""
+"""Tests for kalytera/tracer.py — Component 1."""
 import time
 import uuid
 
-import agentiq
-from agentiq import tracer
+import kalytera
+from kalytera import tracer
 
 
 def test_trace_returns_under_5ms() -> None:
     t0 = time.monotonic()
-    agentiq.trace(
+    kalytera.trace(
         session_id="s1",
         step_number=1,
         step_name="retrieve_policy",
@@ -20,7 +20,7 @@ def test_trace_returns_under_5ms() -> None:
 
 
 def test_trace_never_raises_on_bad_input() -> None:
-    agentiq.trace(
+    kalytera.trace(
         session_id=None,  # type: ignore[arg-type]
         step_number=None,  # type: ignore[arg-type]
         step_name=None,  # type: ignore[arg-type]
@@ -33,7 +33,7 @@ def test_trace_never_raises_on_bad_input() -> None:
 
 def test_trace_queues_payload() -> None:
     before = tracer._queue.qsize()
-    agentiq.trace(
+    kalytera.trace(
         session_id=str(uuid.uuid4()),
         step_number=2,
         step_name="apply_policy",
@@ -44,7 +44,7 @@ def test_trace_queues_payload() -> None:
 
 
 def test_watch_decorator_returns_correct_value() -> None:
-    @agentiq.watch
+    @kalytera.watch
     def my_agent(user_input: str) -> str:
         return f"response to: {user_input}"
 
@@ -53,7 +53,7 @@ def test_watch_decorator_returns_correct_value() -> None:
 
 
 def test_watch_reraises_exception() -> None:
-    @agentiq.watch
+    @kalytera.watch
     def broken_agent(x: str) -> str:
         raise ValueError("agent broken")
 
@@ -69,7 +69,7 @@ def test_watch_still_traces_on_exception() -> None:
     """Even when the agent raises, a trace event is still queued."""
     before = tracer._queue.qsize()
 
-    @agentiq.watch
+    @kalytera.watch
     def crashing_agent(x: str) -> str:
         raise RuntimeError("crash")
 
@@ -82,6 +82,6 @@ def test_watch_still_traces_on_exception() -> None:
 
 
 def test_init_sets_agent_id() -> None:
-    agentiq.init(api_key="test-key", agent_id="my-agent")
+    kalytera.init(api_key="test-key", agent_id="my-agent")
     assert tracer._agent_id == "my-agent"
     assert tracer._api_key == "test-key"

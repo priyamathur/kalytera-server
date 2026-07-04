@@ -1,5 +1,5 @@
 """
-AgentIQ SDK Client - Fire-and-forget tracing that never blocks agents
+Kalytera SDK Client - Fire-and-forget tracing that never blocks agents
 """
 
 import asyncio
@@ -16,7 +16,7 @@ import os
 
 # Configure local logging for SDK debugging
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("agentiq.sdk")
+logger = logging.getLogger("kalytera.sdk")
 
 @dataclass
 class TraceEvent:
@@ -32,6 +32,7 @@ class TraceEvent:
     error_occurred: Optional[bool] = None
     error_message: Optional[str] = None
     session_ended: Optional[bool] = None
+    config_snapshot: Optional["KalyteraConfig"] = None
     
     def __post_init__(self):
         if self.timestamp is None:
@@ -39,7 +40,7 @@ class TraceEvent:
         if self.workflow_step is None:
             self.workflow_step = 1
 
-class AgentIQConfig:
+class KalyteraConfig:
     """SDK Configuration"""
     def __init__(
         self,
@@ -48,10 +49,10 @@ class AgentIQConfig:
         timeout_seconds: float = 2.0,
         max_retries: int = 0,  # Never retry - fire and forget
         enable_local_logging: bool = True,
-        local_log_path: str = "agentiq_traces.log"
+        local_log_path: str = "kalytera_traces.log"
     ):
         self.api_endpoint = api_endpoint.rstrip("/")
-        self.api_key = api_key or os.getenv("AGENTIQ_API_KEY")
+        self.api_key = api_key or os.getenv("KALYTERA_API_KEY")
         self.timeout_seconds = timeout_seconds
         self.max_retries = max_retries
         self.enable_local_logging = enable_local_logging
@@ -68,12 +69,12 @@ class TraceClient:
         log_dir: Optional[str] = None
     ):
         """Initialize TraceClient with custom configuration"""
-        self.config = AgentIQConfig(
+        self.config = KalyteraConfig(
             api_endpoint=api_endpoint,
             api_key=api_key,
             timeout_seconds=timeout_seconds,
             enable_local_logging=enable_local_logging,
-            local_log_path=os.path.join(log_dir or ".", "agentiq_traces.log")
+            local_log_path=os.path.join(log_dir or ".", "kalytera_traces.log")
         )
         
     def trace(
@@ -89,31 +90,23 @@ class TraceClient:
         error_message: Optional[str] = None,
         session_ended: Optional[bool] = None
     ) -> None:
-        """Instance method that delegates to global trace function"""
-        # Temporarily override global config
-        global _config
-        old_config = _config
-        _config = self.config
-        
-        try:
-            trace(
-                session_id=session_id,
-                user_input=user_input,
-                agent_response=agent_response,
-                response_time_ms=response_time_ms,
-                workflow_step=workflow_step,
-                tool_calls=tool_calls,
-                tokens_used=tokens_used,
-                error_occurred=error_occurred,
-                error_message=error_message,
-                session_ended=session_ended
-            )
-        finally:
-            # Restore original config
-            _config = old_config
+        """Instance method that traces with this client's config (no global mutation)."""
+        trace(
+            session_id=session_id,
+            user_input=user_input,
+            agent_response=agent_response,
+            response_time_ms=response_time_ms,
+            workflow_step=workflow_step,
+            tool_calls=tool_calls,
+            tokens_used=tokens_used,
+            error_occurred=error_occurred,
+            error_message=error_message,
+            session_ended=session_ended,
+            _config_override=self.config,
+        )
 
 # Global SDK configuration
-_config = AgentIQConfig()
+_config = KalyteraConfig()
 
 # Background thread and queue for async processing
 _trace_queue: Queue = Queue(maxsize=1000)  # Drop events if queue full
@@ -125,33 +118,34 @@ def configure(
     api_key: Optional[str] = None,
     timeout_seconds: float = 2.0,
     enable_local_logging: bool = True,
-    local_log_path: str = "agentiq_traces.log"
+    local_log_path: str = "kalytera_traces.log"
 ) -> None:
     """
-    Configure AgentIQ SDK settings
+    Configure Kalytera SDK settings
     
     Args:
-        api_endpoint: AgentIQ API endpoint URL
+        api_endpoint: Kalytera API endpoint URL
         api_key: Optional API key for authentication
         timeout_seconds: HTTP request timeout (default: 2.0s)
         enable_local_logging: Whether to log traces locally
         local_log_path: Path for local trace logs
     """
     global _config
-    _config = AgentIQConfig(
+    _config = KalyteraConfig(
         api_endpoint=api_endpoint,
         api_key=api_key,
         timeout_seconds=timeout_seconds,
         enable_local_logging=enable_local_logging,
         local_log_path=local_log_path
     )
-    logger.info(f"AgentIQ SDK configured with endpoint: {api_endpoint}")
+    logger.info(f"Kalytera SDK configured with endpoint: {api_endpoint}")
 
 def _log_trace_locally(trace_event: TraceEvent) -> None:
     """Log trace event to local file for debugging/backup"""
-    if not _config.enable_local_logging:
+    cfg = trace_event.config_snapshot or _config
+    if not cfg.enable_local_logging:
         return
-        
+
     try:
         log_data = {
             "timestamp": trace_event.timestamp.isoformat(),
@@ -161,8 +155,8 @@ def _log_trace_locally(trace_event: TraceEvent) -> None:
             "workflow_step": trace_event.workflow_step,
             "error_occurred": trace_event.error_occurred
         }
-        
-        with open(_config.local_log_path, "a", encoding="utf-8") as f:
+
+        with open(cfg.local_log_path, "a", encoding="utf-8") as f:
             f.write(json.dumps(log_data) + "\n")
             
     except Exception as e:
@@ -171,7 +165,7 @@ def _log_trace_locally(trace_event: TraceEvent) -> None:
 
 async def _send_trace_async(trace_event: TraceEvent) -> bool:
     """
-    Send trace event to AgentIQ API asynchronously
+    Send trace event to Kalytera API asynchronously
     Returns True if successful, False otherwise
     """
     try:
@@ -213,43 +207,81 @@ async def _send_trace_async(trace_event: TraceEvent) -> bool:
         logger.debug(f"Failed to send trace: {e}")
         return False
 
+def _write_trace_to_db(trace_event: TraceEvent) -> None:
+    """Write trace event directly to AgentLog table. Never raises."""
+    try:
+        from api.database import SessionLocal
+        from db.models import AgentLog
+        db = SessionLocal()
+        try:
+            log = AgentLog(
+                id=str(uuid.uuid4()),
+                session_id=trace_event.session_id,
+                timestamp=trace_event.timestamp,
+                user_input=trace_event.user_input,
+                agent_response=trace_event.agent_response,
+                workflow_step=trace_event.workflow_step or 1,
+                tool_calls=json.dumps(trace_event.tool_calls) if trace_event.tool_calls else None,
+                response_time_ms=trace_event.response_time_ms,
+                tokens_used=trace_event.tokens_used,
+                error_occurred=trace_event.error_occurred or False,
+                error_message=trace_event.error_message,
+                session_ended=trace_event.session_ended or False,
+            )
+            db.add(log)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.debug(f"DB write failed for session {trace_event.session_id}: {e}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.debug(f"Could not import DB modules: {e}")
+
+
+def _http_send_worker(trace_event: TraceEvent) -> None:
+    """Daemon thread: fire-and-forget HTTP send. Never blocks the main worker."""
+    try:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(_send_trace_async(trace_event))
+        loop.close()
+    except Exception as e:
+        logger.debug(f"HTTP send failed for session {trace_event.session_id}: {e}")
+
+
 def _background_worker():
     """Background thread worker that processes the trace queue"""
-    logger.info("AgentIQ background worker started")
-    
+    logger.info("Kalytera background worker started")
+    # Pre-warm DB import so first write is fast
+    try:
+        from api.database import SessionLocal as _  # noqa: F401
+    except Exception:
+        pass
+
     while not _shutdown_event.is_set():
         try:
-            # Get trace event with timeout
             try:
                 trace_event = _trace_queue.get(timeout=1.0)
-            except:
+            except Exception:
                 continue  # Timeout - check shutdown event
-            
-            # Log locally first (always succeeds)
+
+            # Log locally (always succeeds, fast)
             _log_trace_locally(trace_event)
-            
-            # Attempt to send to API (may fail silently)
-            try:
-                # Run async function in background thread
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                success = loop.run_until_complete(_send_trace_async(trace_event))
-                loop.close()
-                
-                if not success:
-                    logger.debug(f"Failed to send trace for session {trace_event.session_id}")
-                    
-            except Exception as e:
-                logger.debug(f"Exception in background send: {e}")
-            
-            # Mark task as done
+
+            # Write to DB synchronously (fast after pre-warm)
+            _write_trace_to_db(trace_event)
+
+            # HTTP send in its own daemon thread — doesn't block dequeue loop
+            t = threading.Thread(target=_http_send_worker, args=(trace_event,), daemon=True)
+            t.start()
+
             _trace_queue.task_done()
-            
+
         except Exception as e:
             logger.error(f"Critical error in background worker: {e}")
-            # Continue processing - never crash the worker
-    
-    logger.info("AgentIQ background worker stopped")
+
+    logger.info("Kalytera background worker stopped")
 
 def _ensure_background_worker():
     """Ensure background worker thread is running"""
@@ -258,7 +290,7 @@ def _ensure_background_worker():
     if _background_thread is None or not _background_thread.is_alive():
         _background_thread = threading.Thread(target=_background_worker, daemon=True)
         _background_thread.start()
-        logger.debug("Started AgentIQ background worker thread")
+        logger.debug("Started Kalytera background worker thread")
 
 def trace(
     session_id: Optional[str] = None,
@@ -270,7 +302,8 @@ def trace(
     tokens_used: Optional[int] = None,
     error_occurred: Optional[bool] = None,
     error_message: Optional[str] = None,
-    session_ended: Optional[bool] = None
+    session_ended: Optional[bool] = None,
+    _config_override: Optional["KalyteraConfig"] = None,
 ) -> None:
     """
     Trace a single agent interaction - fire and forget
@@ -278,7 +311,7 @@ def trace(
     This function:
     - Never blocks (returns immediately)
     - Never raises exceptions 
-    - Fails silently if AgentIQ is down
+    - Fails silently if Kalytera is down
     - Logs locally for debugging
     
     Args:
@@ -293,7 +326,7 @@ def trace(
         error_message: Error message if error_occurred is True
     
     Example:
-        agentiq.trace(
+        kalytera.trace(
             session_id="session_123",
             user_input="Help me cancel my subscription",
             agent_response="I can help you cancel your subscription...",
@@ -313,7 +346,7 @@ def trace(
         safe_agent_response = str(agent_response) if agent_response is not None else ""
         safe_response_time_ms = int(response_time_ms) if isinstance(response_time_ms, (int, float)) and response_time_ms >= 0 else 0
         
-        # Create trace event
+        # Create trace event — snapshot config so background thread uses correct settings
         trace_event = TraceEvent(
             session_id=safe_session_id,
             user_input=safe_user_input,
@@ -324,18 +357,16 @@ def trace(
             tokens_used=tokens_used,
             error_occurred=error_occurred,
             error_message=error_message,
-            session_ended=session_ended
+            session_ended=session_ended,
+            config_snapshot=_config_override or _config,
         )
         
-        # Ensure background worker is running
+        # Queue for background processing — never blocks caller
         _ensure_background_worker()
-        
-        # Add to queue (non-blocking)
         try:
             _trace_queue.put_nowait(trace_event)
             logger.debug(f"Queued trace for session {session_id}")
-        except:
-            # Queue is full - drop this event silently
+        except Exception:
             logger.debug(f"Trace queue full - dropping event for session {session_id}")
         
     except Exception as e:
@@ -349,7 +380,7 @@ def shutdown():
     """
     global _shutdown_event, _background_thread
     
-    logger.info("Shutting down AgentIQ SDK...")
+    logger.info("Shutting down Kalytera SDK...")
     
     # Signal shutdown
     _shutdown_event.set()
@@ -364,7 +395,7 @@ def shutdown():
     except:
         pass
     
-    logger.info("AgentIQ SDK shutdown complete")
+    logger.info("Kalytera SDK shutdown complete")
 
 # Cleanup on module exit
 import atexit

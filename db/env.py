@@ -16,7 +16,7 @@ from db.models import Base
 target_metadata = Base.metadata
 
 def get_url():
-    return os.getenv("DATABASE_URL", "sqlite:///./agentiq.db")
+    return os.getenv("DATABASE_URL", "sqlite:///./kalytera.db")
 
 def run_migrations_offline() -> None:
     url = get_url()

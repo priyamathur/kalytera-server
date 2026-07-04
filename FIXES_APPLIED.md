@@ -1,4 +1,4 @@
-# AgentIQ — Fixes Applied
+# Kalytera — Fixes Applied
 **Date:** 2026-04-29  
 **Engineer:** Staff Engineer diagnostic pass  
 **Status:** All endpoints green. Full pipeline operational.
@@ -102,7 +102,7 @@
 **File:** `alembic.ini`  
 **Symptom:** `alembic` commands showed placeholder URL warning.  
 **Cause:** `sqlalchemy.url` was set to the default `driver://user:pass@localhost/dbname`.  
-**Fix:** Changed to `sqlite:///./agentiq.db`. (The migration `env.py` also overrides this dynamically from `DATABASE_URL` env var, so this is belt-and-suspenders.)
+**Fix:** Changed to `sqlite:///./kalytera.db`. (The migration `env.py` also overrides this dynamically from `DATABASE_URL` env var, so this is belt-and-suspenders.)
 
 ---
 

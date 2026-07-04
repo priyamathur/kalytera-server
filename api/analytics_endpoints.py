@@ -1,5 +1,5 @@
 """
-Analytics API endpoints for AgentIQ
+Analytics API endpoints for Kalytera
 6 core endpoints providing actionable insights from agent interaction data
 """
 

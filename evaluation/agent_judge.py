@@ -78,7 +78,9 @@ class AgentJudge:
         agent_response: str,
         conversation_context: Optional[List[Dict[str, Any]]] = None,
         tool_results: Optional[str] = None,
-        intent: Optional[str] = None
+        intent: Optional[str] = None,
+        session_id: Optional[str] = None,
+        log_id: Optional[str] = None
     ) -> EvaluationResult:
         """
         Evaluate a single agent interaction

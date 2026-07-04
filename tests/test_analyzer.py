@@ -1,11 +1,11 @@
-"""Tests for agentiq/analyzer.py — pattern detection logic."""
+"""Tests for kalytera/analyzer.py — pattern detection logic."""
 from datetime import datetime, timedelta, timezone
 from typing import Any, List, Optional
 from unittest.mock import MagicMock, patch, call
 
 import pytest
 
-from agentiq.analyzer import (
+from kalytera.analyzer import (
     MIN_FAILURE_COUNT,
     _check_worsening,
     _group_failures,

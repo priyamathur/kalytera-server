@@ -1,15 +1,15 @@
-# AgentIQ — CLAUDE.md
+# Kalytera — CLAUDE.md
 # Read this fully before every session. Keep it open while working.
 
 ---
 
 ## What We Are Building
-AgentIQ runs alongside enterprise AI agents in production. It captures every interaction via a lightweight SDK, evaluates every step in real time with LLM judges, gives every interaction a quality score, surfaces one-off and repeating failures with root cause, and provides a fleet view so enterprises can monitor quality across all their agents at once.
+Kalytera runs alongside enterprise AI agents in production. It captures every interaction via a lightweight SDK, evaluates every step in real time with LLM judges, gives every interaction a quality score, surfaces one-off and repeating failures with root cause, and provides a fleet view so enterprises can monitor quality across all their agents at once.
 
 **The problem we solve:** Enterprise AI agents run complex multi-step workflows. Unlike traditional software, agents think and act differently in every interaction — standard quality checks aren't built for that. Existing eval and observability tools use sampled data and after-the-fact analysis. They miss failures that happen mid-workflow, including one-off catastrophic failures.
 
 **The product constraint that overrides every other decision:**
-The SDK trace call must never block, never raise, and never slow down the agent it is observing. If AgentIQ is down, the agent keeps running.
+The SDK trace call must never block, never raise, and never slow down the agent it is observing. If Kalytera is down, the agent keeps running.
 
 See @docs/ARCHITECTURE.md for full system design.
 
@@ -122,9 +122,9 @@ mypy . --strict
 
 **V1 — Fast frontier model:** Use Claude Haiku as the judge. Latency under 2 seconds per interaction. Cheap enough to run on every interaction. Good enough to collect confirmed failure labels from developers.
 
-**V2 — Distilled proprietary judge:** Every failure a developer confirms in the dashboard is a training example. Once enough labeled examples exist (target: 5,000+ confirmed failures across industries), distill a 3B parameter AgentIQ judge from those examples. Fine-tuned on the seven failure taxonomy, four quality dimensions, and industry-specific standards. This model runs in milliseconds, costs a fraction of an API call, and is more accurate on agent failures than any general-purpose model. It is AgentIQ's proprietary asset — impossible to replicate without the dataset.
+**V2 — Distilled proprietary judge:** Every failure a developer confirms in the dashboard is a training example. Once enough labeled examples exist (target: 5,000+ confirmed failures across industries), distill a 3B parameter Kalytera judge from those examples. Fine-tuned on the seven failure taxonomy, four quality dimensions, and industry-specific standards. This model runs in milliseconds, costs a fraction of an API call, and is more accurate on agent failures than any general-purpose model. It is Kalytera's proprietary asset — impossible to replicate without the dataset.
 
-**Do not train a classifier.** Classifiers work for narrow, fixed-label tasks. AgentIQ needs multi-dimensional quality scoring with explanations across different agent types. That requires generative reasoning capability, not a classifier.
+**Do not train a classifier.** Classifiers work for narrow, fixed-label tasks. Kalytera needs multi-dimensional quality scoring with explanations across different agent types. That requires generative reasoning capability, not a classifier.
 
 Full schemas: @docs/ARCHITECTURE.md
 

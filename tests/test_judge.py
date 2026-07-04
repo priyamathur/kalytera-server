@@ -1,18 +1,18 @@
-"""Tests for agentiq/judge.py — scoring logic, JSON parsing, error handling."""
+"""Tests for kalytera/judge.py — scoring logic, JSON parsing, error handling."""
 import json
 from typing import Any, Dict, List, Optional
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agentiq.judge import (
+from kalytera.judge import (
     _build_result,
     _clamp,
     _error_result,
     _parse_json,
     score_step,
 )
-from agentiq.prompts import StepContext
+from kalytera.prompts import StepContext
 
 _WEIGHTS = {"accuracy": 0.35, "goal_alignment": 0.35, "decision_quality": 0.15, "completeness": 0.15}
 _PASS_THRESHOLD = 0.7
@@ -169,7 +169,7 @@ def test_error_result_sets_eval_error() -> None:
 # --- score_step (mocked Claude) ---
 
 def test_score_step_passes_on_good_response() -> None:
-    with patch("agentiq.judge._call_claude", return_value=_good_json()):
+    with patch("kalytera.judge._call_claude", return_value=_good_json()):
         result = score_step(_step(), prior_steps=[])
     assert result["passed"] is True
     assert result["eval_error"] is False
@@ -177,7 +177,7 @@ def test_score_step_passes_on_good_response() -> None:
 
 
 def test_score_step_failure_on_low_scores() -> None:
-    with patch("agentiq.judge._call_claude", return_value=_failure_json("context_loss")):
+    with patch("kalytera.judge._call_claude", return_value=_failure_json("context_loss")):
         result = score_step(_step(), prior_steps=[])
     assert result["passed"] is False
     assert result["failure_type"] == "context_loss"
@@ -187,14 +187,14 @@ def test_score_step_failure_on_low_scores() -> None:
 def test_score_step_retries_on_bad_json() -> None:
     """First call returns bad JSON; second (retry) returns good JSON."""
     responses = ["not json at all", _good_json()]
-    with patch("agentiq.judge._call_claude", side_effect=responses):
+    with patch("kalytera.judge._call_claude", side_effect=responses):
         result = score_step(_step(), prior_steps=[])
     assert result["eval_error"] is False
     assert result["passed"] is True
 
 
 def test_score_step_eval_error_on_double_failure() -> None:
-    with patch("agentiq.judge._call_claude", return_value=""):
+    with patch("kalytera.judge._call_claude", return_value=""):
         result = score_step(_step(), prior_steps=[])
     assert result["eval_error"] is True
 
@@ -202,8 +202,8 @@ def test_score_step_eval_error_on_double_failure() -> None:
 def test_score_step_uses_prior_context() -> None:
     """Verify prior_steps are passed to build_prompt (not build_retry_prompt)."""
     prior = [_step(n=1, name="fetch_order")]
-    with patch("agentiq.judge._call_claude", return_value=_good_json()) as mock_call:
-        with patch("agentiq.judge.build_prompt", wraps=__import__("agentiq.prompts", fromlist=["build_prompt"]).build_prompt) as mock_bp:
+    with patch("kalytera.judge._call_claude", return_value=_good_json()) as mock_call:
+        with patch("kalytera.judge.build_prompt", wraps=__import__("kalytera.prompts", fromlist=["build_prompt"]).build_prompt) as mock_bp:
             score_step(_step(n=2), prior_steps=prior)
             args = mock_bp.call_args
             assert args[0][1] == prior  # prior_steps forwarded
@@ -216,14 +216,14 @@ def test_score_step_custom_weights() -> None:
         "overall_score": 0.8, "passed": True, "failure_type": None,
         "failure_step": None, "failure_reason": None, "confidence": 0.9,
     })
-    with patch("agentiq.judge._call_claude", return_value=raw):
+    with patch("kalytera.judge._call_claude", return_value=raw):
         result = score_step(_step(), prior_steps=[], weights=weights)
     assert abs(result["overall_score"] - 0.8) < 0.001
 
 
 def test_score_step_custom_pass_threshold() -> None:
     """With threshold=0.95, a score of 0.9 should fail."""
-    with patch("agentiq.judge._call_claude", return_value=_good_json(
+    with patch("kalytera.judge._call_claude", return_value=_good_json(
         accuracy=0.9, goal_alignment=0.9, decision_quality=0.9, completeness=0.9
     )):
         result = score_step(_step(), prior_steps=[], pass_threshold=0.95)

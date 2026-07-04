@@ -1,5 +1,5 @@
 """
-AgentIQ Streamlit Dashboard - Real-time Agent Monitoring
+Kalytera Streamlit Dashboard - Real-time Agent Monitoring
 3 Core Views: Agent Overview, Failure Feed, Interaction Detail + Quality Config
 """
 
@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional
 
 # Page configuration
 st.set_page_config(
-    page_title="AgentIQ - Real-time Agent Monitoring",
+    page_title="Kalytera - Real-time Agent Monitoring",
     page_icon="🤖", 
     layout="wide",
     initial_sidebar_state="expanded"
@@ -40,7 +40,7 @@ def make_api_call(method: str, endpoint: str, params: Dict = None) -> Optional[A
 
 def render_sidebar():
     """Enhanced sidebar with real-time status"""
-    st.sidebar.title("🤖 AgentIQ")
+    st.sidebar.title("🤖 Kalytera")
     st.sidebar.markdown("**Real-time Agent Monitoring**")
     
     # Main navigation
@@ -79,7 +79,7 @@ def main():
     """Main dashboard application with navigation"""
     current_page, auto_refresh = render_sidebar()
     
-    st.title(f"AgentIQ Dashboard - {current_page}")
+    st.title(f"Kalytera Dashboard - {current_page}")
     
     if current_page == "Agent Overview":
         st.subheader("📊 Agent Overview")
@@ -128,7 +128,7 @@ def main():
     
     # Footer
     st.markdown("---")
-    st.markdown("🤖 **AgentIQ** — Real-time Agent Monitoring and Quality Control")
+    st.markdown("🤖 **Kalytera** — Real-time Agent Monitoring and Quality Control")
 
 if __name__ == "__main__":
     main()

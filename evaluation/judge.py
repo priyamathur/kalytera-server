@@ -1,14 +1,21 @@
 """
-AgentIQ Judge Module - Main interface for evaluation system
+Kalytera Judge Module - Main interface for evaluation system
 Exports necessary components for tests and background jobs
 """
 
 from api.database import SessionLocal
-from evaluation.agent_judge import AgentJudge
-
-# Initialize the judge with secure configuration
 import os
-judge_instance = AgentJudge(api_key=os.getenv('ANTHROPIC_API_KEY'))
+
+# Lazy import to avoid circular dependencies
+_judge_instance = None
+
+def get_judge_instance():
+    """Get the judge instance, creating it if necessary"""
+    global _judge_instance
+    if _judge_instance is None:
+        from evaluation.agent_judge import AgentJudge
+        _judge_instance = AgentJudge(api_key=os.getenv('ANTHROPIC_API_KEY'))
+    return _judge_instance
 
 async def evaluate_interaction(
     log_id: str,
@@ -23,14 +30,15 @@ async def evaluate_interaction(
     Evaluate a single agent interaction
     Wrapper function that tests expect
     """
-    return await judge_instance.evaluate_interaction(
-        log_id=log_id,
+    judge = get_judge_instance()
+    return await judge.evaluate_interaction(
         user_input=user_input,
         agent_response=agent_response,
         conversation_context=conversation_context or [],
         tool_results=tool_results,
         intent=intent,
-        session_id=session_id
+        session_id=session_id,
+        log_id=log_id
     )
 
 def get_agent_config(agent_id: str):

@@ -1,5 +1,5 @@
 """
-AgentIQ Universal Agent Performance Dashboard
+Kalytera Universal Agent Performance Dashboard
 Works with all agent types: coding, customer service, data science, BDR, marketing, etc.
 Shows clear, interpretable metrics that matter for any AI agent deployment
 """
@@ -10,12 +10,12 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 
-st.set_page_config(page_title="AgentIQ - Universal Agent Analytics", page_icon="🤖", layout="wide")
+st.set_page_config(page_title="Kalytera - Universal Agent Analytics", page_icon="🤖", layout="wide")
 
 API_BASE_URL = "https://agentiq-api-z9it.onrender.com"
 
 def get_data(endpoint):
-    """Fetch data from AgentIQ API with error handling"""
+    """Fetch data from Kalytera API with error handling"""
     try:
         response = requests.get(f"{API_BASE_URL}{endpoint}", timeout=10)
         if response.status_code == 200:
@@ -96,7 +96,7 @@ def get_agent_type_context(intent_data):
     return primary_type, universal_explanations
 
 # Header
-st.markdown("# 🤖 AgentIQ - Universal Agent Analytics")
+st.markdown("# 🤖 Kalytera - Universal Agent Analytics")
 st.markdown("**Monitor any AI agent's performance: coding, customer service, data science, sales, marketing, and more**")
 
 # System Status
@@ -316,7 +316,7 @@ else:
     st.markdown("""
     ### 📝 How to Get Started
     
-    AgentIQ works with any type of AI agent. Simply start ingesting your agent interactions:
+    Kalytera works with any type of AI agent. Simply start ingesting your agent interactions:
     
     **Supported Agent Types:**
     - 👨‍💻 **Coding Assistants**: GitHub Copilot, CodeWhisperer, custom dev tools
@@ -336,5 +336,5 @@ else:
 
 # Footer
 st.markdown("---")
-st.markdown(f"**AgentIQ Universal Analytics** | API: {API_BASE_URL} | Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+st.markdown(f"**Kalytera Universal Analytics** | API: {API_BASE_URL} | Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 st.markdown("💡 **Universal Platform**: Works with coding, customer service, data science, sales, marketing, and any AI agent type")

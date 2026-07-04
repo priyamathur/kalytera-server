@@ -1,5 +1,5 @@
 """
-AgentIQ Autonomous LLM-as-a-Judge Evaluation System
+Kalytera Autonomous LLM-as-a-Judge Evaluation System
 Continuous, autonomous evaluation of every agent interaction
 
 Core Features:
@@ -62,7 +62,7 @@ class AutonomousLLMJudge:
     
     def __init__(self, api_base: str = "https://agentiq-api-z9it.onrender.com"):
         self.api_base = api_base
-        self.logger = logging.getLogger("AgentIQ-LLMJudge")
+        self.logger = logging.getLogger("Kalytera-LLMJudge")
         
         # Evaluation criteria by agent domain
         self.domain_criteria = self._load_domain_criteria()
@@ -171,7 +171,7 @@ class AutonomousLLMJudge:
     
     def store_evaluation_result(self, result: EvaluationResult) -> bool:
         """
-        Store evaluation result in AgentIQ system for RL loops
+        Store evaluation result in Kalytera system for RL loops
         
         Args:
             result: Evaluation result to store
@@ -180,7 +180,7 @@ class AutonomousLLMJudge:
             Success status
         """
         try:
-            # Format for AgentIQ storage
+            # Format for Kalytera storage
             eval_data = {
                 "interaction_id": result.interaction_id,
                 "agent_id": result.agent_id,

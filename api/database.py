@@ -3,7 +3,7 @@ Shared database configuration and dependency.
 
 Two modes (set DATABASE_URL env var to switch):
   SQLite     — default, zero config, for local dev and demos
-               DATABASE_URL=sqlite:///./agentiq.db  (or leave unset)
+               DATABASE_URL=sqlite:///./kalytera.db  (or leave unset)
   PostgreSQL — for production
                DATABASE_URL=postgresql://user:pass@host:5432/dbname
 """
@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 load_dotenv()  # env vars already set in the environment take precedence over .env
 
 # Database setup - Use SQLite with persistent storage for Railway
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./agentiq.db")
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./kalytera.db")
 print(f"🔍 Connecting to database: {DATABASE_URL[:30]}...")
 
 if "sqlite" in DATABASE_URL:
@@ -69,7 +69,7 @@ def initialize_database():
         return False
 
 # Initialize on import
-print("🚀 Initializing AgentIQ database...")
+print("🚀 Initializing Kalytera database...")
 init_result = initialize_database()
 
 # Database dependency

@@ -1,5 +1,5 @@
 """
-Load 10,000 demo sessions into deployed AgentIQ instance
+Load 10,000 demo sessions into deployed Kalytera instance
 Simulates realistic agent interactions for testing the production system
 """
 
@@ -249,7 +249,7 @@ def main():
     import os
     api_url = os.getenv("API_BASE_URL", "http://localhost:8000")
     
-    print("🤖 AgentIQ Demo Data Loader")
+    print("🤖 Kalytera Demo Data Loader")
     print("=" * 50)
     
     # Option to override URL

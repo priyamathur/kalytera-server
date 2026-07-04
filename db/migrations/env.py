@@ -33,7 +33,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = os.getenv("DATABASE_URL", "sqlite:///./agentiq.db")
+    url = os.getenv("DATABASE_URL", "sqlite:///./kalytera.db")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -53,7 +53,7 @@ def run_migrations_online() -> None:
 
     """
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = os.getenv("DATABASE_URL", "sqlite:///./agentiq.db")
+    configuration["sqlalchemy.url"] = os.getenv("DATABASE_URL", "sqlite:///./kalytera.db")
     connectable = engine_from_config(
         configuration,
         prefix="sqlalchemy.",

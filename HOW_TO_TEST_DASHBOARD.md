@@ -1,4 +1,4 @@
-# How to Test the Real-Time AgentIQ Dashboard
+# How to Test the Real-Time Kalytera Dashboard
 
 ## 🚀 **Real-Time Dashboard is Live!**
 
@@ -55,7 +55,7 @@ This script sends 5 different agent interactions across multiple domains:
 ### **Method 2: Manual API Testing**
 ```bash
 # Send a single test interaction
-curl -X POST https://agentiq-api-z9it.onrender.com/ingest/json \
+curl -X POST https://kalytera-api-z9it.onrender.com/ingest/json \
   -H "Content-Type: application/json" \
   -d '{
     "data": [{
@@ -113,7 +113,7 @@ curl -X POST https://agentiq-api-z9it.onrender.com/ingest/json \
 - ✅ **158 total interactions** with real response times
 - ✅ **Real completion rates** showing actual agent performance
 - ✅ **Timeline data** from May 11-17, 2026
-- ✅ **Live API connectivity** to https://agentiq-api-z9it.onrender.com
+- ✅ **Live API connectivity** to https://kalytera-api-z9it.onrender.com
 
 **Recent Activity (Live):**
 - **Today (May 17)**: 89 sessions, 158 interactions
@@ -165,7 +165,7 @@ Agent Interaction → API Ingest → Database → Analytics → Dashboard
 ## 🔧 **Troubleshooting**
 
 ### **No Data Updates:**
-1. Check API health: `curl https://agentiq-api-z9it.onrender.com/health`
+1. Check API health: `curl https://kalytera-api-z9it.onrender.com/health`
 2. Verify auto-refresh is enabled in sidebar
 3. Try manual refresh button
 

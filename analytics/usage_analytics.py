@@ -1,5 +1,5 @@
 """
-Usage Analytics Engine for AgentIQ
+Usage Analytics Engine for Kalytera
 Transforms raw session data into actionable insights for agent performance optimization
 """
 

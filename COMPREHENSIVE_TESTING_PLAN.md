@@ -1,7 +1,7 @@
-# AgentIQ Comprehensive Testing Plan
+# Kalytera Comprehensive Testing Plan
 
 ## 🎯 Objective
-Test the complete AgentIQ platform end-to-end to validate enterprise readiness, focusing on:
+Test the complete Kalytera platform end-to-end to validate enterprise readiness, focusing on:
 1. **Full LLM Evaluation** (with Claude API key)
 2. **Autonomous Pattern Detection** 
 3. **Complete Production Deployment**
@@ -70,7 +70,7 @@ python3 populate_sophisticated_data.py
 curl -X POST http://localhost:8000/evaluation/batch-evaluate
 
 # Check evaluation results
-sqlite3 agentiq.db "SELECT COUNT(*) FROM eval_results WHERE failure_category IS NOT NULL;"
+sqlite3 kalytera.db "SELECT COUNT(*) FROM eval_results WHERE failure_category IS NOT NULL;"
 ```
 
 **Expected Results:**
@@ -141,7 +141,7 @@ curl http://localhost:8000/analytics/quality-by-intent
 **Comprehensive Test Script:**
 ```bash
 # Run the updated comprehensive test
-python3 comprehensive_agentiq_test.py
+python3 comprehensive_kalytera_test.py
 ```
 
 **Success Criteria:**
@@ -171,18 +171,18 @@ python3 comprehensive_agentiq_test.py
 **Test Data Flow:**
 ```bash
 # 1. Send test data to production
-curl -X POST https://agentiq-api-z9it.onrender.com/ingest/json \
+curl -X POST https://kalytera-api-z9it.onrender.com/ingest/json \
   -H "Content-Type: application/json" \
   -d @sophisticated_test_data.json
 
 # 2. Trigger production evaluation
-curl -X POST https://agentiq-api-z9it.onrender.com/evaluation/batch-evaluate
+curl -X POST https://kalytera-api-z9it.onrender.com/evaluation/batch-evaluate
 
 # 3. Verify production analytics
-curl https://agentiq-api-z9it.onrender.com/analytics/dashboard-summary
+curl https://kalytera-api-z9it.onrender.com/analytics/dashboard-summary
 
 # 4. Test production pattern detection
-curl https://agentiq-api-z9it.onrender.com/patterns/insights/top-intents
+curl https://kalytera-api-z9it.onrender.com/patterns/insights/top-intents
 ```
 
 **Expected Results:**
@@ -197,7 +197,7 @@ curl https://agentiq-api-z9it.onrender.com/patterns/insights/top-intents
 ## 🎪 Phase 4: Enterprise Demonstration Validation
 
 ### Test 4.1: Customer Success Scenario
-**Goal**: Simulate enterprise customer using AgentIQ
+**Goal**: Simulate enterprise customer using Kalytera
 
 **Scenario**: SaaS company with 100 customer service agents
 ```python
@@ -209,7 +209,7 @@ python3 enterprise_demo_data.py
 ```
 
 **Demo Flow:**
-1. **Data Ingestion**: Show agents sending data to AgentIQ
+1. **Data Ingestion**: Show agents sending data to Kalytera
 2. **Real-time Analytics**: Display live usage patterns
 3. **LLM Evaluation**: Show autonomous quality scoring
 4. **Pattern Detection**: Reveal failure modes and root causes
@@ -220,10 +220,10 @@ python3 enterprise_demo_data.py
 
 **Integration Test:**
 ```python
-# Test AgentIQ SDK
-from agentiq_sdk import AgentIQ
+# Test Kalytera SDK
+from kalytera_sdk import Kalytera
 
-client = AgentIQ(api_url="http://localhost:8000")
+client = Kalytera(api_url="http://localhost:8000")
 
 # Single line integration
 client.trace(
@@ -288,7 +288,7 @@ client.trace(
 - [ ] Enterprise demo tells compelling story
 
 ### Joint Testing:
-- [ ] End-to-end workflow: Agent → AgentIQ → Insights
+- [ ] End-to-end workflow: Agent → Kalytera → Insights
 - [ ] Performance under load (100+ concurrent requests)
 - [ ] Error handling and recovery scenarios
 - [ ] Business value demonstration for prospects
@@ -301,14 +301,14 @@ client.trace(
 1. **Customer Demonstrations**: Ready for enterprise sales calls
 2. **Developer Adoption**: Publish integration guides
 3. **Production Launch**: Open API for customer usage
-4. **Launch Post**: Share AgentIQ publicly
+4. **Launch Post**: Share Kalytera publicly
 
 **If Tests Need Work:**
 1. **Focus Areas**: Address specific failing test categories  
 2. **Iteration**: Fix → Test → Validate cycle
 3. **Timeline**: Target 90%+ success within 2-3 iterations
 
-This comprehensive testing plan ensures AgentIQ meets enterprise standards and delivers on the vision from your one-pager: **sophisticated agent monitoring that proves business impact**.
+This comprehensive testing plan ensures Kalytera meets enterprise standards and delivers on the vision from your one-pager: **sophisticated agent monitoring that proves business impact**.
 
 ---
 

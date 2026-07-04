@@ -1,4 +1,4 @@
-# AgentIQ Task Backlog
+# Kalytera Task Backlog
 
 ## In Progress
 - None
@@ -24,7 +24,7 @@
 - [x] **TASK-005: Deployment pipeline working** - Auto-deployment from Git to Render functional
 
 ## Completed Earlier ✅ (2026-05-16)
-- [x] **Verified Render deployment is accessible** - API responding at https://agentiq-api-z9it.onrender.com
+- [x] **Verified Render deployment is accessible** - API responding at https://kalytera-api-z9it.onrender.com
 - [x] **Database connectivity verified** - PostgreSQL connected, all tables exist
 - [x] **Migration status confirmed** - All tables (agent_logs, session_summaries, eval_results, loss_patterns) ready
 - [x] **Tested core API endpoints** - Session volume analytics working, documentation accessible

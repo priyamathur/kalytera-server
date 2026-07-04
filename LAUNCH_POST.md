@@ -1,12 +1,12 @@
-# 🤖 AgentIQ: Open Source Agent Observability Platform
+# 🤖 Kalytera: Open Source Agent Observability Platform
 
 **TL;DR**: Built a production-ready platform to monitor, evaluate, and continuously improve AI agents. LLM-powered failure detection, pattern analysis, and automated improvement loops. Live at [deployed-url] with full source code.
 
 ---
 
-## What is AgentIQ?
+## What is Kalytera?
 
-AgentIQ is a comprehensive observability platform designed specifically for AI agents. Think of it as "New Relic for AI agents" - it helps you understand what your agents are doing, why they're failing, and how to make them better.
+Kalytera is a comprehensive observability platform designed specifically for AI agents. Think of it as "New Relic for AI agents" - it helps you understand what your agents are doing, why they're failing, and how to make them better.
 
 **Core Problem**: AI agents fail silently. You deploy an agent, users interact with it, but you have no visibility into:
 - Which interactions are failing and why
@@ -14,19 +14,19 @@ AgentIQ is a comprehensive observability platform designed specifically for AI a
 - How to systematically improve agent performance
 - Whether your agents are getting better or worse over time
 
-**AgentIQ Solution**: Continuous observation → Intelligent evaluation → Pattern detection → Automated improvement.
+**Kalytera Solution**: Continuous observation → Intelligent evaluation → Pattern detection → Automated improvement.
 
 ## 🎯 Key Features
 
 ### 1. **Real-time Agent Tracing**
 - **Fire-and-forget SDK**: One-line integration that never blocks agents
 - **Background thread processing**: Traces sent asynchronously with local fallback
-- **Graceful degradation**: Logs locally if AgentIQ is unreachable
+- **Graceful degradation**: Logs locally if Kalytera is unreachable
 - **Framework-agnostic webhook**: REST API for any agent platform
 
 ```python
 # SDK Integration (never blocks your agent)
-from agentiq.sdk import trace
+from kalytera.sdk import trace
 
 trace(
     session_id="session_123",
@@ -38,7 +38,7 @@ trace(
 )
 
 # Or direct webhook call
-curl -X POST "https://agentiq-production.up.railway.app/api/trace" \
+curl -X POST "https://kalytera-production.up.railway.app/api/trace" \
   -H "Content-Type: application/json" \
   -d '{"session_id": "123", "user_input": "...", "agent_response": "..."}'
 ```
@@ -56,7 +56,7 @@ curl -X POST "https://agentiq-production.up.railway.app/api/trace" \
 if "error" in response.lower():
     quality_score = 0.3
 
-# AgentIQ approach: LLM judge with business understanding
+# Kalytera approach: LLM judge with business understanding
 result = await evaluate_interaction(
     user_input="My billing is wrong",
     agent_response="I'll help you with that...",
@@ -154,14 +154,14 @@ Tested with **10,000 realistic agent sessions** across 6 intent types (billing, 
 
 ## 🚀 Live Production System
 
-**API**: https://agentiq-production.up.railway.app
-**Dashboard**: https://agentiq-dashboard.up.railway.app
+**API**: https://kalytera-production.up.railway.app
+**Dashboard**: https://kalytera-dashboard.up.railway.app
 
 **Try the full workflow**:
 
 1. **Send a trace**:
 ```bash
-curl -X POST "https://agentiq-production.up.railway.app/api/trace" \
+curl -X POST "https://kalytera-production.up.railway.app/api/trace" \
   -H "Content-Type: application/json" \
   -d '{
     "session_id": "demo_123",
@@ -175,17 +175,17 @@ curl -X POST "https://agentiq-production.up.railway.app/api/trace" \
 
 2. **Load demo data**:
 ```bash
-python load_demo_data.py https://agentiq-production.up.railway.app
+python load_demo_data.py https://kalytera-production.up.railway.app
 ```
 
 3. **View analytics**:
 ```bash
-curl https://agentiq-production.up.railway.app/analytics/dashboard-summary
+curl https://kalytera-production.up.railway.app/analytics/dashboard-summary
 ```
 
 4. **Export patterns**:
 ```bash
-curl https://agentiq-production.up.railway.app/patterns/export/developer
+curl https://kalytera-production.up.railway.app/patterns/export/developer
 ```
 
 5. **Interactive dashboard**: Visit dashboard URL for real-time monitoring
@@ -193,8 +193,8 @@ curl https://agentiq-production.up.railway.app/patterns/export/developer
 ## 🛠️ Local Development
 
 ```bash
-git clone https://github.com/[your-username]/AgentIQ
-cd AgentIQ
+git clone https://github.com/[your-username]/Kalytera
+cd Kalytera
 pip install -r requirements.txt
 
 # Set up environment
@@ -213,7 +213,7 @@ streamlit run dashboard/app.py --server.port 8501
 
 **Integrate your agent**:
 ```python
-from agentiq.sdk import trace
+from kalytera.sdk import trace
 
 # Add this one line to your agent code
 trace(
@@ -228,7 +228,7 @@ Get immediate insights into failure patterns and improvement opportunities.
 
 ## 🔬 Technical Innovation
 
-**1. Fire-and-forget Architecture**: Unlike other monitoring tools, AgentIQ never blocks your production agents. Traces are processed asynchronously with graceful degradation.
+**1. Fire-and-forget Architecture**: Unlike other monitoring tools, Kalytera never blocks your production agents. Traces are processed asynchronously with graceful degradation.
 
 **2. LLM-Native Evaluation**: Uses Claude for context-aware assessment that understands business intent, not just technical metrics.
 
@@ -265,7 +265,7 @@ Get immediate insights into failure patterns and improvement opportunities.
 
 ## 🤝 Get Involved
 
-This is day 1 of AgentIQ. Looking for:
+This is day 1 of Kalytera. Looking for:
 
 **Early adopters**: Try it with your agent logs and share feedback
 **Contributors**: Help expand evaluation metrics and pattern detection
@@ -273,9 +273,9 @@ This is day 1 of AgentIQ. Looking for:
 **Feedback**: What observability features would be most valuable?
 
 **Links**:
-- 🔗 **Live API**: https://agentiq-production.up.railway.app
-- 📊 **Live Dashboard**: https://agentiq-dashboard.up.railway.app
-- 📂 **Source Code**: https://github.com/[your-username]/AgentIQ
+- 🔗 **Live API**: https://kalytera-production.up.railway.app
+- 📊 **Live Dashboard**: https://kalytera-dashboard.up.railway.app
+- 📂 **Source Code**: https://github.com/[your-username]/Kalytera
 - 📖 **Documentation**: Built-in API docs at `/docs`
 - 💬 **Issues**: GitHub issues for bugs and feature requests
 - 🐦 **Updates**: Follow development progress on GitHub

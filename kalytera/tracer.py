@@ -1,5 +1,5 @@
 """
-AgentIQ interceptor — captures agent steps, sends to API asynchronously.
+Kalytera interceptor — captures agent steps, sends to API asynchronously.
 Constraint: never raises, never blocks. Returns in <5ms.
 """
 import asyncio
@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 import aiohttp
 
-from agentiq import config as _cfg
+from kalytera import config as _cfg
 
 _queue: Queue[Dict[str, Any]] = Queue(maxsize=500)
 _worker: Optional[threading.Thread] = None
@@ -24,14 +24,14 @@ _api_key: str = ""
 
 
 def init(api_key: str, agent_id: str = "", api_endpoint: str = "") -> None:
-    """Configure AgentIQ. Call once at startup before the first trace."""
+    """Configure Kalytera. Call once at startup before the first trace."""
     global _agent_id, _api_key, _api_endpoint
     _agent_id = agent_id or str(uuid.uuid4())[:8]
     _api_key = api_key
     _api_endpoint = api_endpoint or _cfg.DEFAULT_ENDPOINT
     _ensure_worker()
     print(
-        f"✓ AgentIQ connected\n"
+        f"✓ Kalytera connected\n"
         f"  Evaluating every step in real time\n"
         f"  Dashboard: {_api_endpoint}/dashboard"
     )

@@ -1,5 +1,5 @@
 """
-AgentIQ Intent Classification System
+Kalytera Intent Classification System
 Advanced intent detection to understand how agents are actually being used
 
 Core Features:
@@ -47,7 +47,7 @@ class AgentIntentClassifier:
     
     def __init__(self, api_base: str = "https://agentiq-api-z9it.onrender.com"):
         self.api_base = api_base
-        self.logger = logging.getLogger("AgentIQ-IntentClassifier")
+        self.logger = logging.getLogger("Kalytera-IntentClassifier")
         
         # Intent patterns learned from enterprise agent deployments
         self.intent_patterns = self._load_intent_patterns()

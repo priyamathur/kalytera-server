@@ -18,7 +18,7 @@ import plotly.graph_objects as go
 import streamlit as st
 
 st.set_page_config(
-    page_title="AgentIQ",
+    page_title="Kalytera",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -300,7 +300,7 @@ with st.sidebar:
                         border-radius:9px;display:flex;align-items:center;justify-content:center;
                         font-size:20px;flex-shrink:0;box-shadow:0 2px 8px rgba(99,102,241,0.3)">⚡</div>
             <div>
-              <div style="font-size:19px;font-weight:900;color:#0f172a;letter-spacing:-0.03em">AgentIQ</div>
+              <div style="font-size:19px;font-weight:900;color:#0f172a;letter-spacing:-0.03em">Kalytera</div>
               <div style="font-size:10px;color:#94a3b8;font-weight:600;letter-spacing:0.08em;
                           text-transform:uppercase;margin-top:-1px">AI MONITORING</div>
             </div>
@@ -934,76 +934,47 @@ def _show_failure_feed(agent_id: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 3 — Trace Viewer
 # ═══════════════════════════════════════════════════════════════════════════════
-def _build_waterfall(steps: List[Tuple[Any, Optional[Any]]]) -> Optional[go.Figure]:
-    """Build a Plotly Gantt/waterfall chart from session steps."""
+def _build_step_duration_chart(steps: List[Tuple[Any, Optional[Any]]]) -> Optional[go.Figure]:
+    """Bar chart: one bar per step, height = latency, color = pass/fail."""
     if not steps:
         return None
 
-    # Compute cumulative start times
-    cumulative = 0
-    rows_data = []
+    labels, durations, colors, hover = [], [], [], []
     for log, ev in steps:
-        latency = max(log.latency_ms or 0, 1)
-        passed = ev.passed if ev else True
+        latency = log.latency_ms or 0
         failed = ev is not None and not ev.passed
-        rows_data.append({
-            "step": f"Step {log.step_number} · {log.step_name}",
-            "start": cumulative,
-            "end": cumulative + latency,
-            "latency": latency,
-            "passed": passed,
-            "failed": failed,
-            "score": int(round(ev.overall_score * 100)) if ev else None,
-        })
-        cumulative += latency
+        score = int(round(ev.overall_score * 100)) if ev else None
+        labels.append(f"Step {log.step_number}<br>{log.step_name}")
+        durations.append(latency)
+        colors.append("#ef4444" if failed else "#22c55e")
+        score_line = f"Score: {score}/100" if score is not None else "Pending eval"
+        hover.append(
+            f"<b>{log.step_name}</b><br>Duration: {latency:,} ms<br>{score_line}<extra></extra>"
+        )
 
-    fig = go.Figure()
-    total_ms = cumulative
-
-    for row in rows_data:
-        color = "#ef4444" if row["failed"] else "#22c55e"
-        score_text = f" · {row['score']}/100" if row["score"] is not None else ""
-
-        fig.add_trace(go.Bar(
-            name=row["step"],
-            x=[row["latency"]],
-            y=[row["step"]],
-            base=[row["start"]],
-            orientation="h",
-            marker=dict(
-                color=color,
-                opacity=0.85,
-                line=dict(color="white", width=1),
-            ),
-            text=f"{row['latency']} ms{score_text}",
-            textposition="inside" if row["latency"] > total_ms * 0.08 else "outside",
-            textfont=dict(size=11, color="white" if row["latency"] > total_ms * 0.08 else color),
-            hovertemplate=(
-                f"<b>{row['step']}</b><br>"
-                f"Latency: {row['latency']} ms<br>"
-                f"Start: {row['start']} ms<br>"
-                + (f"Score: {row['score']}/100" if row['score'] is not None else "Pending eval")
-                + "<extra></extra>"
-            ),
-            showlegend=False,
-        ))
-
+    fig = go.Figure(go.Bar(
+        x=labels,
+        y=durations,
+        marker_color=colors,
+        marker_line=dict(color="white", width=1),
+        text=[f"{d:,} ms" for d in durations],
+        textposition="outside",
+        textfont=dict(size=11, color="#475569"),
+        hovertemplate=hover,
+        showlegend=False,
+    ))
     fig.update_layout(
-        height=max(160, len(rows_data) * 36 + 40),
-        barmode="overlay",
+        height=220,
         plot_bgcolor="white",
         paper_bgcolor="white",
         margin=dict(l=0, r=0, t=8, b=0),
         font=dict(family="Inter, sans-serif", size=11, color="#475569"),
-        xaxis=dict(
-            title="Time (ms)", gridcolor="#f1f5f9", linecolor="#e2e8f0",
-            showline=True, zeroline=False,
-        ),
+        xaxis=dict(tickfont=dict(size=11), linecolor="#e2e8f0"),
         yaxis=dict(
-            autorange="reversed",
-            gridcolor="#f1f5f9",
-            tickfont=dict(size=11),
+            title="ms", gridcolor="#f1f5f9", linecolor="#e2e8f0",
+            zeroline=False,
         ),
+        bargap=0.35,
         hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#e2e8f0"),
     )
     return fig
@@ -1031,8 +1002,23 @@ def _build_diagnosis(
     return {"what": what, "fix": _fix_trace(ft, step_name)}
 
 
+def _score_bar(label: str, value: float, color: str) -> str:
+    pct = int(value * 100)
+    width = max(pct, 2)
+    return (
+        f'<div style="margin-bottom:6px">'
+        f'<div style="display:flex;justify-content:space-between;margin-bottom:2px">'
+        f'<span style="font-size:11px;color:#64748b;font-weight:600">{label}</span>'
+        f'<span style="font-size:11px;font-weight:700;color:{color}">{pct}</span>'
+        f'</div>'
+        f'<div style="background:#f1f5f9;border-radius:4px;height:5px">'
+        f'<div style="background:{color};width:{width}%;height:5px;border-radius:4px;transition:width 0.3s"></div>'
+        f'</div></div>'
+    )
+
+
 def _show_trace(agent_id: str, session_id: str) -> None:
-    _page_header("Trace Viewer", "Step-by-step waterfall trace with scores and diagnosis")
+    _page_header("Trace Viewer", "Step-by-step conversation trace with scores and diagnosis")
 
     if not session_id:
         _show_session_browser(agent_id)
@@ -1059,147 +1045,168 @@ def _show_trace(agent_id: str, session_id: str) -> None:
     score_color = "#dc2626" if is_failed else "#16a34a"
     total_ms = sum(log.latency_ms or 0 for log, _ in steps)
 
-    # Session banner
+    # ── Session header ────────────────────────────────────────────────────────
+    passed_count = len(steps) - len(failed_steps)
     st.markdown(
         f"""
         <div style="background:white;border:1px solid #e2e8f0;border-radius:14px;
                     padding:20px 24px;display:flex;justify-content:space-between;
-                    align-items:center;margin-bottom:20px;
+                    align-items:center;margin-bottom:16px;
                     box-shadow:0 1px 3px rgba(15,23,42,0.05)">
           <div>
             <div style="font-size:10px;font-weight:700;color:#64748b;letter-spacing:0.08em;
-                        text-transform:uppercase;margin-bottom:4px">Session</div>
-            <code style="font-size:13px;color:#1e293b;background:transparent;padding:0">{session_id}</code>
-            <div style="font-size:12px;color:#94a3b8;margin-top:6px">
-              {len(steps)} steps · {len(failed_steps)} failed · {total_ms:,} ms total
+                        text-transform:uppercase;margin-bottom:6px">Session ID</div>
+            <code style="font-size:13px;color:#1e293b;background:#f8fafc;padding:4px 8px;
+                         border-radius:6px;border:1px solid #e2e8f0">{session_id}</code>
+            <div style="display:flex;gap:16px;margin-top:10px">
+              <span style="font-size:12px;color:#64748b">{len(steps)} steps</span>
+              <span style="font-size:12px;color:#16a34a;font-weight:600">✓ {passed_count} passed</span>
+              {'<span style="font-size:12px;color:#dc2626;font-weight:600">✗ ' + str(len(failed_steps)) + ' failed</span>' if failed_steps else ''}
+              <span style="font-size:12px;color:#64748b">{total_ms:,} ms total</span>
             </div>
           </div>
           <div style="text-align:right">
-            <div style="font-size:40px;font-weight:900;color:{score_color};
+            <div style="font-size:44px;font-weight:900;color:{score_color};
                         letter-spacing:-0.04em;line-height:1">
-              {session_score}
-              <span style="font-size:18px;font-weight:400;color:#94a3b8">/100</span>
+              {session_score}<span style="font-size:20px;font-weight:400;color:#cbd5e1">/100</span>
             </div>
-            <div style="font-size:12px;font-weight:700;color:{score_color};
-                        letter-spacing:0.06em">{"FAILED" if is_failed else "PASSED"}</div>
+            <div style="font-size:11px;font-weight:800;color:{score_color};
+                        letter-spacing:0.1em;text-transform:uppercase;margin-top:2px">
+              {"● FAILED" if is_failed else "● PASSED"}
+            </div>
           </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
 
-    # ── Waterfall chart ──────────────────────────────────────────────────────
-    _section_head("Execution Waterfall", "step timing — width = latency")
-    waterfall = _build_waterfall(steps)
-    if waterfall:
-        st.plotly_chart(
-            waterfall, use_container_width=True, config={"displayModeBar": False}
+    # ── Root cause alert — shown immediately if session failed ────────────────
+    diag = _build_diagnosis(steps)
+    if diag:
+        primary_ft = next(
+            (ev.failure_type for _, ev in failed_steps if ev and ev.failure_type), "unknown"
         )
-        # Legend
+        fg, bg = _ft_color(primary_ft)
         st.markdown(
-            '<div style="display:flex;gap:16px;margin:-8px 0 12px;font-size:11px;color:#64748b">'
-            '<span><span style="background:#22c55e;border-radius:3px;display:inline-block;width:12px;height:12px;vertical-align:middle"></span> Passed</span>'
-            '<span><span style="background:#ef4444;border-radius:3px;display:inline-block;width:12px;height:12px;vertical-align:middle"></span> Failed</span>'
-            '</div>',
+            f"""
+            <div style="background:{bg};border:1px solid {fg}33;border-left:4px solid {fg};
+                        border-radius:0 12px 12px 0;padding:16px 20px;margin-bottom:20px">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span style="font-size:11px;font-weight:800;color:{fg};text-transform:uppercase;
+                             letter-spacing:0.06em">Root Cause</span>
+                {_badge(primary_ft, "11px")}
+              </div>
+              <div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:10px;line-height:1.6">
+                {diag['what']}
+              </div>
+              <div style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#0369a1">
+                <span style="font-weight:700;flex-shrink:0">→ Fix:</span>
+                <span>{diag['fix']}</span>
+              </div>
+            </div>
+            """,
             unsafe_allow_html=True,
         )
 
-    # ── Step details ──────────────────────────────────────────────────────────
-    _section_head("Step Details", "expand to see input/output")
+    # ── Step duration chart ───────────────────────────────────────────────────
+    _section_head("Step Duration", "latency per step — green = passed, red = failed")
+    duration_chart = _build_step_duration_chart(steps)
+    if duration_chart:
+        st.plotly_chart(duration_chart, use_container_width=True, config={"displayModeBar": False})
+
+    # ── Conversation trace ────────────────────────────────────────────────────
+    _section_head("Conversation", "click any step to expand — failed steps open automatically")
 
     for log, ev in steps:
         passed = ev.passed if ev is not None else True
         score = int(round(ev.overall_score * 100)) if ev else None
-        border = "#ef4444" if (ev and not passed) else "#22c55e" if (ev and passed) else "#e2e8f0"
-        step_bg = "#fef2f2" if (ev and not passed) else "white"
-        ev_badge_html = f'&nbsp;&nbsp;{_score_chip(score, passed)}' if score is not None else ""
-        ft_html = ""
-        if ev and not ev.passed:
-            ft_html = (
-                f'<div style="font-size:12px;color:#64748b;margin-top:6px">'
-                f'{_badge((ev.failure_type or "unknown"), "11px")}'
-                f'&nbsp;&nbsp;{ev.failure_reason or ""}'
-                f'</div>'
-            )
+        is_step_failed = ev is not None and not passed
+        border_color = "#ef4444" if is_step_failed else "#22c55e" if ev else "#94a3b8"
+        status_icon = "✗" if is_step_failed else ("✓" if ev else "·")
 
-        st.markdown(
-            f"""
-            <div style="background:{step_bg};border:1px solid #e2e8f0;border-left:4px solid {border};
-                        border-radius:0 12px 12px 0;padding:14px 18px;margin:6px 0">
-              <div style="display:flex;justify-content:space-between;align-items:center">
-                <div>
-                  <span style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;
-                               letter-spacing:0.08em">Step {log.step_number}</span>
-                  <span style="font-size:15px;font-weight:700;color:#1e293b;margin-left:10px">{log.step_name}</span>
-                  <span style="font-size:11px;color:#94a3b8;margin-left:10px">{log.latency_ms:,} ms</span>
-                </div>
-                {ev_badge_html}
-              </div>
-              {ft_html}
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+        # Expander label: the step_name IS the summary — no extra words needed
+        if score is not None:
+            label = f"{status_icon}  Step {log.step_number} · {log.step_name}  ·  {log.latency_ms:,} ms  ·  {score}/100"
+        else:
+            label = f"·  Step {log.step_number} · {log.step_name}  ·  {log.latency_ms:,} ms  ·  pending"
 
-        if ev and not ev.passed:
-            sc1, sc2, sc3, sc4 = st.columns(4)
-            sc1.metric("Accuracy", f"{ev.accuracy * 100:.0f}")
-            sc2.metric("Goal Align", f"{ev.goal_alignment * 100:.0f}")
-            sc3.metric("Decision", f"{ev.decision_quality * 100:.0f}")
-            sc4.metric("Completeness", f"{ev.completeness * 100:.0f}")
+        # Failed steps open automatically so failures are never hidden
+        with st.expander(label, expanded=is_step_failed):
 
-        with st.expander(f"Input / Output  ·  {log.latency_ms:,} ms", expanded=False):
-            ic, oc = st.columns(2)
-            with ic:
+            # User → Agent conversation
+            msg_l, msg_r = st.columns(2)
+            with msg_l:
                 st.markdown(
                     '<p style="font-size:10px;font-weight:700;color:#64748b;'
-                    'text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Input</p>',
+                    'text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">User</p>',
                     unsafe_allow_html=True,
                 )
-                st.code(log.input[:1200] + ("…" if len(log.input) > 1200 else ""), language=None)
-            with oc:
+                st.markdown(
+                    f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;'
+                    f'padding:12px 14px;font-size:13px;color:#1e293b;line-height:1.6;min-height:52px">'
+                    f'{log.input[:800]}{"…" if len(log.input) > 800 else ""}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+            with msg_r:
                 st.markdown(
                     '<p style="font-size:10px;font-weight:700;color:#64748b;'
-                    'text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Output</p>',
+                    'text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px">Agent</p>',
                     unsafe_allow_html=True,
                 )
-                st.code(log.output[:1200] + ("…" if len(log.output) > 1200 else ""), language=None)
+                st.markdown(
+                    f'<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;'
+                    f'padding:12px 14px;font-size:13px;color:#1e293b;line-height:1.6;min-height:52px">'
+                    f'{log.output[:800]}{"…" if len(log.output) > 800 else ""}'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+            # Score bars + fix — only on failed steps
+            if is_step_failed and ev:
+                ft = ev.failure_type or "unknown"
+                fg, bg = _ft_color(ft)
+                fix = _fix_trace(ft, log.step_name)
+                bars = (
+                    _score_bar("Accuracy", ev.accuracy, "#6366f1")
+                    + _score_bar("Goal alignment", ev.goal_alignment, "#8b5cf6")
+                    + _score_bar("Decision quality", ev.decision_quality, "#f59e0b")
+                    + _score_bar("Completeness", ev.completeness, "#0891b2")
+                )
+                st.markdown('<div style="height:10px"/>', unsafe_allow_html=True)
+                st.markdown(
+                    f"""
+                    <div style="background:{bg};border:1px solid {fg}33;border-radius:10px;
+                                padding:14px 16px">
+                      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
+                        <div style="flex:1;min-width:200px">
+                          <div style="margin-bottom:8px">{_badge(ft)}</div>
+                          <div style="font-size:13px;font-weight:600;color:#1e293b;
+                                      line-height:1.5;margin-bottom:8px">
+                            {ev.failure_reason or ft}
+                          </div>
+                          <div style="font-size:12px;color:#0369a1">→ {fix}</div>
+                        </div>
+                        <div style="width:190px;flex-shrink:0">{bars}</div>
+                      </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            # Tool calls — only when present
             if log.tool_calls:
                 try:
-                    tools = json.loads(log.tool_calls) if isinstance(log.tool_calls, str) else log.tool_calls
+                    tools = (
+                        json.loads(log.tool_calls)
+                        if isinstance(log.tool_calls, str)
+                        else log.tool_calls
+                    )
                     if tools:
-                        st.markdown(
-                            '<p style="font-size:10px;font-weight:700;color:#64748b;'
-                            'text-transform:uppercase;letter-spacing:0.06em;margin:8px 0 4px">Tool Calls</p>',
-                            unsafe_allow_html=True,
-                        )
-                        st.json(tools)
+                        st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
+                        st.json(tools, expanded=False)
                 except (json.JSONDecodeError, TypeError):
                     pass
-
-    # ── Diagnosis ─────────────────────────────────────────────────────────────
-    diag = _build_diagnosis(steps)
-    if diag:
-        st.markdown(
-            f"""
-            <div style="background:white;border:1px solid #e2e8f0;border-radius:14px;
-                        padding:20px 24px;margin-top:16px;
-                        box-shadow:0 1px 3px rgba(15,23,42,0.05)">
-              <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;
-                          letter-spacing:0.08em;margin-bottom:10px">Root Cause</div>
-              <div style="font-size:14px;color:#475569;margin-bottom:16px;line-height:1.7">
-                {diag['what']}
-              </div>
-              <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;
-                          letter-spacing:0.08em;margin-bottom:8px">Recommended Fix</div>
-              <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;
-                          padding:12px 16px;font-size:13px;color:#0c4a6e;line-height:1.6">
-                {diag['fix']}
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
 
 def _show_session_browser(agent_id: str) -> None:
