@@ -802,7 +802,7 @@ async function submitSignup() {
   if (!email || !email.includes('@')) { showErr('Please enter a valid email address.'); return; }
 
   btn.disabled = true;
-  btn.textContent = 'Creating account…';
+  btn.textContent = _currentPlan === 'free' ? 'Creating account…' : 'Creating account and connecting to Stripe…';
 
   try {
     const res = await fetch(API_BASE + '/signup', {
@@ -812,8 +812,8 @@ async function submitSignup() {
         name,
         email,
         plan: _currentPlan,
-        success_url: 'https://kalytera.dev/?plan=success',
-        cancel_url:  'https://kalytera.dev/pricing',
+        success_url: 'https://agentiq-api-z9it.onrender.com/health?plan=success',
+        cancel_url:  'https://agentiq-api-z9it.onrender.com/health?plan=cancelled',
       }),
     });
 
@@ -827,12 +827,15 @@ async function submitSignup() {
     }
 
     if (data.checkout_url) {
-      // Paid plan — show key then redirect
+      // Paid plan — show key then redirect immediately
       revealKey(data.api_key, _currentPlan);
       document.getElementById('modal-form-view').style.display = 'none';
       document.getElementById('modal-key-view').style.display = 'block';
-      // Auto-redirect after 4 seconds
-      setTimeout(() => { window.location.href = data.checkout_url; }, 4000);
+      // Add a visible redirect button + auto-redirect after 2 seconds
+      const doneBtn = document.getElementById('modal-key-view').querySelector('.btn-full');
+      doneBtn.textContent = 'Continue to payment →';
+      doneBtn.onclick = () => { window.location.href = data.checkout_url; };
+      setTimeout(() => { window.location.href = data.checkout_url; }, 2000);
     } else {
       // Free plan — just show the key
       document.getElementById('modal-form-view').style.display = 'none';
