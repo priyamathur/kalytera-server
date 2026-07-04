@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import case, distinct, func
 from sqlalchemy.orm import Session
 
-from db.models import AgentLog, AgentQualityConfig, EvalResult, LossPattern
+from db.models import AgentLog, AgentQualityConfig, ApiKey, EvalResult, LossPattern, Organization, User, UsageRecord
 
 
 # ---------------------------------------------------------------------------
@@ -444,6 +444,112 @@ def search_eval_failures(
         .all()
     )
     return [(ev, log) for ev, log in rows]
+
+
+# ---------------------------------------------------------------------------
+# Billing — organizations, users, API keys, usage
+# ---------------------------------------------------------------------------
+
+def create_organization(name: str, db: Session) -> Organization:
+    org = Organization(name=name)
+    db.add(org)
+    db.commit()
+    db.refresh(org)
+    return org
+
+
+def get_org_by_id(org_id: str, db: Session) -> Optional[Organization]:
+    return db.query(Organization).filter(Organization.id == org_id, Organization.is_active == True).first()  # noqa: E712
+
+
+def list_organizations(db: Session) -> List[Organization]:
+    return db.query(Organization).order_by(Organization.created_at.desc()).all()
+
+
+def create_user(email: str, org_id: str, role: str, db: Session) -> User:
+    user = User(email=email, org_id=org_id, role=role)
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def get_user_by_email(email: str, db: Session) -> Optional[User]:
+    return db.query(User).filter(User.email == email, User.is_active == True).first()  # noqa: E712
+
+
+def list_users_for_org(org_id: str, db: Session) -> List[User]:
+    return db.query(User).filter(User.org_id == org_id, User.is_active == True).all()  # noqa: E712
+
+
+def create_api_key(key_hash: str, key_prefix: str, name: str, org_id: str, created_by: Optional[str], db: Session) -> ApiKey:
+    key = ApiKey(key_hash=key_hash, key_prefix=key_prefix, name=name, org_id=org_id, created_by=created_by)
+    db.add(key)
+    db.commit()
+    db.refresh(key)
+    return key
+
+
+def get_apikey_by_hash(key_hash: str, db: Session) -> Optional[ApiKey]:
+    return (
+        db.query(ApiKey)
+        .filter(ApiKey.key_hash == key_hash, ApiKey.is_active == True)  # noqa: E712
+        .first()
+    )
+
+
+def list_keys_for_org(org_id: str, db: Session) -> List[ApiKey]:
+    return db.query(ApiKey).filter(ApiKey.org_id == org_id, ApiKey.is_active == True).all()  # noqa: E712
+
+
+def revoke_api_key(key_id: str, db: Session) -> None:
+    key = db.query(ApiKey).filter(ApiKey.id == key_id).first()
+    if key:
+        key.is_active = False
+        db.commit()
+
+
+def get_current_usage(org_id: str, period: str, db: Session) -> Optional[UsageRecord]:
+    return (
+        db.query(UsageRecord)
+        .filter(UsageRecord.org_id == org_id, UsageRecord.period == period)
+        .first()
+    )
+
+
+def increment_session_count(org_id: str, period: str, db: Session) -> int:
+    """Increment session_count by 1 for the given org+period. Returns new count."""
+    record = (
+        db.query(UsageRecord)
+        .filter(UsageRecord.org_id == org_id, UsageRecord.period == period)
+        .first()
+    )
+    if record is None:
+        record = UsageRecord(org_id=org_id, period=period, session_count=1)
+        db.add(record)
+        db.commit()
+        return 1
+    record.session_count += 1
+    record.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    return record.session_count
+
+
+def update_org_stripe(org_id: str, stripe_customer_id: str, subscription_id: str, tier: str, db: Session) -> None:
+    org = db.query(Organization).filter(Organization.id == org_id).first()
+    if org:
+        org.stripe_customer_id = stripe_customer_id
+        org.stripe_subscription_id = subscription_id
+        org.tier = tier
+        db.commit()
+
+
+def downgrade_org(subscription_id: str, db: Session) -> None:
+    org = db.query(Organization).filter(Organization.stripe_subscription_id == subscription_id).first()
+    if org:
+        org.tier = "free"
+        org.stripe_subscription_id = None
+        db.commit()
 
 
 # ---------------------------------------------------------------------------

@@ -1,13 +1,15 @@
 """
-Kalytera API — two endpoints only.
+Kalytera API — core endpoints + billing.
   POST /trace                        — receive AgentLog from tracer
   GET  /agents/{agent_id}/patterns   — return LossPattern rows
+  /billing/*                         — usage, checkout, webhook
+  /admin/tenants                     — tenant management
 """
 import asyncio
 import logging
 import os
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
@@ -16,7 +18,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from api.database import SessionLocal, get_db, initialize_database
-from db.queries import get_patterns_for_agent, get_unevaluated_logs, insert_agent_log
+from db.queries import (
+    get_patterns_for_agent,
+    get_unevaluated_logs,
+    insert_agent_log,
+    get_apikey_by_hash,
+    get_org_by_id,
+    get_current_usage,
+    increment_session_count,
+)
+from api.billing import router as billing_router, TIERS, hash_key
 
 logger = logging.getLogger(__name__)
 
@@ -65,24 +76,63 @@ class PatternOut(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Auth
+# Auth + rate limiting
 # ---------------------------------------------------------------------------
 
-def _require_auth(authorization: Optional[str] = Header(default=None)) -> None:
-    expected = os.getenv("KALYTERA_API_KEY")
-    if not expected:
-        return  # dev mode: no key configured, allow all
+def _require_auth(
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Optional[Any]:
+    """
+    Returns the Organization for customer keys (kly_live_*).
+    Returns None for the master admin key or in dev mode (no rate limiting).
+    Raises 429 when the org has exhausted its monthly session limit.
+    """
+    admin_key = os.getenv("KALYTERA_API_KEY", "")
+    if not admin_key:
+        return None  # dev mode — no key configured
+
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization: Bearer <key> header required",
         )
     token = authorization[len("Bearer "):]
-    if token != expected:
+
+    # Master admin key — bypass rate limiting
+    if token == admin_key:
+        return None
+
+    # Customer key — resolve to org via ApiKey table
+    api_key_row = get_apikey_by_hash(hash_key(token), db)
+    if not api_key_row:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+
+    org = get_org_by_id(api_key_row.org_id, db)
+    if not org:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Organization not found")
+
+    # Check monthly rate limit (shared across all keys in this org)
+    period = datetime.now(timezone.utc).strftime("%Y-%m")
+    usage = get_current_usage(org.id, period, db)
+    sessions_used = usage.session_count if usage else 0
+    tier_cfg = TIERS.get(org.tier, TIERS["free"])
+    limit = tier_cfg["sessions"]
+
+    if limit and sessions_used >= limit:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid API key",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "error": "monthly_limit_reached",
+                "org": org.name,
+                "tier": org.tier,
+                "sessions_used": sessions_used,
+                "sessions_limit": limit,
+                "message": f"Your organization has used all {limit:,} sessions for {period} on the {org.tier} plan.",
+                "upgrade_url": "/billing/checkout",
+            },
         )
+    return org
 
 
 # ---------------------------------------------------------------------------
@@ -200,6 +250,8 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+app.include_router(billing_router)
+
 
 # ---------------------------------------------------------------------------
 # Endpoints
@@ -213,14 +265,17 @@ async def health() -> Dict[str, str]:
 @app.post("/trace", response_model=TraceResponse, status_code=201)
 async def post_trace(
     payload: TracePayload,
-    _: None = Depends(_require_auth),
+    org=Depends(_require_auth),
     db: Session = Depends(get_db),
 ) -> TraceResponse:
     """
     Receive one agent step from kalytera.trace().
-    Writes an AgentLog row. Returns immediately.
+    Writes an AgentLog row, increments monthly usage for customer keys.
     """
     insert_agent_log(payload.model_dump(), db)
+    if org is not None:
+        period = datetime.now(timezone.utc).strftime("%Y-%m")
+        increment_session_count(org.id, period, db)
     return TraceResponse(id=payload.id, status="accepted")
 
 

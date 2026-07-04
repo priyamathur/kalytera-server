@@ -1,14 +1,18 @@
 """
-Four tables. Nothing more.
-AgentLog ← tracer.py only
-EvalResult ← judge.py only
-LossPattern ← analyzer.py only
+Seven tables.
+AgentLog           ← tracer.py only
+EvalResult         ← judge.py only
+LossPattern        ← analyzer.py only
 AgentQualityConfig ← dashboard weight editor
+Organization       ← billing unit (company or solo dev); holds Stripe subscription
+User               ← person with an email/login; belongs to one org
+ApiKey             ← what developers put in kalytera.configure(); scoped to an org
+UsageRecord        ← monthly session counters per org (shared across all org's keys)
 """
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, Float, Integer, String, Text
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy import DateTime as SADateTime
 from sqlalchemy.orm import declarative_base
 
@@ -88,3 +92,66 @@ class AgentQualityConfig(Base):
     weight_decision = Column(Float, nullable=False, default=0.15)
     weight_completeness = Column(Float, nullable=False, default=0.15)
     pass_threshold = Column(Float, nullable=False, default=0.7)
+
+
+class Organization(Base):
+    """
+    The billing unit. One Stripe subscription lives here.
+    Can be a solo developer (name = their name) or a company (name = "Acme Corp").
+    All API keys under an org share the org's monthly session limit.
+    """
+    __tablename__ = "organizations"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    name = Column(String, nullable=False)
+    tier = Column(String, nullable=False, default="free")  # free | starter | growth | scale
+    stripe_customer_id = Column(String, nullable=True)
+    stripe_subscription_id = Column(String, nullable=True)
+    created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+
+class User(Base):
+    """
+    A person — developer, admin, or viewer — who belongs to one org.
+    Role admin can create/revoke API keys and manage billing.
+    """
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    email = Column(String, nullable=False, unique=True, index=True)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    role = Column(String, nullable=False, default="admin")  # admin | member
+    created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+
+class ApiKey(Base):
+    """
+    A key developers put in kalytera.configure(api_key=...).
+    Scoped to an org. Multiple keys per org (e.g. production, staging).
+    Usage is tracked at org level, not per key.
+    """
+    __tablename__ = "api_keys"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    key_hash = Column(String, nullable=False, unique=True, index=True)  # SHA256, never store raw
+    key_prefix = Column(String, nullable=False)   # first 16 chars for display, e.g. "kly_live_xxxx"
+    name = Column(String, nullable=False, default="default")  # "production", "staging", etc.
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    created_by = Column(String, ForeignKey("users.id"), nullable=True)  # null for system-generated
+    created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+
+
+class UsageRecord(Base):
+    """Monthly session counter per org. All keys in an org share one record."""
+    __tablename__ = "usage_records"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    period = Column(String, nullable=False)   # "YYYY-MM"
+    session_count = Column(Integer, nullable=False, default=0)
+    updated_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+
+    __table_args__ = (UniqueConstraint("org_id", "period", name="uq_usage_org_period"),)
