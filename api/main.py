@@ -278,7 +278,7 @@ body{background:#0a0d10;color:#e8ecf0;font-family:'DM Mono',monospace;font-weigh
 .card{max-width:480px;width:100%;text-align:center}
 .logo{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin-bottom:48px;display:flex;align-items:center;justify-content:center;gap:8px;color:#e8ecf0}
 .dot{width:6px;height:6px;border-radius:50%;background:#00c8e8}
-.check{width:56px;height:56px;border-radius:50%;background:rgba(168,224,96,0.1);border:2px solid rgba(168,224,96,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;font-size:22px;color:#a8e060}
+.check{font-size:72px;line-height:1;margin:0 auto 24px;color:#a8e060}
 h1{font-family:'Syne',sans-serif;font-weight:800;font-size:26px;letter-spacing:-.5px;margin-bottom:10px}
 .sub{font-size:13px;color:rgba(232,236,240,0.42);line-height:1.75;margin-bottom:36px}
 .cb{background:#0d1117;border:1px solid rgba(255,255,255,0.08);border-radius:10px;text-align:left;overflow:hidden;margin-bottom:28px}
@@ -295,6 +295,7 @@ h1{font-family:'Syne',sans-serif;font-weight:800;font-size:26px;letter-spacing:-
 <div class="card">
   <div class="logo"><div class="dot"></div>Kalytera</div>
   <div class="check">✓</div>
+
   <h1>You're all set.</h1>
   <p class="sub">Your plan is active. Paste your API key from the previous screen and you're ready.</p>
   <div class="cb">
