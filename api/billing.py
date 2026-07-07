@@ -455,9 +455,9 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     try:
         if event_type == "checkout.session.completed":
             obj = event["data"]["object"]
-            org_id = obj.get("client_reference_id")
-            customer_id = obj.get("customer")
-            subscription_id = obj.get("subscription")
+            org_id = getattr(obj, "client_reference_id", None)
+            customer_id = getattr(obj, "customer", None)
+            subscription_id = getattr(obj, "subscription", None)
             logger.info("Webhook checkout: org_id=%s customer=%s sub=%s", org_id, customer_id, subscription_id)
             tier = _tier_from_subscription(stripe, subscription_id)
             logger.info("Resolved tier: %s", tier)
@@ -468,7 +468,8 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 logger.error("Webhook: no client_reference_id in event — cannot identify org")
 
         elif event_type in ("customer.subscription.deleted", "customer.subscription.paused"):
-            subscription_id = event["data"]["object"]["id"]
+            sub_obj = event["data"]["object"]
+            subscription_id = getattr(sub_obj, "id", None)
             downgrade_org(subscription_id, db)
             logger.info("Subscription %s ended — org downgraded to free", subscription_id)
 
@@ -484,7 +485,7 @@ def _tier_from_subscription(stripe, subscription_id: str) -> str:
         return "free"
     try:
         sub = stripe.Subscription.retrieve(subscription_id)
-        price_id = sub["items"]["data"][0]["price"]["id"]
+        price_id = sub.items.data[0].price.id
         for tier, cfg in TIERS.items():
             if cfg.get("stripe_price_id") == price_id:
                 return tier
