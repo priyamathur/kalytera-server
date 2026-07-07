@@ -452,20 +452,29 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     event_type = event["type"]
     logger.info("Stripe event: %s", event_type)
 
-    if event_type == "checkout.session.completed":
-        obj = event["data"]["object"]
-        org_id = obj.get("client_reference_id")
-        customer_id = obj.get("customer")
-        subscription_id = obj.get("subscription")
-        tier = _tier_from_subscription(stripe, subscription_id)
-        if org_id:
-            update_org_stripe(org_id, customer_id, subscription_id, tier, db)
-            logger.info("Org %s upgraded to %s", org_id, tier)
+    try:
+        if event_type == "checkout.session.completed":
+            obj = event["data"]["object"]
+            org_id = obj.get("client_reference_id")
+            customer_id = obj.get("customer")
+            subscription_id = obj.get("subscription")
+            logger.info("Webhook checkout: org_id=%s customer=%s sub=%s", org_id, customer_id, subscription_id)
+            tier = _tier_from_subscription(stripe, subscription_id)
+            logger.info("Resolved tier: %s", tier)
+            if org_id:
+                update_org_stripe(org_id, customer_id, subscription_id, tier, db)
+                logger.info("Org %s upgraded to %s", org_id, tier)
+            else:
+                logger.error("Webhook: no client_reference_id in event — cannot identify org")
 
-    elif event_type in ("customer.subscription.deleted", "customer.subscription.paused"):
-        subscription_id = event["data"]["object"]["id"]
-        downgrade_org(subscription_id, db)
-        logger.info("Subscription %s ended — org downgraded to free", subscription_id)
+        elif event_type in ("customer.subscription.deleted", "customer.subscription.paused"):
+            subscription_id = event["data"]["object"]["id"]
+            downgrade_org(subscription_id, db)
+            logger.info("Subscription %s ended — org downgraded to free", subscription_id)
+
+    except Exception as exc:
+        logger.error("Webhook event processing failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Webhook processing error: {exc}")
 
     return {"status": "ok"}
 
