@@ -827,15 +827,25 @@ async function submitSignup() {
     }
 
     if (data.checkout_url) {
-      // Paid plan — show key then redirect immediately
+      // Paid plan — show key, user must click to proceed
       revealKey(data.api_key, _currentPlan);
       document.getElementById('modal-form-view').style.display = 'none';
       document.getElementById('modal-key-view').style.display = 'block';
-      // Add a visible redirect button + auto-redirect after 2 seconds
+      // Replace "Done" button with locked "Continue to payment" that requires copying first
       const doneBtn = document.getElementById('modal-key-view').querySelector('.btn-full');
-      doneBtn.textContent = 'Continue to payment →';
-      doneBtn.onclick = () => { window.location.href = data.checkout_url; };
-      setTimeout(() => { window.location.href = data.checkout_url; }, 2000);
+      doneBtn.textContent = 'Copy key first, then continue to payment →';
+      doneBtn.disabled = true;
+      doneBtn.style.opacity = '0.45';
+      doneBtn.style.cursor = 'not-allowed';
+      // Unlock once they copy the key
+      window._checkoutUrl = data.checkout_url;
+      window._unlockCheckout = function() {
+        doneBtn.disabled = false;
+        doneBtn.style.opacity = '1';
+        doneBtn.style.cursor = 'pointer';
+        doneBtn.textContent = 'Continue to payment →';
+        doneBtn.onclick = () => { window.location.href = window._checkoutUrl; };
+      };
     } else {
       // Free plan — just show the key
       document.getElementById('modal-form-view').style.display = 'none';
@@ -863,6 +873,8 @@ function copyKey() {
     const btn = document.querySelector('.key-copy');
     btn.textContent = 'Copied!';
     setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+    // Unlock "Continue to payment" button once key is copied
+    if (window._unlockCheckout) window._unlockCheckout();
   });
 }
 
