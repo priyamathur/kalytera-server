@@ -326,6 +326,32 @@ def add_user(
 
 
 # ---------------------------------------------------------------------------
+# POST /admin/orgs/{org_id}/tier — manually set tier (bypass Stripe webhook)
+# ---------------------------------------------------------------------------
+
+class SetTierRequest(BaseModel):
+    tier: str  # free | starter | growth | scale
+
+@router.post("/admin/orgs/{org_id}/tier")
+def set_tier(
+    org_id: str,
+    req: SetTierRequest,
+    db: Session = Depends(get_db),
+    authorization: Optional[str] = Header(default=None),
+):
+    _require_admin(authorization)
+    if req.tier not in TIERS:
+        raise HTTPException(status_code=400, detail=f"Unknown tier: {req.tier}")
+    org = get_org_by_id(org_id, db)
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
+    org.tier = req.tier
+    db.commit()
+    logger.info("Admin manually set org %s to tier %s", org_id, req.tier)
+    return {"org_id": org_id, "tier": org.tier, "name": org.name}
+
+
+# ---------------------------------------------------------------------------
 # DELETE /admin/keys/{key_id} — revoke an API key
 # ---------------------------------------------------------------------------
 
@@ -414,10 +440,14 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await request.body()
     sig = request.headers.get("stripe-signature", "")
     secret = os.getenv("STRIPE_WEBHOOK_SECRET", "")
+    if not secret:
+        logger.error("STRIPE_WEBHOOK_SECRET not set — cannot verify webhook")
+        raise HTTPException(status_code=500, detail="Webhook secret not configured")
     try:
         event = stripe.Webhook.construct_event(payload, sig, secret)
-    except stripe.error.SignatureVerificationError:
-        raise HTTPException(status_code=400, detail="Invalid Stripe signature")
+    except Exception as exc:
+        logger.error("Webhook signature verification failed: %s", exc)
+        raise HTTPException(status_code=400, detail=f"Webhook signature failed: {exc}")
 
     event_type = event["type"]
     logger.info("Stripe event: %s", event_type)
