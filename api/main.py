@@ -275,21 +275,20 @@ async def welcome() -> str:
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0a0d10;color:#e8ecf0;font-family:'DM Mono',monospace;font-weight:300;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
-.card{max-width:540px;width:100%;text-align:center}
-.check{width:64px;height:64px;border-radius:50%;background:rgba(168,224,96,0.1);border:2px solid rgba(168,224,96,0.3);display:flex;align-items:center;justify-content:center;margin:0 auto 28px;font-size:26px}
-h1{font-family:'Syne',sans-serif;font-weight:800;font-size:28px;letter-spacing:-.5px;margin-bottom:10px}
-.sub{font-size:14px;color:rgba(232,236,240,0.45);line-height:1.7;margin-bottom:40px;max-width:400px;margin-left:auto;margin-right:auto}
-.steps{text-align:left;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;margin-bottom:32px}
-.step{display:grid;grid-template-columns:40px 1fr;gap:12px;padding:18px 20px;border-bottom:1px solid rgba(255,255,255,0.06);align-items:start}
-.step:last-child{border-bottom:none}
-.step-n{font-family:'Syne',sans-serif;font-weight:800;font-size:18px;color:rgba(0,200,232,0.25);line-height:1.2}
-.step-title{font-family:'Syne',sans-serif;font-weight:700;font-size:13px;margin-bottom:5px}
-.step-body{font-size:11.5px;color:rgba(232,236,240,0.45);line-height:1.65}
-.step-body code{background:rgba(0,200,232,0.08);color:#00c8e8;padding:1px 6px;border-radius:3px;font-size:11px}
-.btn{display:inline-block;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;padding:13px 28px;background:#00c8e8;color:#0a0d10;border-radius:7px;text-decoration:none;margin-right:10px}
-.btn-s{display:inline-block;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;padding:12px 24px;border:1px solid rgba(255,255,255,0.08);color:rgba(232,236,240,0.5);border-radius:7px;text-decoration:none}
-.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin-bottom:40px;display:flex;align-items:center;justify-content:center;gap:8px}
+.card{max-width:480px;width:100%;text-align:center}
+.logo{font-family:'Syne',sans-serif;font-weight:800;font-size:15px;margin-bottom:48px;display:flex;align-items:center;justify-content:center;gap:8px;color:#e8ecf0}
 .dot{width:6px;height:6px;border-radius:50%;background:#00c8e8}
+.check{width:56px;height:56px;border-radius:50%;background:rgba(168,224,96,0.1);border:2px solid rgba(168,224,96,0.25);display:flex;align-items:center;justify-content:center;margin:0 auto 24px;font-size:22px;color:#a8e060}
+h1{font-family:'Syne',sans-serif;font-weight:800;font-size:26px;letter-spacing:-.5px;margin-bottom:10px}
+.sub{font-size:13px;color:rgba(232,236,240,0.42);line-height:1.75;margin-bottom:36px}
+.cb{background:#0d1117;border:1px solid rgba(255,255,255,0.08);border-radius:10px;text-align:left;overflow:hidden;margin-bottom:28px}
+.cb-lbl{background:#161b22;padding:8px 16px;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#4e5a68;border-bottom:1px solid rgba(255,255,255,0.06)}
+.cb pre{padding:16px 20px;font-size:12px;line-height:2;color:#e8ecf0;overflow-x:auto}
+.kw{color:#00c8e8}.fn{color:#a8e060}.str{color:#e8c864}.cm{color:#4e5a68}
+.btn{display:inline-block;font-family:'Syne',sans-serif;font-weight:700;font-size:12px;padding:13px 28px;background:#00c8e8;color:#0a0d10;border-radius:7px;text-decoration:none}
+.help{margin-top:24px;font-size:11px;color:rgba(232,236,240,0.28)}
+.help a{color:rgba(232,236,240,0.4);text-decoration:none;border-bottom:1px solid rgba(232,236,240,0.15)}
+.help a:hover{color:#e8ecf0}
 </style>
 </head>
 <body>
@@ -297,39 +296,25 @@ h1{font-family:'Syne',sans-serif;font-weight:800;font-size:28px;letter-spacing:-
   <div class="logo"><div class="dot"></div>Kalytera</div>
   <div class="check">✓</div>
   <h1>You're all set.</h1>
-  <p class="sub">Your plan is active. Your API key was shown at signup — check your notes. Here's how to get your first trace into Kalytera.</p>
-  <div class="steps">
-    <div class="step">
-      <div class="step-n">1</div>
-      <div>
-        <div class="step-title">Install the SDK</div>
-        <div class="step-body"><code>pip install kalytera</code></div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-n">2</div>
-      <div>
-        <div class="step-title">Configure once at startup</div>
-        <div class="step-body"><code>kalytera.configure(api_key="kly_live_...", api_endpoint="https://agentiq-api-z9it.onrender.com")</code></div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-n">3</div>
-      <div>
-        <div class="step-title">Add to your agent</div>
-        <div class="step-body"><code>@kalytera.watch</code> on any function — or call <code>kalytera.trace()</code> manually at each step. That's it.</div>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-n">4</div>
-      <div>
-        <div class="step-title">Watch failures surface in real time</div>
-        <div class="step-body">Loss patterns appear automatically after 5+ failures of the same type. Root cause in plain English. No config required.</div>
-      </div>
-    </div>
+  <p class="sub">Your plan is active. Paste your API key from the previous screen and you're ready.</p>
+  <div class="cb">
+    <div class="cb-lbl">Get started in 30 seconds</div>
+    <pre><span class="cm">pip install kalytera</span>
+
+<span class="kw">import</span> kalytera
+kalytera.<span class="fn">configure</span>(
+  api_key=<span class="str">"kly_live_..."</span>,
+  api_endpoint=<span class="str">"https://agentiq-api-z9it.onrender.com"</span>
+)
+
+<span class="kw">@</span>kalytera.<span class="fn">watch</span>
+<span class="kw">def</span> <span class="fn">your_agent</span>(user_input):
+    ...  <span class="cm"># nothing else changes</span></pre>
   </div>
-  <a href="https://agentiq-api-z9it.onrender.com/docs" class="btn">API docs →</a>
-  <a href="mailto:priya@kalytera.ai" class="btn-s">Contact support</a>
+  <a href="https://kalytera.dev" class="btn">Back to kalytera.dev →</a>
+  <div class="help">
+    Questions? <a href="mailto:priya@kalytera.ai?subject=Kalytera%20support&body=Hi%20Priya%2C%0A%0AI%20just%20signed%20up%20for%20Kalytera%20and%20need%20help%20with%3A%0A%0A">Email priya@kalytera.ai</a>
+  </div>
 </div>
 </body>
 </html>"""
