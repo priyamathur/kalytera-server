@@ -387,6 +387,33 @@ def get_session_and_latency_stats(agent_id: str, hours: int, db: Session) -> Dic
 # Dashboard — Latency / score distributions + search
 # ---------------------------------------------------------------------------
 
+def get_avg_score_by_step(agent_id: str, hours: int, db: Session) -> List[Tuple[str, float, int]]:
+    """
+    Avg quality score per step_name, sorted lowest first (most concerning at top).
+    Returns (step_name, avg_score_0_to_1, eval_count).
+    Unique to Kalytera — shows which workflow step is the quality bottleneck.
+    """
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    rows = (
+        db.query(
+            AgentLog.step_name,
+            func.avg(EvalResult.overall_score).label("avg_score"),
+            func.count(EvalResult.id).label("cnt"),
+        )
+        .join(EvalResult, EvalResult.log_id == AgentLog.id)
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.evaluated_at >= since,
+            EvalResult.eval_error == False,  # noqa: E712
+        )
+        .group_by(AgentLog.step_name)
+        .order_by(func.avg(EvalResult.overall_score))
+        .limit(12)
+        .all()
+    )
+    return [(str(r.step_name), round(float(r.avg_score or 0), 3), int(r.cnt)) for r in rows]
+
+
 def get_latency_values(agent_id: str, hours: int, db: Session) -> List[int]:
     """Raw step latency_ms values for computing percentiles in-process."""
     since = datetime.now(timezone.utc) - timedelta(hours=hours)

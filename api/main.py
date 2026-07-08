@@ -188,10 +188,11 @@ async def _eval_loop() -> None:
 
 async def _analysis_loop() -> None:
     loop = asyncio.get_event_loop()
+    await asyncio.sleep(90)  # let eval loop score a few batches first
     while True:
         try:
-            await asyncio.sleep(_ANALYSIS_INTERVAL_S)
             await loop.run_in_executor(None, _analysis_batch)
+            await asyncio.sleep(_ANALYSIS_INTERVAL_S)
         except asyncio.CancelledError:
             break
         except Exception as exc:

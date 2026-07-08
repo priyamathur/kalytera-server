@@ -134,6 +134,7 @@ def _db():  # type: ignore[return]
 # ── Imports ───────────────────────────────────────────────────────────────────
 from db.queries import (  # noqa: E402
     get_all_agent_ids,
+    get_avg_score_by_step,
     get_failures_by_step,
     get_latency_values,
     get_patterns_for_agent,
@@ -444,6 +445,7 @@ def _show_overview(agent_id: str) -> None:
         step_hot = get_failures_by_step(agent_id, 24, db)
         latencies = get_latency_values(agent_id, 24, db)
         score_buckets = get_score_buckets(agent_id, 24, db)
+        step_scores   = get_avg_score_by_step(agent_id, 24, db)
     finally:
         db.close()
 
@@ -457,41 +459,37 @@ def _show_overview(agent_id: str) -> None:
 
     # ── KPI row ─────────────────────────────────────────────────────────────
     pass_color = "#16a34a" if pass_pct >= 70 else "#dc2626"
+    fail_color = "#dc2626" if failures_24h > 0 else "#16a34a"
     k1, k2, k3, k4, k5 = st.columns(5)
     k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), "distinct sessions, 24h"), unsafe_allow_html=True)
     k2.markdown(_kpi_card("Pass Rate", f"{pass_pct:.0f}%", "score ≥ 70", color=pass_color), unsafe_allow_html=True)
     k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "weighted 4 dims"), unsafe_allow_html=True)
-    k4.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
-    k5.markdown(_kpi_card("P99 Latency", f"{p_vals[4]:,} ms", "99th percentile"), unsafe_allow_html=True)
+    k4.markdown(_kpi_card("Failures", str(failures_24h), "sessions failed, 24h", color=fail_color), unsafe_allow_html=True)
+    k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
 
     # ── Quality trend + session volume ───────────────────────────────────────
-    _section_head("Quality Trend", f"last {TREND_DAYS} days · bars = sessions, lines = scores")
+    _section_head("Quality Trend", f"last {TREND_DAYS} days — avg score · pass rate")
     ch1, ch2 = st.columns([3, 2])
 
     with ch1:
         if trend:
             df_t = pd.DataFrame(trend)
-            max_sessions = max(int(df_t["total"].max()), 1)
             fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=df_t["date"], y=df_t["total"],
-                name="Sessions / day",
-                marker_color="#e0e7ff",
-                yaxis="y2",
-                hovertemplate="%{y} sessions<extra>Sessions</extra>",
-            ))
             fig.add_trace(go.Scatter(
                 x=df_t["date"], y=(df_t["avg_score"] * 100).round(1),
-                name="Avg Score", mode="lines+markers",
+                name="Avg Score",
+                mode="lines",
+                fill="tozeroy",
+                fillcolor="rgba(99,102,241,0.10)",
                 line=dict(color="#6366f1", width=2.5),
-                marker=dict(size=5),
                 hovertemplate="%{y:.0f}/100<extra>Avg Score</extra>",
             ))
             fig.add_trace(go.Scatter(
                 x=df_t["date"], y=(df_t["pass_rate"] * 100).round(1),
-                name="Pass Rate %", mode="lines+markers",
+                name="Pass Rate %",
+                mode="lines+markers",
                 line=dict(color="#22c55e", width=2, dash="dot"),
-                marker=dict(size=5),
+                marker=dict(size=4),
                 hovertemplate="%{y:.0f}%<extra>Pass Rate</extra>",
             ))
             fig.add_hline(y=70, line_dash="dash", line_color="#ef4444", line_width=1,
@@ -502,15 +500,6 @@ def _show_overview(agent_id: str) -> None:
                 xaxis=dict(title="Date", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
                 yaxis=dict(title="Score / Pass %", range=[0, 108],
                            gridcolor="#f1f5f9", linecolor="#e2e8f0"),
-                yaxis2=dict(
-                    title="Sessions",
-                    overlaying="y", side="right",
-                    showgrid=False,
-                    range=[0, max_sessions * 5],
-                    tickfont=dict(size=10, color="#94a3b8"),
-                    title_font=dict(size=10, color="#94a3b8"),
-                    linecolor="#e2e8f0",
-                ),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02,
                             xanchor="right", x=1, font=dict(size=11)),
             )
@@ -542,68 +531,48 @@ def _show_overview(agent_id: str) -> None:
         else:
             st.caption("No score data yet.")
 
-    # ── Latency Distribution ─────────────────────────────────────────────────
+    # ── Latency ─────────────────────────────────────────────────────────────
     if latencies:
-        _section_head("Latency Distribution", "step response times — last 24h")
-        lat_l, lat_r = st.columns([2, 3])
+        _section_head("Latency", "step response time percentiles — last 24h")
+        lc1, lc2, lc3, lc4 = st.columns(4)
+        lc1.markdown(_kpi_card("P50", f"{p_vals[0]:,} ms", "median response"), unsafe_allow_html=True)
+        lc2.markdown(_kpi_card("P75", f"{p_vals[1]:,} ms", "75th percentile", color="#8b5cf6"), unsafe_allow_html=True)
+        lc3.markdown(_kpi_card("P95", f"{p_vals[3]:,} ms", "95th percentile", color="#f97316"), unsafe_allow_html=True)
+        lc4.markdown(_kpi_card("P99", f"{p_vals[4]:,} ms", "worst 1% of steps", color="#ef4444"), unsafe_allow_html=True)
 
-        with lat_l:
-            st.markdown(
-                '<p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'
-                'letter-spacing:0.06em;margin-bottom:14px">Percentile Summary</p>',
-                unsafe_allow_html=True,
-            )
-            lat_rows = [
-                ("P50 — Median",   p_vals[0], "#6366f1"),
-                ("P75",            p_vals[1], "#8b5cf6"),
-                ("P90",            p_vals[2], "#f59e0b"),
-                ("P95",            p_vals[3], "#f97316"),
-                ("P99 — Worst 1%", p_vals[4], "#ef4444"),
-            ]
-            max_val = max(p_vals[4], 1)
-            for lbl, val, clr in lat_rows:
-                bar_w = val / max_val * 100
-                st.markdown(
-                    f'<div style="margin-bottom:13px">'
-                    f'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
-                    f'<span style="font-size:12px;color:#475569;font-weight:500">{lbl}</span>'
-                    f'<span style="font-size:13px;font-weight:800;color:{clr}">{val:,} ms</span>'
-                    f'</div>'
-                    f'<div style="background:#f1f5f9;border-radius:4px;height:5px">'
-                    f'<div style="background:{clr};width:{bar_w:.0f}%;height:5px;border-radius:4px"></div>'
-                    f'</div></div>',
-                    unsafe_allow_html=True,
-                )
-
-        with lat_r:
-            n_bins = min(30, max(10, len(latencies) // 3))
-            fig3 = go.Figure()
-            fig3.add_trace(go.Histogram(
-                x=latencies,
-                nbinsx=n_bins,
-                marker_color="#818cf8",
-                marker_line=dict(color="white", width=1),
-                opacity=0.85,
-                name="Steps",
-                hovertemplate="<b>~%{x:.0f} ms</b><br>%{y} steps<extra></extra>",
-            ))
-            for lbl, val, clr in [("P50", p_vals[0], "#22c55e"),
-                                   ("P95", p_vals[3], "#f97316"),
-                                   ("P99", p_vals[4], "#ef4444")]:
-                fig3.add_vline(
-                    x=val, line_dash="dash", line_color=clr, line_width=1.5,
-                    annotation_text=f"{lbl}: {val:,} ms",
-                    annotation_position="top",
-                    annotation_font_size=10,
-                    annotation_font_color=clr,
-                )
-            _plotly_defaults(fig3, 220).update_layout(
-                xaxis=dict(title="Response time (ms)", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
-                yaxis=dict(title="Steps", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
-                showlegend=False,
-                bargap=0.05,
-            )
-            st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
+    # ── Quality Score by Step ────────────────────────────────────────────────
+    if step_scores:
+        _section_head("Quality Score by Step", "avg score per workflow step — red steps are your biggest quality risk")
+        y_steps  = [s for s, _, _ in step_scores]
+        x_scores = [round(sc * 100) for _, sc, _ in step_scores]
+        x_counts = [cnt for _, _, cnt in step_scores]
+        bar_clrs = [
+            "#ef4444" if sc < 50 else "#f97316" if sc < 70 else "#22c55e"
+            for sc in x_scores
+        ]
+        fig_sq = go.Figure(go.Bar(
+            x=x_scores,
+            y=y_steps,
+            orientation="h",
+            marker_color=bar_clrs,
+            marker_line=dict(color="white", width=1),
+            text=[f"{sc}/100  ·  {cnt} eval{'s' if cnt != 1 else ''}" for sc, cnt in zip(x_scores, x_counts)],
+            textposition="outside",
+            textfont=dict(size=11, color="#475569"),
+            hovertemplate="<b>%{y}</b><br>Avg score: %{x}/100<extra></extra>",
+        ))
+        fig_sq.add_vline(x=70, line_dash="dash", line_color="#ef4444", line_width=1,
+                         annotation_text="pass threshold",
+                         annotation_position="top left",
+                         annotation_font_size=10, annotation_font_color="#ef4444")
+        _plotly_defaults(fig_sq, max(160, len(step_scores) * 44)).update_layout(
+            xaxis=dict(title="Avg quality score (0–100)", range=[0, 120],
+                       gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+            yaxis=dict(tickfont=dict(size=12), linecolor="#e2e8f0"),
+            showlegend=False,
+            margin=dict(l=0, r=100, t=8, b=0),
+        )
+        st.plotly_chart(fig_sq, use_container_width=True, config={"displayModeBar": False})
 
     # ── Failure Breakdown ─────────────────────────────────────────────────────
     _section_head("Failure Breakdown", "last 24h")
@@ -617,15 +586,15 @@ def _show_overview(agent_id: str) -> None:
         )
         if step_hot:
             rows_s = [
-                {"Step": f"{n} · {name}", "Failures": cnt, "Fail Rate %": round(rate * 100, 1)}
+                {"Step": name, "Failures": cnt, "Fail Rate": f"{rate * 100:.0f}%"}
                 for n, name, cnt, rate in step_hot
             ]
             st.dataframe(
                 pd.DataFrame(rows_s),
                 column_config={
-                    "Fail Rate %": st.column_config.ProgressColumn(
-                        "Fail Rate", format="%.1f%%", min_value=0, max_value=100),
-                    "Failures": st.column_config.NumberColumn("Failures"),
+                    "Step": st.column_config.TextColumn("Step"),
+                    "Failures": st.column_config.NumberColumn("Failures", width="small"),
+                    "Fail Rate": st.column_config.TextColumn("Fail Rate", width="small"),
                 },
                 hide_index=True, use_container_width=True,
             )
