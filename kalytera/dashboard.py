@@ -556,10 +556,11 @@ def _show_overview(agent_id: str) -> None:
             orientation="h",
             marker_color=bar_clrs,
             marker_line=dict(color="white", width=1),
-            text=[f"{sc}/100  ·  {cnt} eval{'s' if cnt != 1 else ''}" for sc, cnt in zip(x_scores, x_counts)],
+            customdata=x_counts,
+            text=[f"{sc}/100  ·  {cnt} session{'s' if cnt != 1 else ''}" for sc, cnt in zip(x_scores, x_counts)],
             textposition="outside",
             textfont=dict(size=11, color="#475569"),
-            hovertemplate="<b>%{y}</b><br>Avg score: %{x}/100<extra></extra>",
+            hovertemplate="<b>%{y}</b><br>Avg score: %{x}/100<br>Based on %{customdata} session(s)<extra></extra>",
         ))
         fig_sq.add_vline(x=70, line_dash="dash", line_color="#ef4444", line_width=1,
                          annotation_text="pass threshold",
