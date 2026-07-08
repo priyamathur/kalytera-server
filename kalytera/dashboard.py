@@ -416,6 +416,19 @@ def _plotly_defaults(fig: go.Figure, height: int = 220) -> go.Figure:
     return fig
 
 
+def _kpi_card(label: str, value: str, subtitle: str, color: str = "#0f172a") -> str:
+    return (
+        f'<div style="background:white;border:1px solid #e2e8f0;border-radius:14px;'
+        f'padding:20px 22px 16px;box-shadow:0 1px 3px rgba(15,23,42,0.06);height:100%">'
+        f'<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;'
+        f'letter-spacing:0.08em;margin-bottom:8px">{label}</div>'
+        f'<div style="font-size:28px;font-weight:800;color:{color};letter-spacing:-0.03em;'
+        f'line-height:1.1;margin-bottom:5px">{value}</div>'
+        f'<div style="font-size:10px;color:#94a3b8;font-style:italic">{subtitle}</div>'
+        f'</div>'
+    )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 1 — Overview
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -429,7 +442,6 @@ def _show_overview(agent_id: str) -> None:
         trend = get_quality_trend(agent_id, TREND_DAYS, db)
         top_types = get_top_failure_types(agent_id, 24, db)
         step_hot = get_failures_by_step(agent_id, 24, db)
-        patterns = get_patterns_for_agent(agent_id, db)
         latencies = get_latency_values(agent_id, 24, db)
         score_buckets = get_score_buckets(agent_id, 24, db)
     finally:
@@ -437,38 +449,37 @@ def _show_overview(agent_id: str) -> None:
 
     failures_24h = stats["total"] - stats["passed"]
     pass_pct = stats["pass_rate"] * 100
+    arr = np.array(latencies) if latencies else np.array([0])
+    p_vals = [int(np.percentile(arr, p)) for p in [50, 75, 90, 95, 99]]
 
     if failures_24h == 0 and stats["total"] > 0:
         st.success("No failures in the last 24 hours — your agent is healthy.", icon="✅")
 
     # ── KPI row ─────────────────────────────────────────────────────────────
+    pass_color = "#16a34a" if pass_pct >= 70 else "#dc2626"
     k1, k2, k3, k4, k5 = st.columns(5)
-    k1.metric("Sessions (24h)", extra["session_count"])
-    k2.metric("Pass Rate", f"{pass_pct:.0f}%",
-              delta=f"{stats['passed']} passed · {failures_24h} failed")
-    k3.metric("Avg Score", f"{extra['avg_score']:.0f}/100")
-    k4.metric("Avg Latency", f"{extra['avg_latency_ms']} ms")
+    k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), "distinct sessions, 24h"), unsafe_allow_html=True)
+    k2.markdown(_kpi_card("Pass Rate", f"{pass_pct:.0f}%", "score ≥ 70", color=pass_color), unsafe_allow_html=True)
+    k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "weighted 4 dims"), unsafe_allow_html=True)
+    k4.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
+    k5.markdown(_kpi_card("P99 Latency", f"{p_vals[4]:,} ms", "99th percentile"), unsafe_allow_html=True)
 
-    # Latency P99
-    p99 = int(np.percentile(latencies, 99)) if latencies else 0
-    k5.metric("P99 Latency", f"{p99} ms", help="99th percentile step latency")
-
-    # Color pass rate
-    color = "#16a34a" if pass_pct >= 70 else "#dc2626"
-    st.markdown(
-        f"<style>[data-testid='stMetric']:nth-child(2) "
-        f"[data-testid='stMetricValue'] > div {{ color: {color} !important; }}</style>",
-        unsafe_allow_html=True,
-    )
-
-    # ── Two main charts ──────────────────────────────────────────────────────
-    _section_head("Trend & Distribution", f"last {TREND_DAYS} days quality, last 24h scores")
+    # ── Quality trend + session volume ───────────────────────────────────────
+    _section_head("Quality Trend", f"last {TREND_DAYS} days · bars = sessions, lines = scores")
     ch1, ch2 = st.columns([3, 2])
 
     with ch1:
         if trend:
             df_t = pd.DataFrame(trend)
+            max_sessions = max(int(df_t["total"].max()), 1)
             fig = go.Figure()
+            fig.add_trace(go.Bar(
+                x=df_t["date"], y=df_t["total"],
+                name="Sessions / day",
+                marker_color="#e0e7ff",
+                yaxis="y2",
+                hovertemplate="%{y} sessions<extra>Sessions</extra>",
+            ))
             fig.add_trace(go.Scatter(
                 x=df_t["date"], y=(df_t["avg_score"] * 100).round(1),
                 name="Avg Score", mode="lines+markers",
@@ -484,9 +495,25 @@ def _show_overview(agent_id: str) -> None:
                 hovertemplate="%{y:.0f}%<extra>Pass Rate</extra>",
             ))
             fig.add_hline(y=70, line_dash="dash", line_color="#ef4444", line_width=1,
-                          annotation_text="Pass threshold", annotation_position="right",
+                          annotation_text="70 — pass threshold",
+                          annotation_position="bottom right",
                           annotation_font_size=10, annotation_font_color="#ef4444")
-            _plotly_defaults(fig, 200).update_layout(yaxis=dict(range=[0, 105]))
+            _plotly_defaults(fig, 230).update_layout(
+                xaxis=dict(title="Date", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                yaxis=dict(title="Score / Pass %", range=[0, 108],
+                           gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                yaxis2=dict(
+                    title="Sessions",
+                    overlaying="y", side="right",
+                    showgrid=False,
+                    range=[0, max_sessions * 5],
+                    tickfont=dict(size=10, color="#94a3b8"),
+                    title_font=dict(size=10, color="#94a3b8"),
+                    linecolor="#e2e8f0",
+                ),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02,
+                            xanchor="right", x=1, font=dict(size=11)),
+            )
             st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         else:
             st.caption("No evaluation data yet.")
@@ -494,55 +521,91 @@ def _show_overview(agent_id: str) -> None:
     with ch2:
         if score_buckets:
             df_b = pd.DataFrame(score_buckets)
-            colors = [
+            colors_b = [
                 "#ef4444" if b < 50 else "#f97316" if b < 70 else "#22c55e"
                 for b in df_b["bucket"]
             ]
             fig2 = go.Figure(go.Bar(
                 x=df_b["range"], y=df_b["count"],
-                marker_color=colors,
+                marker_color=colors_b,
                 text=df_b["count"], textposition="outside",
                 textfont=dict(size=11, color="#475569"),
-                hovertemplate="%{x}: %{y} sessions<extra></extra>",
+                hovertemplate="Score %{x}: %{y} sessions<extra></extra>",
             ))
-            _plotly_defaults(fig2, 200).update_layout(
-                yaxis_title="sessions",
-                xaxis=dict(tickfont=dict(size=10)),
+            _plotly_defaults(fig2, 230).update_layout(
+                yaxis=dict(title="Sessions", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                xaxis=dict(title="Score range (0–100)", tickfont=dict(size=10),
+                           gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                showlegend=False,
             )
             st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
         else:
             st.caption("No score data yet.")
 
-    # ── Latency percentiles ──────────────────────────────────────────────────
+    # ── Latency Distribution ─────────────────────────────────────────────────
     if latencies:
-        _section_head("Latency Profile", "step execution time distribution")
-        arr = np.array(latencies)
-        pcts = [50, 75, 90, 95, 99]
-        vals = [int(np.percentile(arr, p)) for p in pcts]
+        _section_head("Latency Distribution", "step response times — last 24h")
+        lat_l, lat_r = st.columns([2, 3])
 
-        fig3 = go.Figure(go.Bar(
-            x=[f"P{p}" for p in pcts], y=vals,
-            marker_color=["#6366f1", "#8b5cf6", "#f59e0b", "#f97316", "#ef4444"],
-            text=[f"{v:,} ms" for v in vals],
-            textposition="outside",
-            textfont=dict(size=11, color="#475569"),
-            hovertemplate="%{x}: %{y} ms<extra></extra>",
-        ))
-        _plotly_defaults(fig3, 160).update_layout(
-            yaxis_title="ms",
-            bargap=0.4,
-            xaxis=dict(tickfont=dict(size=12, color="#0f172a")),
-        )
-        pcol1, pcol2 = st.columns([2, 3])
-        with pcol1:
-            pc1, pc2, pc3 = st.columns(3)
-            pc1.metric("P50", f"{vals[0]} ms")
-            pc2.metric("P95", f"{vals[3]} ms")
-            pc3.metric("P99", f"{vals[4]} ms")
-        with pcol2:
+        with lat_l:
+            st.markdown(
+                '<p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'
+                'letter-spacing:0.06em;margin-bottom:14px">Percentile Summary</p>',
+                unsafe_allow_html=True,
+            )
+            lat_rows = [
+                ("P50 — Median",   p_vals[0], "#6366f1"),
+                ("P75",            p_vals[1], "#8b5cf6"),
+                ("P90",            p_vals[2], "#f59e0b"),
+                ("P95",            p_vals[3], "#f97316"),
+                ("P99 — Worst 1%", p_vals[4], "#ef4444"),
+            ]
+            max_val = max(p_vals[4], 1)
+            for lbl, val, clr in lat_rows:
+                bar_w = val / max_val * 100
+                st.markdown(
+                    f'<div style="margin-bottom:13px">'
+                    f'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
+                    f'<span style="font-size:12px;color:#475569;font-weight:500">{lbl}</span>'
+                    f'<span style="font-size:13px;font-weight:800;color:{clr}">{val:,} ms</span>'
+                    f'</div>'
+                    f'<div style="background:#f1f5f9;border-radius:4px;height:5px">'
+                    f'<div style="background:{clr};width:{bar_w:.0f}%;height:5px;border-radius:4px"></div>'
+                    f'</div></div>',
+                    unsafe_allow_html=True,
+                )
+
+        with lat_r:
+            n_bins = min(30, max(10, len(latencies) // 3))
+            fig3 = go.Figure()
+            fig3.add_trace(go.Histogram(
+                x=latencies,
+                nbinsx=n_bins,
+                marker_color="#818cf8",
+                marker_line=dict(color="white", width=1),
+                opacity=0.85,
+                name="Steps",
+                hovertemplate="<b>~%{x:.0f} ms</b><br>%{y} steps<extra></extra>",
+            ))
+            for lbl, val, clr in [("P50", p_vals[0], "#22c55e"),
+                                   ("P95", p_vals[3], "#f97316"),
+                                   ("P99", p_vals[4], "#ef4444")]:
+                fig3.add_vline(
+                    x=val, line_dash="dash", line_color=clr, line_width=1.5,
+                    annotation_text=f"{lbl}: {val:,} ms",
+                    annotation_position="top",
+                    annotation_font_size=10,
+                    annotation_font_color=clr,
+                )
+            _plotly_defaults(fig3, 220).update_layout(
+                xaxis=dict(title="Response time (ms)", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                yaxis=dict(title="Steps", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                showlegend=False,
+                bargap=0.05,
+            )
             st.plotly_chart(fig3, use_container_width=True, config={"displayModeBar": False})
 
-    # ── Failure breakdown ────────────────────────────────────────────────────
+    # ── Failure Breakdown ─────────────────────────────────────────────────────
     _section_head("Failure Breakdown", "last 24h")
     col_l, col_r = st.columns(2)
 
@@ -553,15 +616,15 @@ def _show_overview(agent_id: str) -> None:
             unsafe_allow_html=True,
         )
         if step_hot:
-            rows = [
-                {"Step": f"{n} · {name}", "Failures": cnt, "Fail Rate": rate}
+            rows_s = [
+                {"Step": f"{n} · {name}", "Failures": cnt, "Fail Rate %": round(rate * 100, 1)}
                 for n, name, cnt, rate in step_hot
             ]
             st.dataframe(
-                pd.DataFrame(rows),
+                pd.DataFrame(rows_s),
                 column_config={
-                    "Fail Rate": st.column_config.ProgressColumn(
-                        "Fail Rate", format="%.0f%%", min_value=0, max_value=1),
+                    "Fail Rate %": st.column_config.ProgressColumn(
+                        "Fail Rate", format="%.1f%%", min_value=0, max_value=100),
                     "Failures": st.column_config.NumberColumn("Failures"),
                 },
                 hide_index=True, use_container_width=True,
@@ -576,76 +639,33 @@ def _show_overview(agent_id: str) -> None:
             unsafe_allow_html=True,
         )
         if top_types:
-            # Donut chart
-            fig_d = go.Figure(go.Pie(
-                labels=[ft for ft, _, _ in top_types],
-                values=[cnt for _, cnt, _ in top_types],
-                hole=0.55,
-                marker_colors=[_ft_color(ft)[0] for ft, _, _ in top_types],
-                textinfo="label+percent",
-                textfont=dict(size=11),
-                hovertemplate="%{label}: %{value}<extra></extra>",
+            sorted_types = list(reversed(top_types))
+            y_labels = [ft for ft, _, _ in sorted_types]
+            x_vals   = [cnt for _, cnt, _ in sorted_types]
+            pct_vals  = [pct for _, _, pct in sorted_types]
+            bar_colors = [_ft_color(ft)[0] for ft in y_labels]
+
+            fig_ft = go.Figure(go.Bar(
+                x=x_vals,
+                y=y_labels,
+                orientation="h",
+                marker_color=bar_colors,
+                marker_line=dict(color="white", width=1),
+                text=[f"{v}  ({p * 100:.0f}%)" for v, p in zip(x_vals, pct_vals)],
+                textposition="outside",
+                textfont=dict(size=11, color="#475569"),
+                hovertemplate="<b>%{y}</b><br>%{x} failures<extra></extra>",
             ))
-            fig_d.update_layout(
-                height=180, margin=dict(l=0, r=0, t=0, b=0),
-                paper_bgcolor="white",
-                font=dict(family="Inter, sans-serif", size=11),
+            chart_h = max(160, len(top_types) * 44)
+            _plotly_defaults(fig_ft, chart_h).update_layout(
+                xaxis=dict(title="Number of failures", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                yaxis=dict(tickfont=dict(size=12), linecolor="#e2e8f0"),
                 showlegend=False,
+                margin=dict(l=0, r=70, t=8, b=0),
             )
-            st.plotly_chart(fig_d, use_container_width=True, config={"displayModeBar": False})
+            st.plotly_chart(fig_ft, use_container_width=True, config={"displayModeBar": False})
         else:
             st.caption("No failures in the last 24h.")
-
-    # ── Action items ─────────────────────────────────────────────────────────
-    _section_head("Action Items", "highest impact — fix in order")
-
-    if not patterns:
-        st.info("No recurring patterns yet — patterns appear once 5+ failures share a root cause.")
-        return
-
-    sorted_p = sorted(
-        [p for p in patterns if p.pattern_type == "failure_type"],
-        key=lambda x: x.pct_of_all_failures,
-        reverse=True,
-    )
-    seen: set = set()
-    n = 0
-    for p in sorted_p:
-        if p.root_cause in seen or n >= 5:
-            break
-        seen.add(p.root_cause)
-        n += 1
-        ft = p.pattern_value
-        fg, bg = _ft_color(ft)
-        fix = _FIXES.get(ft, "Review agent logic.")
-        worsening = ' <span style="color:#ef4444;font-size:11px">▲ worsening</span>' if p.is_worsening else ""
-
-        st.markdown(
-            f"""
-            <div style="background:white;border:1px solid #e2e8f0;border-left:4px solid {fg};
-                        border-radius:0 12px 12px 0;padding:16px 20px;margin:8px 0;
-                        box-shadow:0 1px 3px rgba(15,23,42,0.04)">
-              <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                  <span style="font-size:11px;font-weight:800;color:#94a3b8">#{n}</span>
-                  {_badge(ft)}
-                  {worsening}
-                </div>
-                <span style="font-size:13px;font-weight:800;color:{fg}">
-                  {p.pct_of_all_failures * 100:.0f}% of failures
-                </span>
-              </div>
-              <div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:6px">
-                {p.root_cause or "No root cause identified"}
-              </div>
-              <div style="font-size:12px;color:#0891b2;margin-bottom:8px">→ {fix}</div>
-              <div style="font-size:11px;color:#94a3b8">
-                {p.failure_count} occurrences · {p.failure_rate * 100:.0f}% fail rate
-              </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
