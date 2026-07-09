@@ -53,12 +53,77 @@ dist/
 *.egg-info/
 build/
 
-# Old branding / internal planning docs
+# Internal planning / old branding docs — live in private agentiq repo
 agentiq-*.docx
 agentiq-*.html
 agentiq-*.md
 agentiq-site.html
 agentiq-dev-landing.html
+"AgentIQ — One Pager_files/"
+CLAUDE.md
+CODING_PROMPT.md*
+COMPREHENSIVE_TESTING_PLAN.md
+CRITICAL_ISSUES_FIX_PLAN.md
+DEPLOY_TO_RAILWAY.md
+END_TO_END_TESTING_GUIDE.md
+FIXES_APPLIED.md
+HOW_TO_TEST_DASHBOARD.md
+INIT_PROMPT.md*
+LAUNCH_POST.md
+README_AUTONOMOUS.md
+README_DASHBOARD.md
+README_DEPLOYMENT.md
+REVIEWER_PROMPT.md*
+TESTING_PLAN.md
+TEST_RESULTS.md
+API_ENDPOINTS.md
+AgentIQ-deployment.tar.gz
+
+# Old architecture — archived in private repo
+_archive/
+sdk/
+evaluation/
+ingestion/
+patterns/
+causal/
+analytics/
+dashboard/
+docs/
+site/
+api/admin_endpoints.py
+api/analytics_endpoints.py
+api/evaluation_endpoints.py
+api/ingest_endpoints.py
+api/monitoring.py
+api/pattern_endpoints.py
+api/security.py
+autonomous_llm_judge.py
+comprehensive_agentiq_test.py
+config.py
+debug_intent.py
+deploy_to_render.sh
+dashboard_render.yaml
+dashboard_requirements.txt
+render-dashboard.yaml
+env_example
+features_list.json
+final_working_loader.py
+integration_showcase.html
+integration_test.py
+integration_test_report.json
+intent_classification.py
+kalytera-admin.html
+kalytera-site.html
+load_demo_data.py
+loss_pattern_analyzer.py
+main.py
+run_with_review.sh
+simple_dashboard.py
+test_evaluation_simple.py
+test_patterns_simple.py
+test_sdk_integration.py
+tests/unit/
+web_dashboard.html
 
 # Large demo/test data scripts (not for public SDK)
 load_100k.py

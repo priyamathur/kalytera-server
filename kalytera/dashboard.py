@@ -655,98 +655,156 @@ def _show_overview(agent_id: str) -> None:
 
     # ── Scoring Configuration ─────────────────────────────────────────────────
     st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
-    with st.expander("⚙  Scoring Configuration — calibrate weights for your industry", expanded=False):
+    with st.expander("⚙  Scoring Configuration", expanded=False):
         db2 = _db()
         try:
             cfg = get_quality_config(agent_id, db2)
         finally:
             db2.close()
 
-        _INDUSTRY_PRESETS: Dict[str, Dict[str, Any]] = {
-            "default":         dict(weight_accuracy=0.35, weight_goal_alignment=0.35, weight_decision=0.15, weight_completeness=0.15, pass_threshold=0.70),
-            "customer_support":dict(weight_accuracy=0.30, weight_goal_alignment=0.40, weight_decision=0.15, weight_completeness=0.15, pass_threshold=0.70),
-            "healthcare":      dict(weight_accuracy=0.50, weight_goal_alignment=0.25, weight_decision=0.15, weight_completeness=0.10, pass_threshold=0.80),
-            "legal":           dict(weight_accuracy=0.45, weight_goal_alignment=0.30, weight_decision=0.15, weight_completeness=0.10, pass_threshold=0.80),
-            "sales":           dict(weight_accuracy=0.25, weight_goal_alignment=0.40, weight_decision=0.20, weight_completeness=0.15, pass_threshold=0.65),
-            "coding_assistant":dict(weight_accuracy=0.40, weight_goal_alignment=0.25, weight_decision=0.20, weight_completeness=0.15, pass_threshold=0.75),
+        _PRESETS: Dict[str, Dict[str, Any]] = {
+            "Default":          dict(weight_accuracy=0.35, weight_goal_alignment=0.35, weight_decision=0.15, weight_completeness=0.15, pass_threshold=0.70),
+            "Customer support": dict(weight_accuracy=0.30, weight_goal_alignment=0.40, weight_decision=0.15, weight_completeness=0.15, pass_threshold=0.70),
+            "Healthcare":       dict(weight_accuracy=0.50, weight_goal_alignment=0.25, weight_decision=0.15, weight_completeness=0.10, pass_threshold=0.80),
+            "Legal":            dict(weight_accuracy=0.45, weight_goal_alignment=0.30, weight_decision=0.15, weight_completeness=0.10, pass_threshold=0.80),
+            "Sales":            dict(weight_accuracy=0.25, weight_goal_alignment=0.40, weight_decision=0.20, weight_completeness=0.15, pass_threshold=0.65),
+            "Coding assistant": dict(weight_accuracy=0.40, weight_goal_alignment=0.25, weight_decision=0.20, weight_completeness=0.15, pass_threshold=0.75),
         }
 
+        _industry_map = {
+            "default": "Default", "customer_support": "Customer support",
+            "healthcare": "Healthcare", "legal": "Legal",
+            "sales": "Sales", "coding_assistant": "Coding assistant",
+        }
+        _industry_key_map = {v: k for k, v in _industry_map.items()}
+
+        # ── Preset pills ──────────────────────────────────────────────────────
         st.markdown(
-            '<p style="font-size:13px;color:#64748b;margin-bottom:14px">'
-            'Adjust how each dimension is weighted and what score counts as a pass. '
-            'Weights must sum to 1.0. Changes apply to future evaluations.</p>',
+            '<p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'
+            'letter-spacing:0.06em;margin-bottom:6px">Start from a preset</p>',
+            unsafe_allow_html=True,
+        )
+        cur_label = _industry_map.get(cfg.get("industry", "default"), "Default")
+        preset_cols = st.columns(len(_PRESETS))
+        selected_preset_label = cur_label
+        for col, (label, _) in zip(preset_cols, _PRESETS.items()):
+            is_active = label == cur_label
+            btn_style = (
+                "background:#6366f1;color:white;border:1px solid #6366f1;"
+                if is_active else
+                "background:white;color:#475569;border:1px solid #e2e8f0;"
+            )
+            if col.button(
+                label,
+                key=f"preset_{label}",
+                use_container_width=True,
+                help=f"Load {label} weights",
+            ):
+                selected_preset_label = label
+                p = _PRESETS[label]
+                st.session_state["cfg_acc"]   = int(p["weight_accuracy"] * 100)
+                st.session_state["cfg_goal"]  = int(p["weight_goal_alignment"] * 100)
+                st.session_state["cfg_dec"]   = int(p["weight_decision"] * 100)
+                st.session_state["cfg_comp"]  = int(p["weight_completeness"] * 100)
+                st.session_state["cfg_thresh"]= int(p["pass_threshold"] * 100)
+                st.rerun()
+
+        st.markdown('<div style="height:12px"/>', unsafe_allow_html=True)
+
+        # ── Weight table ──────────────────────────────────────────────────────
+        st.markdown(
+            '<p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'
+            'letter-spacing:0.06em;margin-bottom:8px">Dimension weights</p>',
             unsafe_allow_html=True,
         )
 
-        preset_names = list(_INDUSTRY_PRESETS.keys())
-        cur_industry = cfg.get("industry", "default")
-        industry = st.selectbox(
-            "Industry preset",
-            preset_names,
-            index=preset_names.index(cur_industry) if cur_industry in preset_names else 0,
-            key="cfg_industry",
-            help="Load preset weights for your industry — then fine-tune below.",
-        )
-        preset = _INDUSTRY_PRESETS[industry]
+        _DIMS = [
+            ("cfg_acc",   "Accuracy",          cfg["weight_accuracy"],        "Factual correctness — raise for healthcare / legal"),
+            ("cfg_goal",  "Goal alignment",     cfg["weight_goal_alignment"],  "Did the agent address what the user actually needed?"),
+            ("cfg_dec",   "Decision quality",   cfg["weight_decision"],        "Soundness of reasoning and tool choice"),
+            ("cfg_comp",  "Completeness",       cfg["weight_completeness"],    "Was the request fully resolved?"),
+        ]
 
-        cc1, cc2 = st.columns(2)
-        with cc1:
-            w_acc = st.slider("Accuracy weight", 0.05, 0.70,
-                              value=float(cfg["weight_accuracy"]), step=0.05,
-                              key="cfg_acc",
-                              help="Factual correctness — raise for healthcare/legal")
-            w_goal = st.slider("Goal alignment weight", 0.05, 0.70,
-                               value=float(cfg["weight_goal_alignment"]), step=0.05,
-                               key="cfg_goal",
-                               help="Did the agent address what the user actually needed?")
-        with cc2:
-            w_dec = st.slider("Decision quality weight", 0.05, 0.50,
-                              value=float(cfg["weight_decision"]), step=0.05,
-                              key="cfg_dec",
-                              help="Soundness of reasoning and tool choice")
-            w_comp = st.slider("Completeness weight", 0.05, 0.50,
-                               value=float(cfg["weight_completeness"]), step=0.05,
-                               key="cfg_comp",
-                               help="Was the request fully resolved?")
-
-        total = round(w_acc + w_goal + w_dec + w_comp, 2)
-        threshold = st.slider("Pass threshold", 0.50, 0.95,
-                              value=float(cfg["pass_threshold"]), step=0.05,
-                              key="cfg_thresh",
-                              help="Overall score must reach this to count as passed")
-
-        warn_col, btn_col = st.columns([3, 1])
-        if abs(total - 1.0) > 0.01:
-            warn_col.warning(f"Weights sum to {total:.2f} — must equal 1.00 to save.")
-        else:
-            warn_col.markdown(
-                f'<p style="font-size:12px;color:#64748b;margin-top:8px">'
-                f'Weights sum to {total:.2f} ✓ &nbsp;·&nbsp; pass at ≥ {threshold:.0%}</p>',
+        w_vals = []
+        for key, label, default_frac, hint in _DIMS:
+            default_pct = int(default_frac * 100)
+            stored = st.session_state.get(key, default_pct)
+            lc, nc, hc = st.columns([3, 1, 4])
+            lc.markdown(
+                f'<div style="font-size:13px;font-weight:600;color:#1e293b;padding-top:6px">'
+                f'{label}</div>'
+                f'<div style="font-size:11px;color:#94a3b8">{hint}</div>',
                 unsafe_allow_html=True,
             )
+            val = nc.number_input(
+                label, min_value=5, max_value=95, value=int(stored), step=5,
+                key=key, label_visibility="collapsed",
+            )
+            bar_w = val
+            bar_color = "#6366f1" if val >= 30 else "#94a3b8"
+            hc.markdown(
+                f'<div style="padding-top:10px">'
+                f'<div style="display:flex;align-items:center;gap:8px">'
+                f'<div style="flex:1;background:#f1f5f9;border-radius:4px;height:6px">'
+                f'<div style="background:{bar_color};width:{bar_w}%;height:6px;border-radius:4px"></div>'
+                f'</div>'
+                f'<span style="font-size:12px;color:#64748b;width:28px;text-align:right">{val}%</span>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+            w_vals.append(val)
 
-        if btn_col.button("Save config", use_container_width=True, disabled=abs(total - 1.0) > 0.01):
+        total = sum(w_vals)
+        total_color = "#16a34a" if total == 100 else "#dc2626"
+        st.markdown(
+            f'<div style="border-top:1px solid #e2e8f0;margin:8px 0;padding-top:8px;'
+            f'display:flex;justify-content:space-between;align-items:center">'
+            f'<span style="font-size:13px;font-weight:700;color:#1e293b">Total</span>'
+            f'<span style="font-size:14px;font-weight:800;color:{total_color}">{total}%'
+            f'{"  ✓" if total == 100 else "  — must equal 100%"}</span>'
+            f'</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
+
+        # ── Pass threshold ────────────────────────────────────────────────────
+        st.markdown(
+            '<p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'
+            'letter-spacing:0.06em;margin-bottom:8px">Pass threshold</p>',
+            unsafe_allow_html=True,
+        )
+        thresh_stored = st.session_state.get("cfg_thresh", int(cfg["pass_threshold"] * 100))
+        tc1, tc2 = st.columns([1, 3])
+        thresh = tc1.number_input(
+            "Pass threshold %", min_value=50, max_value=95, value=int(thresh_stored), step=5,
+            key="cfg_thresh", label_visibility="collapsed",
+        )
+        tc2.markdown(
+            f'<div style="font-size:12px;color:#64748b;padding-top:8px">'
+            f'Steps scoring below <strong>{thresh}%</strong> are flagged as failures '
+            f'and appear in the Failure Feed.</div>',
+            unsafe_allow_html=True,
+        )
+
+        st.markdown('<div style="height:12px"/>', unsafe_allow_html=True)
+
+        # ── Save ──────────────────────────────────────────────────────────────
+        _, save_col = st.columns([3, 1])
+        if save_col.button("Save", use_container_width=True, disabled=total != 100):
             db3 = _db()
             try:
                 upsert_quality_config(agent_id, {
-                    "industry": industry,
-                    "weight_accuracy": w_acc,
-                    "weight_goal_alignment": w_goal,
-                    "weight_decision": w_dec,
-                    "weight_completeness": w_comp,
-                    "pass_threshold": threshold,
+                    "industry": _industry_key_map.get(selected_preset_label, "default"),
+                    "weight_accuracy":     w_vals[0] / 100,
+                    "weight_goal_alignment": w_vals[1] / 100,
+                    "weight_decision":     w_vals[2] / 100,
+                    "weight_completeness": w_vals[3] / 100,
+                    "pass_threshold":      thresh / 100,
                 }, db3)
             finally:
                 db3.close()
-            st.success("Config saved. New weights apply to the next evaluation cycle.")
-
-        if st.button("Load preset", key="cfg_preset"):
-            st.session_state["cfg_acc"] = preset["weight_accuracy"]
-            st.session_state["cfg_goal"] = preset["weight_goal_alignment"]
-            st.session_state["cfg_dec"] = preset["weight_decision"]
-            st.session_state["cfg_comp"] = preset["weight_completeness"]
-            st.session_state["cfg_thresh"] = preset["pass_threshold"]
-            st.rerun()
+            st.success("Saved. New weights apply to the next evaluation cycle.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
