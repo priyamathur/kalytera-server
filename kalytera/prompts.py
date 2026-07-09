@@ -90,6 +90,9 @@ def build_prompt(
         f"4. completeness: Was the request fully resolved?\n\n"
         f"If any dimension is below 0.7, identify the failure type:\n"
         f"{_FAILURE_LIST}\n\n"
+        f"failure_reason: one short phrase, max 12 words. "
+        f'Format: "[what failed] at {step.step_name}; [one-word consequence]." '
+        f"Example: \"Payment API timed out at process_payment; charge not completed.\"\n\n"
         f"Respond with JSON only:\n"
         f"{_JSON_TEMPLATE}"
     )

@@ -118,6 +118,19 @@ def _fix_trace(ft: Optional[str], step: str) -> str:
     return _FIX_TRACE.get(ft or "", "Review agent logic at **{s}**.").format(s=step)
 
 
+def _short_reason(reason: Optional[str], ft: Optional[str], step_name: str) -> str:
+    """Return a concise one-line failure reason for cards/feed — never a paragraph."""
+    if not reason:
+        return f"{ft or 'failure'} at {step_name}"
+    # Take text up to the first sentence break
+    for sep in (". ", "; ", "\n"):
+        idx = reason.find(sep)
+        if 0 < idx < 120:
+            return reason[:idx + 1].strip()
+    # Hard truncate at 100 chars
+    return reason[:100].rstrip(" ,") + ("…" if len(reason) > 100 else "")
+
+
 # ── DB helpers ────────────────────────────────────────────────────────────────
 @st.cache_resource
 def _engine():  # type: ignore[return]
@@ -138,6 +151,7 @@ from db.queries import (  # noqa: E402
     get_failures_by_step,
     get_latency_values,
     get_patterns_for_agent,
+    get_quality_config,
     get_quality_trend,
     get_recent_eval_failures,
     get_recent_failing_sessions,
@@ -147,6 +161,7 @@ from db.queries import (  # noqa: E402
     get_todays_stats,
     get_top_failure_types,
     search_eval_failures,
+    upsert_quality_config,
 )
 
 # ── Nav redirect (pop before sidebar renders, set index from it) ──────────────
@@ -526,6 +541,7 @@ def _show_overview(agent_id: str) -> None:
                 xaxis=dict(title="Score range (0–100)", tickfont=dict(size=10),
                            gridcolor="#f1f5f9", linecolor="#e2e8f0"),
                 showlegend=False,
+                margin=dict(l=10, r=10, t=8, b=50),
             )
             st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
         else:
@@ -567,11 +583,11 @@ def _show_overview(agent_id: str) -> None:
                          annotation_position="top left",
                          annotation_font_size=10, annotation_font_color="#ef4444")
         _plotly_defaults(fig_sq, max(160, len(step_scores) * 44)).update_layout(
-            xaxis=dict(title="Avg quality score (0–100)", range=[0, 120],
+            xaxis=dict(title="Avg quality score (0–100)", range=[0, 130],
                        gridcolor="#f1f5f9", linecolor="#e2e8f0"),
-            yaxis=dict(tickfont=dict(size=12), linecolor="#e2e8f0"),
+            yaxis=dict(tickfont=dict(size=12), linecolor="#e2e8f0", automargin=True),
             showlegend=False,
-            margin=dict(l=0, r=100, t=8, b=0),
+            margin=dict(l=10, r=130, t=8, b=40),
         )
         st.plotly_chart(fig_sq, use_container_width=True, config={"displayModeBar": False})
 
@@ -629,13 +645,108 @@ def _show_overview(agent_id: str) -> None:
             chart_h = max(160, len(top_types) * 44)
             _plotly_defaults(fig_ft, chart_h).update_layout(
                 xaxis=dict(title="Number of failures", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
-                yaxis=dict(tickfont=dict(size=12), linecolor="#e2e8f0"),
+                yaxis=dict(tickfont=dict(size=12), linecolor="#e2e8f0", automargin=True),
                 showlegend=False,
-                margin=dict(l=0, r=70, t=8, b=0),
+                margin=dict(l=10, r=90, t=8, b=40),
             )
             st.plotly_chart(fig_ft, use_container_width=True, config={"displayModeBar": False})
         else:
             st.caption("No failures in the last 24h.")
+
+    # ── Scoring Configuration ─────────────────────────────────────────────────
+    st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
+    with st.expander("⚙  Scoring Configuration — calibrate weights for your industry", expanded=False):
+        db2 = _db()
+        try:
+            cfg = get_quality_config(agent_id, db2)
+        finally:
+            db2.close()
+
+        _INDUSTRY_PRESETS: Dict[str, Dict[str, Any]] = {
+            "default":         dict(weight_accuracy=0.35, weight_goal_alignment=0.35, weight_decision=0.15, weight_completeness=0.15, pass_threshold=0.70),
+            "customer_support":dict(weight_accuracy=0.30, weight_goal_alignment=0.40, weight_decision=0.15, weight_completeness=0.15, pass_threshold=0.70),
+            "healthcare":      dict(weight_accuracy=0.50, weight_goal_alignment=0.25, weight_decision=0.15, weight_completeness=0.10, pass_threshold=0.80),
+            "legal":           dict(weight_accuracy=0.45, weight_goal_alignment=0.30, weight_decision=0.15, weight_completeness=0.10, pass_threshold=0.80),
+            "sales":           dict(weight_accuracy=0.25, weight_goal_alignment=0.40, weight_decision=0.20, weight_completeness=0.15, pass_threshold=0.65),
+            "coding_assistant":dict(weight_accuracy=0.40, weight_goal_alignment=0.25, weight_decision=0.20, weight_completeness=0.15, pass_threshold=0.75),
+        }
+
+        st.markdown(
+            '<p style="font-size:13px;color:#64748b;margin-bottom:14px">'
+            'Adjust how each dimension is weighted and what score counts as a pass. '
+            'Weights must sum to 1.0. Changes apply to future evaluations.</p>',
+            unsafe_allow_html=True,
+        )
+
+        preset_names = list(_INDUSTRY_PRESETS.keys())
+        cur_industry = cfg.get("industry", "default")
+        industry = st.selectbox(
+            "Industry preset",
+            preset_names,
+            index=preset_names.index(cur_industry) if cur_industry in preset_names else 0,
+            key="cfg_industry",
+            help="Load preset weights for your industry — then fine-tune below.",
+        )
+        preset = _INDUSTRY_PRESETS[industry]
+
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            w_acc = st.slider("Accuracy weight", 0.05, 0.70,
+                              value=float(cfg["weight_accuracy"]), step=0.05,
+                              key="cfg_acc",
+                              help="Factual correctness — raise for healthcare/legal")
+            w_goal = st.slider("Goal alignment weight", 0.05, 0.70,
+                               value=float(cfg["weight_goal_alignment"]), step=0.05,
+                               key="cfg_goal",
+                               help="Did the agent address what the user actually needed?")
+        with cc2:
+            w_dec = st.slider("Decision quality weight", 0.05, 0.50,
+                              value=float(cfg["weight_decision"]), step=0.05,
+                              key="cfg_dec",
+                              help="Soundness of reasoning and tool choice")
+            w_comp = st.slider("Completeness weight", 0.05, 0.50,
+                               value=float(cfg["weight_completeness"]), step=0.05,
+                               key="cfg_comp",
+                               help="Was the request fully resolved?")
+
+        total = round(w_acc + w_goal + w_dec + w_comp, 2)
+        threshold = st.slider("Pass threshold", 0.50, 0.95,
+                              value=float(cfg["pass_threshold"]), step=0.05,
+                              key="cfg_thresh",
+                              help="Overall score must reach this to count as passed")
+
+        warn_col, btn_col = st.columns([3, 1])
+        if abs(total - 1.0) > 0.01:
+            warn_col.warning(f"Weights sum to {total:.2f} — must equal 1.00 to save.")
+        else:
+            warn_col.markdown(
+                f'<p style="font-size:12px;color:#64748b;margin-top:8px">'
+                f'Weights sum to {total:.2f} ✓ &nbsp;·&nbsp; pass at ≥ {threshold:.0%}</p>',
+                unsafe_allow_html=True,
+            )
+
+        if btn_col.button("Save config", use_container_width=True, disabled=abs(total - 1.0) > 0.01):
+            db3 = _db()
+            try:
+                upsert_quality_config(agent_id, {
+                    "industry": industry,
+                    "weight_accuracy": w_acc,
+                    "weight_goal_alignment": w_goal,
+                    "weight_decision": w_dec,
+                    "weight_completeness": w_comp,
+                    "pass_threshold": threshold,
+                }, db3)
+            finally:
+                db3.close()
+            st.success("Config saved. New weights apply to the next evaluation cycle.")
+
+        if st.button("Load preset", key="cfg_preset"):
+            st.session_state["cfg_acc"] = preset["weight_accuracy"]
+            st.session_state["cfg_goal"] = preset["weight_goal_alignment"]
+            st.session_state["cfg_dec"] = preset["weight_decision"]
+            st.session_state["cfg_comp"] = preset["weight_completeness"]
+            st.session_state["cfg_thresh"] = preset["pass_threshold"]
+            st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -789,6 +900,7 @@ def _render_failure_row(ev: Any, log: Any) -> None:
     score = int(round(ev.overall_score * 100))
     ft = ev.failure_type or "unknown"
     fg, _ = _ft_color(ft)
+    reason = _short_reason(ev.failure_reason, ft, log.step_name)
 
     with st.container(border=True):
         lc, rc = st.columns([6, 1])
@@ -797,20 +909,14 @@ def _render_failure_row(ev: Any, log: Any) -> None:
                 f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
                 f'{_badge(ft)}'
                 f'<span style="font-size:13px;font-weight:700;color:{fg}">{score}/100</span>'
+                f'<span style="font-size:12px;color:#94a3b8">Step {log.step_number} · {log.step_name}</span>'
                 f'<span style="font-size:12px;color:#94a3b8">{_fmt_ts(ev.evaluated_at)}</span>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-            reason = ev.failure_reason or ft
             st.markdown(
-                f'<div style="font-size:14px;color:#1e293b;font-weight:500;margin-bottom:4px">'
+                f'<div style="font-size:13px;color:#1e293b;font-weight:500;line-height:1.4">'
                 f'{reason}</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                f'<div style="font-size:12px;color:#94a3b8">'
-                f'Step {log.step_number} · {log.step_name}'
-                f'</div>',
                 unsafe_allow_html=True,
             )
         with rc:
@@ -892,7 +998,7 @@ def _render_failure_card(ev: Any, log: Any) -> None:
                 """,
                 unsafe_allow_html=True,
             )
-            reason = ev.failure_reason or ft
+            reason = _short_reason(ev.failure_reason, ft, log.step_name)
             st.markdown(
                 f'<div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:4px">'
                 f'{reason}</div>',
@@ -1270,7 +1376,7 @@ def _show_session_browser(agent_id: str) -> None:
             "Failure type": s["failure_type"] or "unknown",
             "Step": s["failure_step"] or "—",
             "Score": int(s["overall_score"] * 100),
-            "Root cause": (s["failure_reason"] or "")[:70],
+            "Root cause": _short_reason(s["failure_reason"], s["failure_type"], s.get("failure_step") or ""),
             "_session_id": s["session_id"],
         }
         for s in sessions

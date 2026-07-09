@@ -580,6 +580,47 @@ def downgrade_org(subscription_id: str, db: Session) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Agent quality config
+# ---------------------------------------------------------------------------
+
+_DEFAULTS = dict(
+    industry="default",
+    weight_accuracy=0.35,
+    weight_goal_alignment=0.35,
+    weight_decision=0.15,
+    weight_completeness=0.15,
+    pass_threshold=0.70,
+)
+
+
+def get_quality_config(agent_id: str, db: Session) -> Dict[str, Any]:
+    row = db.query(AgentQualityConfig).filter(AgentQualityConfig.agent_id == agent_id).first()
+    if row is None:
+        return {"agent_id": agent_id, **_DEFAULTS}
+    return {
+        "agent_id": row.agent_id,
+        "industry": row.industry,
+        "weight_accuracy": row.weight_accuracy,
+        "weight_goal_alignment": row.weight_goal_alignment,
+        "weight_decision": row.weight_decision,
+        "weight_completeness": row.weight_completeness,
+        "pass_threshold": row.pass_threshold,
+    }
+
+
+def upsert_quality_config(agent_id: str, updates: Dict[str, Any], db: Session) -> None:
+    row = db.query(AgentQualityConfig).filter(AgentQualityConfig.agent_id == agent_id).first()
+    if row is None:
+        row = AgentQualityConfig(agent_id=agent_id, **{**_DEFAULTS, **updates})
+        db.add(row)
+    else:
+        for k, v in updates.items():
+            if hasattr(row, k):
+                setattr(row, k, v)
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
