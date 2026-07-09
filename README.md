@@ -6,7 +6,19 @@ Kalytera sits alongside your agent, scores every interaction with an LLM judge, 
 
 ---
 
-## Install
+## Get started in 2 minutes
+
+**1. Get an API key** (free, no credit card):
+
+```bash
+curl -s -X POST https://agentiq-api-z9it.onrender.com/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@example.com", "name": "your-agent"}' | python3 -m json.tool
+```
+
+You'll get back an `api_key` (looks like `kly_live_...`). Save it.
+
+**2. Install the SDK:**
 
 ```bash
 pip install kalytera
@@ -14,25 +26,28 @@ pip install kalytera
 
 Only dependency: `aiohttp`. Does not require the Kalytera server to be running at import time.
 
----
-
-## Quickstart (3 lines)
+**3. Add one call per agent step:**
 
 ```python
 import kalytera
 
-kalytera.configure(api_key="your-api-key", api_endpoint="https://your-kalytera-host")
+kalytera.configure(
+    api_key="kly_live_...",   # from signup above
+    api_endpoint="https://agentiq-api-z9it.onrender.com",
+)
 
 kalytera.trace(
-    session_id="session-123",     # groups all steps of one conversation
+    session_id="session-123",
     step_number=1,
-    step_name="classify_intent",  # meaningful label — appears in the dashboard
+    step_name="classify_intent",
     input="I need to cancel my subscription",
     output="I can help with that. Can I ask why?",
 )
 ```
 
-`trace()` returns immediately. It never raises. If the Kalytera server is unreachable, your agent keeps running and events are queued locally.
+`trace()` returns immediately. It never raises. If the server is unreachable, your agent keeps running and events are queued locally.
+
+---
 
 ---
 
@@ -156,14 +171,14 @@ Kalytera evaluates each step in the background. Quality scores appear in the das
 ## Hosting options
 
 ### Option 1 — Kalytera Cloud (SaaS)
-Get an API key from your Kalytera admin. Set it in `configure()` or via env var. No infrastructure needed.
+Sign up via the curl command above. Use `api_endpoint="https://agentiq-api-z9it.onrender.com"`. No infrastructure needed.
 
 ### Option 2 — Self-hosted (Docker)
 For teams that want data on their own infrastructure:
 
 ```bash
-git clone https://github.com/priyamathur/AgentIQ
-cd AgentIQ
+git clone https://github.com/priyamathur/kalytera-server
+cd kalytera-server
 cp .env.example .env        # fill in ANTHROPIC_API_KEY and POSTGRES_PASSWORD
 docker compose up           # starts API + dashboard + database
 ```

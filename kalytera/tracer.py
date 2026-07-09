@@ -45,12 +45,13 @@ def trace(
     output: str,
     tool_calls: Optional[List[Dict[str, Any]]] = None,
     metadata: Optional[Dict[str, Any]] = None,
+    agent_id: Optional[str] = None,
 ) -> None:
     """Record one agent step. Returns immediately. Never raises."""
     try:
         payload: Dict[str, Any] = {
             "id": str(uuid.uuid4()),
-            "agent_id": _agent_id,
+            "agent_id": agent_id or _agent_id,
             "session_id": str(session_id) if session_id is not None else "",
             "step_number": int(step_number) if step_number is not None else 1,
             "step_name": str(step_name) if step_name is not None else "",
