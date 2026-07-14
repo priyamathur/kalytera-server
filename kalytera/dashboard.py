@@ -286,45 +286,18 @@ code {
 /* ── Plotly charts ── */
 .js-plotly-plot { border-radius: 12px !important; }
 
-/* ── Sidebar collapse/expand toggle — always visible ── */
+/* ── Sidebar: hide collapse button so sidebar is always open ── */
+/* Collapse button inside expanded sidebar */
+section[data-testid="stSidebar"] button[data-testid="stBaseButton-headerNoPadding"],
+section[data-testid="stSidebar"] [data-testid="stSidebarCollapseButton"],
+section[data-testid="stSidebar"] button[kind="header"] {
+    display: none !important;
+}
+/* Expand button when sidebar is collapsed (fallback) */
 section[data-testid="stSidebarCollapsedControl"],
 div[data-testid="stSidebarCollapsedControl"],
 [data-testid="collapsedControl"] {
-    display: flex !important;
-    visibility: visible !important;
-    opacity: 1 !important;
-    pointer-events: auto !important;
-    position: fixed !important;
-    left: 0 !important;
-    top: 50% !important;
-    transform: translateY(-50%) !important;
-    z-index: 999999 !important;
-    background: #6366f1 !important;
-    border: none !important;
-    border-radius: 0 10px 10px 0 !important;
-    box-shadow: 3px 0 12px rgba(99,102,241,0.4) !important;
-    width: 28px !important;
-    min-width: 28px !important;
-    height: 52px !important;
-    align-items: center !important;
-    justify-content: center !important;
-    cursor: pointer !important;
-}
-section[data-testid="stSidebarCollapsedControl"] svg,
-div[data-testid="stSidebarCollapsedControl"] svg,
-[data-testid="collapsedControl"] svg {
-    color: white !important;
-    fill: white !important;
-    stroke: white !important;
-}
-section[data-testid="stSidebarCollapsedControl"] button,
-div[data-testid="stSidebarCollapsedControl"] button,
-[data-testid="collapsedControl"] button {
-    background: transparent !important;
-    border: none !important;
-    color: white !important;
-    width: 100% !important;
-    height: 100% !important;
+    display: none !important;
 }
 </style>
 """, unsafe_allow_html=True)
@@ -515,8 +488,8 @@ def _show_overview(agent_id: str) -> None:
     _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#6366f1"}
     _CALIB_LABEL = {"excellent": "Calibrated ✓", "good": "Good", "needs_calibration": "Review weights", "unlabeled": "Not yet labeled"}
     calib_status = calib["status"]
-    calib_val = f"{calib['agreement_rate']*100:.0f}%" if calib["agreement_rate"] is not None else "Set up →"
-    calib_sub = f"{calib['total_labeled']} sessions labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "👍/👎 sessions in Trace Viewer"
+    calib_val = f"{calib['agreement_rate']*100:.0f}%" if calib["agreement_rate"] is not None else "—"
+    calib_sub = f"{calib['total_labeled']} sessions labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "Go to Trace Viewer → label sessions 👍👎"
     k6.markdown(_kpi_card("Judge Accuracy", calib_val, calib_sub, color=_CALIB_COLOR[calib_status]), unsafe_allow_html=True)
 
     # ── Quality trend + session volume ───────────────────────────────────────
