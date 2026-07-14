@@ -55,6 +55,8 @@ class EvalResult(Base):
     goal_alignment = Column(Float, nullable=False)
     decision_quality = Column(Float, nullable=False)
     completeness = Column(Float, nullable=False)
+    helpfulness = Column(Float, nullable=True)
+    factuality = Column(Float, nullable=True)
     overall_score = Column(Float, nullable=False)   # weighted average, 0.0–1.0
     passed = Column(Boolean, nullable=False)        # overall_score >= pass_threshold
     failure_type = Column(String, nullable=True)    # null if passed
@@ -88,10 +90,12 @@ class AgentQualityConfig(Base):
 
     agent_id = Column(String, primary_key=True)
     industry = Column(String, nullable=False, default="default")
-    weight_accuracy = Column(Float, nullable=False, default=0.35)
-    weight_goal_alignment = Column(Float, nullable=False, default=0.35)
+    weight_accuracy = Column(Float, nullable=False, default=0.25)
+    weight_goal_alignment = Column(Float, nullable=False, default=0.25)
     weight_decision = Column(Float, nullable=False, default=0.15)
     weight_completeness = Column(Float, nullable=False, default=0.15)
+    weight_helpfulness = Column(Float, nullable=False, default=0.10)
+    weight_factuality = Column(Float, nullable=False, default=0.10)
     pass_threshold = Column(Float, nullable=False, default=0.7)
     custom_metrics = Column(Text, nullable=True)  # JSON: [{"name":"helpfulness","weight":0.2,"description":"..."}]
 

@@ -585,10 +585,12 @@ def downgrade_org(subscription_id: str, db: Session) -> None:
 
 _DEFAULTS = dict(
     industry="default",
-    weight_accuracy=0.35,
-    weight_goal_alignment=0.35,
+    weight_accuracy=0.25,
+    weight_goal_alignment=0.25,
     weight_decision=0.15,
     weight_completeness=0.15,
+    weight_helpfulness=0.10,
+    weight_factuality=0.10,
     pass_threshold=0.70,
     custom_metrics=[],
 )
@@ -611,6 +613,8 @@ def get_quality_config(agent_id: str, db: Session) -> Dict[str, Any]:
         "weight_goal_alignment": row.weight_goal_alignment,
         "weight_decision": row.weight_decision,
         "weight_completeness": row.weight_completeness,
+        "weight_helpfulness": getattr(row, "weight_helpfulness", 0.10) or 0.10,
+        "weight_factuality": getattr(row, "weight_factuality", 0.10) or 0.10,
         "pass_threshold": row.pass_threshold,
         "custom_metrics": custom,
     }

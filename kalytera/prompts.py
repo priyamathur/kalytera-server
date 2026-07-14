@@ -20,6 +20,8 @@ EXPECTED_KEYS: frozenset[str] = frozenset({
     "goal_alignment",
     "decision_quality",
     "completeness",
+    "helpfulness",
+    "factuality",
     "overall_score",
     "passed",
     "failure_type",
@@ -41,6 +43,8 @@ _JSON_TEMPLATE = """{
   "goal_alignment": 0.0,
   "decision_quality": 0.0,
   "completeness": 0.0,
+  "helpfulness": 0.0,
+  "factuality": 0.0,
   "overall_score": 0.0,
   "passed": true,
   "failure_type": null,
@@ -60,6 +64,8 @@ def _build_json_template(custom_metrics: List[Dict[str, Any]]) -> str:
         "  \"goal_alignment\": 0.0,\n"
         "  \"decision_quality\": 0.0,\n"
         "  \"completeness\": 0.0,\n"
+        "  \"helpfulness\": 0.0,\n"
+        "  \"factuality\": 0.0,\n"
         + custom_lines +
         "  \"overall_score\": 0.0,\n"
         "  \"passed\": true,\n"
@@ -103,11 +109,13 @@ def build_prompt(
         "1. accuracy: Was the response factually correct given available context?\n"
         "2. goal_alignment: Did the agent serve what the user actually needed?\n"
         "3. decision_quality: Was the reasoning sound and tool selection appropriate?\n"
-        "4. completeness: Was the request fully resolved?"
+        "4. completeness: Was the request fully resolved?\n"
+        "5. helpfulness: Did the response practically help the user accomplish their goal?\n"
+        "6. factuality: Were all claims made verifiable and grounded — no hallucinations?"
     )
     if custom:
         extras = "\n".join(
-            f"{4 + i + 1}. {m['name']}: {m.get('description', 'Custom evaluation dimension.')}"
+            f"{6 + i + 1}. {m['name']}: {m.get('description', 'Custom evaluation dimension.')}"
             for i, m in enumerate(custom)
         )
         dim_lines = dim_lines + "\n" + extras

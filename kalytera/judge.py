@@ -32,10 +32,12 @@ _MAX_TOKENS = 512
 _PASS_THRESHOLD = 0.7
 
 _DEFAULT_WEIGHTS: Dict[str, float] = {
-    "accuracy": 0.35,
-    "goal_alignment": 0.35,
+    "accuracy": 0.25,
+    "goal_alignment": 0.25,
     "decision_quality": 0.15,
     "completeness": 0.15,
+    "helpfulness": 0.10,
+    "factuality": 0.10,
 }
 
 
@@ -192,6 +194,8 @@ def _build_result(
     goal_alignment = _clamp(parsed.get("goal_alignment", 0.0))
     decision_quality = _clamp(parsed.get("decision_quality", 0.0))
     completeness = _clamp(parsed.get("completeness", 0.0))
+    helpfulness = _clamp(parsed.get("helpfulness", 0.0))
+    factuality = _clamp(parsed.get("factuality", 0.0))
 
     custom = custom_metrics or []
     custom_scores: Dict[str, float] = {
@@ -199,10 +203,12 @@ def _build_result(
     }
 
     overall_score = round(
-        accuracy * weights.get("accuracy", 0.35)
-        + goal_alignment * weights.get("goal_alignment", 0.35)
+        accuracy * weights.get("accuracy", 0.25)
+        + goal_alignment * weights.get("goal_alignment", 0.25)
         + decision_quality * weights.get("decision_quality", 0.15)
         + completeness * weights.get("completeness", 0.15)
+        + helpfulness * weights.get("helpfulness", 0.10)
+        + factuality * weights.get("factuality", 0.10)
         + sum(custom_scores[m["name"]] * weights.get(m["name"], 0.0) for m in custom),
         4,
     )
@@ -221,6 +227,8 @@ def _build_result(
         "goal_alignment": goal_alignment,
         "decision_quality": decision_quality,
         "completeness": completeness,
+        "helpfulness": helpfulness,
+        "factuality": factuality,
         "custom_scores": custom_scores,
         "overall_score": overall_score,
         "passed": passed,
@@ -241,6 +249,8 @@ def _error_result(
         "goal_alignment": 0.0,
         "decision_quality": 0.0,
         "completeness": 0.0,
+        "helpfulness": 0.0,
+        "factuality": 0.0,
         "custom_scores": {m["name"]: 0.0 for m in (custom_metrics or [])},
         "overall_score": 0.0,
         "passed": False,
@@ -277,6 +287,8 @@ def _weights_from_config(
         "goal_alignment": config.weight_goal_alignment,
         "decision_quality": config.weight_decision,
         "completeness": config.weight_completeness,
+        "helpfulness": getattr(config, "weight_helpfulness", 0.10) or 0.10,
+        "factuality": getattr(config, "weight_factuality", 0.10) or 0.10,
     }
     for m in custom_metrics:
         weights[m["name"]] = float(m.get("weight", 0.0))

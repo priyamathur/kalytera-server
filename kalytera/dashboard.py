@@ -673,12 +673,12 @@ def _show_overview(agent_id: str) -> None:
             db2.close()
 
         _PRESETS: Dict[str, Dict[str, Any]] = {
-            "Default":          dict(weight_accuracy=0.35, weight_goal_alignment=0.35, weight_decision=0.15, weight_completeness=0.15, pass_threshold=0.70),
-            "Customer support": dict(weight_accuracy=0.30, weight_goal_alignment=0.40, weight_decision=0.15, weight_completeness=0.15, pass_threshold=0.70),
-            "Healthcare":       dict(weight_accuracy=0.50, weight_goal_alignment=0.25, weight_decision=0.15, weight_completeness=0.10, pass_threshold=0.80),
-            "Legal":            dict(weight_accuracy=0.45, weight_goal_alignment=0.30, weight_decision=0.15, weight_completeness=0.10, pass_threshold=0.80),
-            "Sales":            dict(weight_accuracy=0.25, weight_goal_alignment=0.40, weight_decision=0.20, weight_completeness=0.15, pass_threshold=0.65),
-            "Coding assistant": dict(weight_accuracy=0.40, weight_goal_alignment=0.25, weight_decision=0.20, weight_completeness=0.15, pass_threshold=0.75),
+            "Default":          dict(weight_accuracy=0.25, weight_goal_alignment=0.25, weight_decision=0.15, weight_completeness=0.15, weight_helpfulness=0.10, weight_factuality=0.10, pass_threshold=0.70),
+            "Customer support": dict(weight_accuracy=0.20, weight_goal_alignment=0.35, weight_decision=0.15, weight_completeness=0.15, weight_helpfulness=0.10, weight_factuality=0.05, pass_threshold=0.70),
+            "Healthcare":       dict(weight_accuracy=0.30, weight_goal_alignment=0.20, weight_decision=0.15, weight_completeness=0.10, weight_helpfulness=0.10, weight_factuality=0.15, pass_threshold=0.80),
+            "Legal":            dict(weight_accuracy=0.30, weight_goal_alignment=0.25, weight_decision=0.15, weight_completeness=0.10, weight_helpfulness=0.05, weight_factuality=0.15, pass_threshold=0.80),
+            "Sales":            dict(weight_accuracy=0.15, weight_goal_alignment=0.35, weight_decision=0.20, weight_completeness=0.15, weight_helpfulness=0.10, weight_factuality=0.05, pass_threshold=0.65),
+            "Coding assistant": dict(weight_accuracy=0.30, weight_goal_alignment=0.20, weight_decision=0.20, weight_completeness=0.15, weight_helpfulness=0.05, weight_factuality=0.10, pass_threshold=0.75),
         }
 
         _industry_map = {
@@ -716,6 +716,8 @@ def _show_overview(agent_id: str) -> None:
                 st.session_state["cfg_goal"]  = int(p["weight_goal_alignment"] * 100)
                 st.session_state["cfg_dec"]   = int(p["weight_decision"] * 100)
                 st.session_state["cfg_comp"]  = int(p["weight_completeness"] * 100)
+                st.session_state["cfg_help"]  = int(p["weight_helpfulness"] * 100)
+                st.session_state["cfg_fact"]  = int(p["weight_factuality"] * 100)
                 st.session_state["cfg_thresh"]= int(p["pass_threshold"] * 100)
                 st.rerun()
 
@@ -729,10 +731,12 @@ def _show_overview(agent_id: str) -> None:
         )
 
         _DIMS = [
-            ("cfg_acc",   "Accuracy",          cfg["weight_accuracy"],        "Factual correctness — raise for healthcare / legal"),
+            ("cfg_acc",   "Accuracy",          cfg["weight_accuracy"],        "Contextual correctness — did the answer fit the situation?"),
             ("cfg_goal",  "Goal alignment",     cfg["weight_goal_alignment"],  "Did the agent address what the user actually needed?"),
             ("cfg_dec",   "Decision quality",   cfg["weight_decision"],        "Soundness of reasoning and tool choice"),
             ("cfg_comp",  "Completeness",       cfg["weight_completeness"],    "Was the request fully resolved?"),
+            ("cfg_help",  "Helpfulness",        cfg.get("weight_helpfulness", 0.10), "Did the response practically help the user accomplish their goal?"),
+            ("cfg_fact",  "Factuality",         cfg.get("weight_factuality", 0.10),  "Were all claims verifiable and grounded — no hallucinations?"),
         ]
 
         w_vals = []
@@ -884,10 +888,12 @@ def _show_overview(agent_id: str) -> None:
             try:
                 upsert_quality_config(agent_id, {
                     "industry": _industry_key_map.get(selected_preset_label, "default"),
-                    "weight_accuracy":     w_vals[0] / 100,
+                    "weight_accuracy":       w_vals[0] / 100,
                     "weight_goal_alignment": w_vals[1] / 100,
-                    "weight_decision":     w_vals[2] / 100,
-                    "weight_completeness": w_vals[3] / 100,
+                    "weight_decision":       w_vals[2] / 100,
+                    "weight_completeness":   w_vals[3] / 100,
+                    "weight_helpfulness":    w_vals[4] / 100,
+                    "weight_factuality":     w_vals[5] / 100,
                     "pass_threshold":      thresh / 100,
                     "custom_metrics":      custom_list,
                 }, db3)
@@ -1459,6 +1465,8 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                     + _score_bar("Goal alignment", ev.goal_alignment, "#8b5cf6")
                     + _score_bar("Decision quality", ev.decision_quality, "#f59e0b")
                     + _score_bar("Completeness", ev.completeness, "#0891b2")
+                    + _score_bar("Helpfulness", getattr(ev, "helpfulness", None) or 0.0, "#10b981")
+                    + _score_bar("Factuality", getattr(ev, "factuality", None) or 0.0, "#ef4444")
                 )
                 st.markdown('<div style="height:10px"/>', unsafe_allow_html=True)
                 st.markdown(
