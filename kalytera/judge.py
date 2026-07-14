@@ -255,7 +255,7 @@ def _error_result(
         "overall_score": 0.0,
         "passed": False,
         "failure_type": None,
-        "failure_step": step.step_number,
+        "failure_step": str(step.step_number),
         "failure_reason": None,
         "confidence": 0.0,
         "eval_error": True,

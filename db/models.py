@@ -60,7 +60,7 @@ class EvalResult(Base):
     overall_score = Column(Float, nullable=False)   # weighted average, 0.0–1.0
     passed = Column(Boolean, nullable=False)        # overall_score >= pass_threshold
     failure_type = Column(String, nullable=True)    # null if passed
-    failure_step = Column(Integer, nullable=True)
+    failure_step = Column(String, nullable=True)   # step name or number as string
     failure_reason = Column(String, nullable=True)  # one plain English sentence
     confidence = Column(Float, nullable=True)
     eval_error = Column(Boolean, default=False, nullable=False)

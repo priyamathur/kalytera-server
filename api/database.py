@@ -43,6 +43,7 @@ def _apply_schema_additions() -> None:
     if "sqlite" in DATABASE_URL:
         return  # SQLite: create_all() builds the full schema on first run
     stmts = [
+        "ALTER TABLE eval_results ALTER COLUMN failure_step TYPE TEXT USING failure_step::TEXT",
         "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS helpfulness FLOAT",
         "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS factuality FLOAT",
         "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS custom_scores TEXT",

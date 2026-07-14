@@ -306,7 +306,7 @@ def get_recent_failing_sessions(
     if failure_types:
         q = q.filter(EvalResult.failure_type.in_(failure_types))
     if step_numbers:
-        q = q.filter(EvalResult.failure_step.in_(step_numbers))
+        q = q.filter(EvalResult.failure_step.in_([str(n) for n in step_numbers]))
 
     rows = q.order_by(EvalResult.evaluated_at.desc()).limit(limit * 6).all()
 
