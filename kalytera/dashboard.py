@@ -287,22 +287,45 @@ code {
 .js-plotly-plot { border-radius: 12px !important; }
 
 /* ── Sidebar collapse/expand toggle — always visible ── */
-[data-testid="collapsedControl"],
-button[kind="header"],
-.st-emotion-cache-1dp5vir,
-section[data-testid="stSidebarCollapsedControl"] {
+section[data-testid="stSidebarCollapsedControl"],
+div[data-testid="stSidebarCollapsedControl"],
+[data-testid="collapsedControl"] {
     display: flex !important;
     visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
-    background: white !important;
-    border: 1px solid #e2e8f0 !important;
-    border-radius: 0 8px 8px 0 !important;
-    box-shadow: 2px 0 8px rgba(99,102,241,0.15) !important;
+    position: fixed !important;
+    left: 0 !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
     z-index: 999999 !important;
+    background: #6366f1 !important;
+    border: none !important;
+    border-radius: 0 10px 10px 0 !important;
+    box-shadow: 3px 0 12px rgba(99,102,241,0.4) !important;
+    width: 28px !important;
+    min-width: 28px !important;
+    height: 52px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
 }
-[data-testid="collapsedControl"] svg,
-section[data-testid="stSidebarCollapsedControl"] svg { color: #6366f1 !important; }
+section[data-testid="stSidebarCollapsedControl"] svg,
+div[data-testid="stSidebarCollapsedControl"] svg,
+[data-testid="collapsedControl"] svg {
+    color: white !important;
+    fill: white !important;
+    stroke: white !important;
+}
+section[data-testid="stSidebarCollapsedControl"] button,
+div[data-testid="stSidebarCollapsedControl"] button,
+[data-testid="collapsedControl"] button {
+    background: transparent !important;
+    border: none !important;
+    color: white !important;
+    width: 100% !important;
+    height: 100% !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -454,6 +477,7 @@ def _kpi_card(label: str, value: str, subtitle: str, color: str = "#0f172a") -> 
 def _show_overview(agent_id: str) -> None:
     _page_header("Agent Overview", "Quality, latency, and failure breakdown for the last 24 hours")
 
+    _calib_default = {"total_labeled": 0, "agreement_count": 0, "agreement_rate": None, "status": "unlabeled"}
     db = _db()
     try:
         stats = get_todays_stats(agent_id, db)
@@ -464,7 +488,10 @@ def _show_overview(agent_id: str) -> None:
         latencies = get_latency_values(agent_id, 24, db)
         score_buckets = get_score_buckets(agent_id, 24, db)
         step_scores   = get_avg_score_by_step(agent_id, 24, db)
-        calib = get_calibration_stats(agent_id, db)
+        try:
+            calib = get_calibration_stats(agent_id, db)
+        except Exception:
+            calib = _calib_default
     finally:
         db.close()
 
@@ -485,11 +512,11 @@ def _show_overview(agent_id: str) -> None:
     k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "weighted 4 dims"), unsafe_allow_html=True)
     k4.markdown(_kpi_card("Failures", str(failures_24h), "sessions failed, 24h", color=fail_color), unsafe_allow_html=True)
     k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
-    _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#94a3b8"}
+    _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#6366f1"}
     _CALIB_LABEL = {"excellent": "Calibrated ✓", "good": "Good", "needs_calibration": "Review weights", "unlabeled": "Not yet labeled"}
     calib_status = calib["status"]
-    calib_val = f"{calib['agreement_rate']*100:.0f}%" if calib["agreement_rate"] is not None else "—"
-    calib_sub = f"{calib['total_labeled']} sessions labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "Label sessions in Trace Viewer"
+    calib_val = f"{calib['agreement_rate']*100:.0f}%" if calib["agreement_rate"] is not None else "Set up →"
+    calib_sub = f"{calib['total_labeled']} sessions labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "👍/👎 sessions in Trace Viewer"
     k6.markdown(_kpi_card("Judge Accuracy", calib_val, calib_sub, color=_CALIB_COLOR[calib_status]), unsafe_allow_html=True)
 
     # ── Quality trend + session volume ───────────────────────────────────────
@@ -1529,7 +1556,8 @@ def _show_session_browser(agent_id: str) -> None:
         "Failure type", ALL_FT, default=preset_types, key="session_ft",
     )
     step_sel: List[int] = fc3.multiselect(
-        "Step number", list(range(1, 9)), default=preset_steps, key="session_step",
+        "Step", [], default=[], key="session_step",
+        placeholder="All steps",
     )
     time_lbl = fc4.selectbox(
         "Time range", ["Last 24h", "Last 7 days", "All time"], index=1, key="session_time",
