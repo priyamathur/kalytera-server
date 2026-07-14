@@ -128,5 +128,19 @@ web_dashboard.html
 # Large demo/test data scripts (not for public SDK)
 load_100k.py
 
+# Internal seed scripts
+seed_demo.py
+seed_rohan.py
+seed_data.py
+
+# Internal deployment / infra
+railway.toml
+.railwayignore
+helm/
+
+# Internal docs
+LAUNCH_POST_FINAL.md
+LAUNCH_POST_FINAL*.md
+
 # Streamlit local secrets (safe, but keep local)
 .streamlit/secrets.toml
