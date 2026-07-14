@@ -24,7 +24,7 @@ def _now() -> datetime:
 
 def _eval(
     *,
-    failure_step: Optional[int] = None,
+    failure_step: Optional[str] = None,
     failure_type: Optional[str] = None,
     failure_reason: Optional[str] = None,
     passed: bool = False,
@@ -45,9 +45,9 @@ def _eval(
 
 def _make_failures(
     n: int,
-    failure_step: int = 3,
+    failure_step: str = "payment_step",
     failure_type: str = "tool_failure",
-    failure_reason: str = "Payment API timed out at step 3.",
+    failure_reason: str = "Payment API timed out at payment_step.",
 ) -> List[MagicMock]:
     return [
         _eval(failure_step=failure_step, failure_type=failure_type, failure_reason=failure_reason)
@@ -88,7 +88,7 @@ def _mock_db(
 # ---------------------------------------------------------------------------
 
 def test_group_failures_by_step() -> None:
-    rows = _make_failures(3, failure_step=3) + _make_failures(2, failure_step=5)
+    rows = _make_failures(3, failure_step="step_3") + _make_failures(2, failure_step="step_5")
     groups = list(_group_failures(rows))
     step_groups = {pv: g for pt, pv, g in groups if pt == "workflow_step"}
     assert "step_3" in step_groups
@@ -114,14 +114,14 @@ def test_group_failures_skips_none_step() -> None:
 
 
 def test_group_failures_skips_none_type() -> None:
-    rows = [_eval(failure_step=2, failure_type=None)]
+    rows = [_eval(failure_step="step_2", failure_type=None)]
     groups = list(_group_failures(rows))
     type_groups = [(pt, pv) for pt, pv, _ in groups if pt == "failure_type"]
     assert len(type_groups) == 0
 
 
 def test_group_failures_both_dimensions() -> None:
-    rows = _make_failures(6, failure_step=3, failure_type="tool_failure")
+    rows = _make_failures(6, failure_step="step_3", failure_type="tool_failure")
     groups = list(_group_failures(rows))
     types = {pt for pt, _, _ in groups}
     assert "workflow_step" in types
@@ -235,14 +235,14 @@ def test_run_analysis_no_failures_returns_zero() -> None:
 
 
 def test_run_analysis_below_min_threshold_no_patterns() -> None:
-    failures = _make_failures(MIN_FAILURE_COUNT - 1, failure_step=3, failure_type="tool_failure")
+    failures = _make_failures(MIN_FAILURE_COUNT - 1, failure_step="step_3", failure_type="tool_failure")
     db = _db_for_analysis(failures)
     result = run_analysis("agent-1", db)
     assert result == 0
 
 
 def test_run_analysis_writes_pattern_when_threshold_met() -> None:
-    failures = _make_failures(MIN_FAILURE_COUNT, failure_step=3, failure_type="tool_failure")
+    failures = _make_failures(MIN_FAILURE_COUNT, failure_step="step_3", failure_type="tool_failure")
     db = _db_for_analysis(failures, total_evals=50)
     result = run_analysis("agent-1", db)
     assert result >= 1
@@ -250,7 +250,7 @@ def test_run_analysis_writes_pattern_when_threshold_met() -> None:
 
 
 def test_run_analysis_writes_both_step_and_type_patterns() -> None:
-    failures = _make_failures(MIN_FAILURE_COUNT + 2, failure_step=3, failure_type="tool_failure")
+    failures = _make_failures(MIN_FAILURE_COUNT + 2, failure_step="step_3", failure_type="tool_failure")
     db = _db_for_analysis(failures, total_evals=100)
     result = run_analysis("agent-1", db)
     # One workflow_step pattern + one failure_type pattern
@@ -259,7 +259,7 @@ def test_run_analysis_writes_both_step_and_type_patterns() -> None:
 
 def test_run_analysis_pct_of_all_failures_correct() -> None:
     """10 step_3 failures out of 10 total = 100% pct_of_all_failures."""
-    failures = _make_failures(10, failure_step=3, failure_type="tool_failure")
+    failures = _make_failures(10, failure_step="step_3", failure_type="tool_failure")
     written: List[Any] = []
 
     db = MagicMock()
@@ -285,9 +285,9 @@ def test_run_analysis_pct_of_all_failures_correct() -> None:
 
 def test_run_analysis_root_cause_from_most_common_reason() -> None:
     failures = (
-        [_eval(failure_step=3, failure_type="tool_failure",
+        [_eval(failure_step="step_3", failure_type="tool_failure",
                failure_reason="Billing API returned 500.")] * 7
-        + [_eval(failure_step=3, failure_type="tool_failure",
+        + [_eval(failure_step="step_3", failure_type="tool_failure",
                  failure_reason="Timeout on billing API.")] * 3
     )
     written: List[Any] = []
@@ -314,7 +314,7 @@ def test_run_analysis_root_cause_from_most_common_reason() -> None:
 
 def test_run_analysis_upserts_existing_pattern() -> None:
     """When a LossPattern row already exists, it's updated not duplicated."""
-    failures = _make_failures(MIN_FAILURE_COUNT, failure_step=3, failure_type="tool_failure")
+    failures = _make_failures(MIN_FAILURE_COUNT, failure_step="step_3", failure_type="tool_failure")
 
     existing = MagicMock()
 

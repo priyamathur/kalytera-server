@@ -123,7 +123,7 @@ def _group_failures(
 
     for row in failures:
         if row.failure_step is not None:
-            key = f"step_{row.failure_step}"
+            key = str(row.failure_step)   # step name (text), e.g. 'billing_dispute'
             by_step.setdefault(key, []).append(row)
         if row.failure_type:
             by_type.setdefault(row.failure_type, []).append(row)
@@ -199,8 +199,7 @@ def _count_group_in_window(
         )
     )
     if pattern_type == "workflow_step":
-        step_num = int(pattern_value.split("_")[1])
-        q = q.filter(EvalResult.failure_step == step_num)
+        q = q.filter(EvalResult.failure_step == pattern_value)
     elif pattern_type == "failure_type":
         q = q.filter(EvalResult.failure_type == pattern_value)
     return q.count()
@@ -293,12 +292,11 @@ def _total_for_group(
     if pattern_type == "failure_type":
         return total_evals
     if pattern_type == "workflow_step":
-        step_num = int(pattern_value.split("_")[1])
         return (
             db.query(EvalResult)
             .filter(
                 EvalResult.agent_id == agent_id,
-                EvalResult.failure_step == step_num,
+                EvalResult.failure_step == pattern_value,
             )
             .count()
             or total_evals
