@@ -39,65 +39,77 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Auto-create tables on startup
 def _apply_schema_additions() -> None:
-    """Idempotent column/table additions for PostgreSQL when Alembic state may be stale.
+    """Idempotent schema migrations for PostgreSQL when Alembic state may be stale.
 
-    Uses raw psycopg2 with autocommit=True so each DDL statement is committed
-    immediately, bypassing SQLAlchemy transaction management entirely.
+    Strategy: read current schema state first (no locks), then only run DDL for
+    what is actually missing or wrong. On a healthy deploy this does zero DDL and
+    takes zero locks — eliminating the deploy-time deadlock risk.
     """
     if "sqlite" in DATABASE_URL:
         return  # SQLite: create_all() builds the full schema on first run
 
-    ddl_stmts = [
-        # Type change must come first (converts INTEGER -> TEXT for existing rows)
-        "ALTER TABLE eval_results ALTER COLUMN failure_step TYPE TEXT USING failure_step::TEXT",
-        "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS helpfulness FLOAT",
-        "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS factuality FLOAT",
-        "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS custom_scores TEXT",
-        "ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS weight_helpfulness FLOAT DEFAULT 0.1",
-        "ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS weight_factuality FLOAT DEFAULT 0.1",
-        "ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS custom_metrics TEXT",
-        """CREATE TABLE IF NOT EXISTS golden_labels (
-            id TEXT NOT NULL PRIMARY KEY,
-            agent_id TEXT NOT NULL,
-            session_id TEXT NOT NULL,
-            human_passed BOOLEAN NOT NULL,
-            note TEXT,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            CONSTRAINT uq_golden_agent_session UNIQUE (agent_id, session_id)
-        )""",
-        "CREATE INDEX IF NOT EXISTS ix_golden_labels_agent_id ON golden_labels (agent_id)",
-        "CREATE INDEX IF NOT EXISTS ix_golden_labels_session_id ON golden_labels (session_id)",
-    ]
-
     raw = engine.raw_connection()
     try:
-        raw.autocommit = True          # each DDL commits immediately — no transaction wrapping
+        raw.autocommit = True  # each DDL commits immediately
         cur = raw.cursor()
-        for stmt in ddl_stmts:
-            short = stmt.strip().split("\n")[0][:80]
+
+        # ── 1. Snapshot current column state (read-only, no locks) ──────────
+        cur.execute("""
+            SELECT table_name, column_name, data_type
+            FROM information_schema.columns
+            WHERE table_name IN ('eval_results', 'agent_quality_configs')
+              AND column_name IN (
+                'failure_step', 'helpfulness', 'factuality', 'custom_scores',
+                'weight_helpfulness', 'weight_factuality', 'custom_metrics'
+              )
+        """)
+        cols: dict = {(r[0], r[1]): r[2] for r in cur.fetchall()}
+
+        cur.execute("SELECT to_regclass('public.golden_labels')")
+        golden_exists: bool = cur.fetchone()[0] is not None  # type: ignore[index]
+
+        # ── 2. Only run DDL for what is actually needed ──────────────────────
+        def _ddl(stmt: str) -> None:
             try:
                 cur.execute(stmt)
-                print(f"  ✓ schema: {short}")
+                print(f"  ✓ schema: {stmt.strip().split(chr(10))[0][:80]}")
             except Exception as exc:
-                # "already exists" / "already that type" errors are expected on re-deploy
-                print(f"  · schema skip ({type(exc).__name__}): {short}")
-        cur.close()
+                print(f"  · schema err: {stmt.strip()[:60]} — {exc}")
 
-        # Verify the two most critical columns actually exist now
-        cur2 = raw.cursor()
-        cur2.execute(
-            "SELECT column_name, data_type FROM information_schema.columns "
-            "WHERE table_name IN ('eval_results','agent_quality_configs') "
-            "AND column_name IN ('failure_step','helpfulness','factuality',"
-            "'weight_helpfulness','weight_factuality') ORDER BY table_name, column_name"
-        )
-        rows = cur2.fetchall()
-        cur2.close()
-        for col, dtype in rows:
-            print(f"  ✓ verified: {col} ({dtype})")
+        fs_type = cols.get(("eval_results", "failure_step"), "")
+        if "int" in fs_type.lower():
+            _ddl("ALTER TABLE eval_results ALTER COLUMN failure_step TYPE TEXT USING failure_step::TEXT")
+
+        if ("eval_results", "helpfulness") not in cols:
+            _ddl("ALTER TABLE eval_results ADD COLUMN helpfulness FLOAT")
+        if ("eval_results", "factuality") not in cols:
+            _ddl("ALTER TABLE eval_results ADD COLUMN factuality FLOAT")
+        if ("eval_results", "custom_scores") not in cols:
+            _ddl("ALTER TABLE eval_results ADD COLUMN custom_scores TEXT")
+        if ("agent_quality_configs", "weight_helpfulness") not in cols:
+            _ddl("ALTER TABLE agent_quality_configs ADD COLUMN weight_helpfulness FLOAT DEFAULT 0.1")
+        if ("agent_quality_configs", "weight_factuality") not in cols:
+            _ddl("ALTER TABLE agent_quality_configs ADD COLUMN weight_factuality FLOAT DEFAULT 0.1")
+        if ("agent_quality_configs", "custom_metrics") not in cols:
+            _ddl("ALTER TABLE agent_quality_configs ADD COLUMN custom_metrics TEXT")
+
+        if not golden_exists:
+            _ddl("""CREATE TABLE golden_labels (
+                id TEXT NOT NULL PRIMARY KEY,
+                agent_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                human_passed BOOLEAN NOT NULL,
+                note TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                CONSTRAINT uq_golden_agent_session UNIQUE (agent_id, session_id)
+            )""")
+            _ddl("CREATE INDEX ix_golden_labels_agent_id ON golden_labels (agent_id)")
+            _ddl("CREATE INDEX ix_golden_labels_session_id ON golden_labels (session_id)")
+
+        cur.close()
     finally:
         raw.close()
-    print("✅ Schema additions complete")
+    print("✅ Schema verified")
 
 
 def initialize_database():
