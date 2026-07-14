@@ -39,10 +39,16 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Auto-create tables on startup
 def _apply_schema_additions() -> None:
-    """Idempotent column/table additions for PostgreSQL when Alembic state may be stale."""
+    """Idempotent column/table additions for PostgreSQL when Alembic state may be stale.
+
+    Uses raw psycopg2 with autocommit=True so each DDL statement is committed
+    immediately, bypassing SQLAlchemy transaction management entirely.
+    """
     if "sqlite" in DATABASE_URL:
         return  # SQLite: create_all() builds the full schema on first run
-    stmts = [
+
+    ddl_stmts = [
+        # Type change must come first (converts INTEGER -> TEXT for existing rows)
         "ALTER TABLE eval_results ALTER COLUMN failure_step TYPE TEXT USING failure_step::TEXT",
         "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS helpfulness FLOAT",
         "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS factuality FLOAT",
@@ -62,16 +68,36 @@ def _apply_schema_additions() -> None:
         "CREATE INDEX IF NOT EXISTS ix_golden_labels_agent_id ON golden_labels (agent_id)",
         "CREATE INDEX IF NOT EXISTS ix_golden_labels_session_id ON golden_labels (session_id)",
     ]
-    from sqlalchemy import text
-    with engine.connect() as conn:
-        for stmt in stmts:
+
+    raw = engine.raw_connection()
+    try:
+        raw.autocommit = True          # each DDL commits immediately — no transaction wrapping
+        cur = raw.cursor()
+        for stmt in ddl_stmts:
+            short = stmt.strip().split("\n")[0][:80]
             try:
-                conn.execute(text(stmt))
-                conn.commit()
-            except Exception as e:
-                conn.rollback()
-                print(f"⚠️  Schema addition skipped (likely already applied): {e}")
-    print("✅ Schema additions verified")
+                cur.execute(stmt)
+                print(f"  ✓ schema: {short}")
+            except Exception as exc:
+                # "already exists" / "already that type" errors are expected on re-deploy
+                print(f"  · schema skip ({type(exc).__name__}): {short}")
+        cur.close()
+
+        # Verify the two most critical columns actually exist now
+        cur2 = raw.cursor()
+        cur2.execute(
+            "SELECT column_name, data_type FROM information_schema.columns "
+            "WHERE table_name IN ('eval_results','agent_quality_configs') "
+            "AND column_name IN ('failure_step','helpfulness','factuality',"
+            "'weight_helpfulness','weight_factuality') ORDER BY table_name, column_name"
+        )
+        rows = cur2.fetchall()
+        cur2.close()
+        for col, dtype in rows:
+            print(f"  ✓ verified: {col} ({dtype})")
+    finally:
+        raw.close()
+    print("✅ Schema additions complete")
 
 
 def initialize_database():
