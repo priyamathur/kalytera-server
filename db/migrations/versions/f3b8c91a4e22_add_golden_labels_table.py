@@ -18,22 +18,20 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        'golden_labels',
-        sa.Column('id', sa.String(), nullable=False),
-        sa.Column('agent_id', sa.String(), nullable=False),
-        sa.Column('session_id', sa.String(), nullable=False),
-        sa.Column('human_passed', sa.Boolean(), nullable=False),
-        sa.Column('note', sa.String(), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('agent_id', 'session_id', name='uq_golden_agent_session'),
-    )
-    op.create_index('ix_golden_labels_agent_id', 'golden_labels', ['agent_id'])
-    op.create_index('ix_golden_labels_session_id', 'golden_labels', ['session_id'])
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS golden_labels (
+            id TEXT NOT NULL PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            human_passed BOOLEAN NOT NULL,
+            note TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT uq_golden_agent_session UNIQUE (agent_id, session_id)
+        )
+    """)
+    op.execute("CREATE INDEX IF NOT EXISTS ix_golden_labels_agent_id ON golden_labels (agent_id)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_golden_labels_session_id ON golden_labels (session_id)")
 
 
 def downgrade() -> None:
-    op.drop_index('ix_golden_labels_session_id', table_name='golden_labels')
-    op.drop_index('ix_golden_labels_agent_id', table_name='golden_labels')
-    op.drop_table('golden_labels')
+    op.execute("DROP TABLE IF EXISTS golden_labels")

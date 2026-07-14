@@ -8,7 +8,6 @@ Create Date: 2026-07-13 00:00:00.000000
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = 'a7d2e04f8b31'
@@ -18,14 +17,14 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column('eval_results', sa.Column('helpfulness', sa.Float(), nullable=True))
-    op.add_column('eval_results', sa.Column('factuality', sa.Float(), nullable=True))
-    op.add_column('agent_quality_configs', sa.Column('weight_helpfulness', sa.Float(), nullable=True, server_default='0.1'))
-    op.add_column('agent_quality_configs', sa.Column('weight_factuality', sa.Float(), nullable=True, server_default='0.1'))
+    op.execute("ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS helpfulness FLOAT")
+    op.execute("ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS factuality FLOAT")
+    op.execute("ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS weight_helpfulness FLOAT DEFAULT 0.1")
+    op.execute("ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS weight_factuality FLOAT DEFAULT 0.1")
 
 
 def downgrade() -> None:
-    op.drop_column('agent_quality_configs', 'weight_factuality')
-    op.drop_column('agent_quality_configs', 'weight_helpfulness')
-    op.drop_column('eval_results', 'factuality')
-    op.drop_column('eval_results', 'helpfulness')
+    op.execute("ALTER TABLE agent_quality_configs DROP COLUMN IF EXISTS weight_factuality")
+    op.execute("ALTER TABLE agent_quality_configs DROP COLUMN IF EXISTS weight_helpfulness")
+    op.execute("ALTER TABLE eval_results DROP COLUMN IF EXISTS factuality")
+    op.execute("ALTER TABLE eval_results DROP COLUMN IF EXISTS helpfulness")

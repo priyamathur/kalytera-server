@@ -8,7 +8,6 @@ Create Date: 2026-07-13 00:00:00.000000
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision: str = 'c4f1a83e2d90'
@@ -18,16 +17,10 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column(
-        'agent_quality_configs',
-        sa.Column('custom_metrics', sa.Text(), nullable=True),
-    )
-    op.add_column(
-        'eval_results',
-        sa.Column('custom_scores', sa.Text(), nullable=True),
-    )
+    op.execute("ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS custom_metrics TEXT")
+    op.execute("ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS custom_scores TEXT")
 
 
 def downgrade() -> None:
-    op.drop_column('eval_results', 'custom_scores')
-    op.drop_column('agent_quality_configs', 'custom_metrics')
+    op.execute("ALTER TABLE eval_results DROP COLUMN IF EXISTS custom_scores")
+    op.execute("ALTER TABLE agent_quality_configs DROP COLUMN IF EXISTS custom_metrics")

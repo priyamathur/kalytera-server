@@ -149,14 +149,21 @@ def _eval_batch() -> None:
     try:
         agent_ids = [row[0] for row in db.query(AgentLog.agent_id).distinct().all()]
         for agent_id in agent_ids:
-            logs = get_unevaluated_logs(agent_id, batch_size=20, db=db)
+            try:
+                logs = get_unevaluated_logs(agent_id, batch_size=20, db=db)
+            except Exception as exc:
+                logger.error("[eval_batch] get_logs agent=%s error: %s", agent_id, exc)
+                db.rollback()
+                continue
             for log in logs:
                 try:
                     evaluate_log(log.id, db)
                 except Exception as exc:
                     logger.error("[eval] log=%s error: %s", log.id, exc)
+                    db.rollback()  # reset aborted transaction so next query works
     except Exception as exc:
         logger.error("[eval_batch] error: %s", exc)
+        db.rollback()
     finally:
         db.close()
 

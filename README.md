@@ -72,14 +72,16 @@ https://kalytera-dashboard.onrender.com
 
 ## What Kalytera detects
 
-Every step is scored across four dimensions by an LLM judge (Claude Haiku):
+Every step is scored across six dimensions by an LLM judge (Claude Haiku):
 
 | Dimension | Default weight | What it measures |
 |---|---|---|
-| Accuracy | 35% | Did the agent get the facts right? |
-| Goal alignment | 35% | Did the agent stay on what the user actually needed? |
-| Decision quality | 15% | Was the reasoning sound and tool selection appropriate? |
-| Completeness | 15% | Was the request fully resolved? |
+| Accuracy | 25% | Contextually correct answer for the situation |
+| Goal alignment | 25% | Agent stayed on what the user actually needed |
+| Decision quality | 15% | Reasoning was sound, right tools were chosen |
+| Completeness | 15% | Request fully resolved end-to-end |
+| Helpfulness | 10% | Response had practical value the user could act on |
+| Factuality | 10% | All claims grounded and true — no hallucinations |
 
 Steps scoring below 70% are flagged. Seven failure types are detected automatically:
 
