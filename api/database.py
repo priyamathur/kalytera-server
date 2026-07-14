@@ -38,6 +38,41 @@ else:
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # Auto-create tables on startup
+def _apply_schema_additions() -> None:
+    """Idempotent column/table additions for PostgreSQL when Alembic state may be stale."""
+    if "sqlite" in DATABASE_URL:
+        return  # SQLite: create_all() builds the full schema on first run
+    stmts = [
+        "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS helpfulness FLOAT",
+        "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS factuality FLOAT",
+        "ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS custom_scores TEXT",
+        "ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS weight_helpfulness FLOAT DEFAULT 0.1",
+        "ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS weight_factuality FLOAT DEFAULT 0.1",
+        "ALTER TABLE agent_quality_configs ADD COLUMN IF NOT EXISTS custom_metrics TEXT",
+        """CREATE TABLE IF NOT EXISTS golden_labels (
+            id TEXT NOT NULL PRIMARY KEY,
+            agent_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            human_passed BOOLEAN NOT NULL,
+            note TEXT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            CONSTRAINT uq_golden_agent_session UNIQUE (agent_id, session_id)
+        )""",
+        "CREATE INDEX IF NOT EXISTS ix_golden_labels_agent_id ON golden_labels (agent_id)",
+        "CREATE INDEX IF NOT EXISTS ix_golden_labels_session_id ON golden_labels (session_id)",
+    ]
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        for stmt in stmts:
+            try:
+                conn.execute(text(stmt))
+                conn.commit()
+            except Exception as e:
+                conn.rollback()
+                print(f"⚠️  Schema addition skipped (likely already applied): {e}")
+    print("✅ Schema additions verified")
+
+
 def initialize_database():
     """Initialize database tables if they don't exist"""
     try:
@@ -47,6 +82,7 @@ def initialize_database():
         )
         print("🔧 Creating database tables...")
         Base.metadata.create_all(bind=engine)
+        _apply_schema_additions()
         
         # Verify tables were created by checking for agent_logs table
         with engine.connect() as conn:
