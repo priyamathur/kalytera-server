@@ -30,7 +30,7 @@ EXPECTED_KEYS: frozenset[str] = frozenset({
 
 _SYSTEM = (
     "You are an expert AI agent quality evaluator. "
-    "You evaluate agent interactions across 4 dimensions. "
+    "You evaluate agent interactions across multiple dimensions. "
     "You always respond with valid JSON only. No prose. No markdown. No code fences."
 )
 
@@ -50,6 +50,27 @@ _JSON_TEMPLATE = """{
 }"""
 
 
+def _build_json_template(custom_metrics: List[Dict[str, Any]]) -> str:
+    if not custom_metrics:
+        return _JSON_TEMPLATE
+    custom_lines = "".join(f'  "{m["name"]}": 0.0,\n' for m in custom_metrics)
+    return (
+        "{\n"
+        "  \"accuracy\": 0.0,\n"
+        "  \"goal_alignment\": 0.0,\n"
+        "  \"decision_quality\": 0.0,\n"
+        "  \"completeness\": 0.0,\n"
+        + custom_lines +
+        "  \"overall_score\": 0.0,\n"
+        "  \"passed\": true,\n"
+        "  \"failure_type\": null,\n"
+        "  \"failure_step\": null,\n"
+        "  \"failure_reason\": null,\n"
+        "  \"confidence\": 0.0\n"
+        "}"
+    )
+
+
 @dataclass
 class StepContext:
     step_number: int
@@ -66,14 +87,32 @@ def system_prompt() -> str:
 def build_prompt(
     step: StepContext,
     prior_steps: List[StepContext],
+    custom_metrics: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, str]]:
     """
     Returns an Anthropic messages list for the judge call.
     Includes up to the last 3 prior steps as context.
+    custom_metrics: list of {"name": "helpfulness", "description": "..."} dicts.
     """
     context_steps = prior_steps[-3:]
     prior_text = _format_prior_steps(context_steps)
     tool_text = _format_tool_calls(step.tool_calls)
+    custom = custom_metrics or []
+
+    dim_lines = (
+        "1. accuracy: Was the response factually correct given available context?\n"
+        "2. goal_alignment: Did the agent serve what the user actually needed?\n"
+        "3. decision_quality: Was the reasoning sound and tool selection appropriate?\n"
+        "4. completeness: Was the request fully resolved?"
+    )
+    if custom:
+        extras = "\n".join(
+            f"{4 + i + 1}. {m['name']}: {m.get('description', 'Custom evaluation dimension.')}"
+            for i, m in enumerate(custom)
+        )
+        dim_lines = dim_lines + "\n" + extras
+
+    json_template = _build_json_template(custom)
 
     user = (
         f"Prior context (last {len(context_steps)} steps):\n"
@@ -83,18 +122,15 @@ def build_prompt(
         f"Input: {step.input}\n"
         f"Output: {step.output}\n"
         f"Tool calls: {tool_text}\n\n"
-        f"Score this step on 4 dimensions (0.0 to 1.0):\n"
-        f"1. accuracy: Was the response factually correct given available context?\n"
-        f"2. goal_alignment: Did the agent serve what the user actually needed?\n"
-        f"3. decision_quality: Was the reasoning sound and tool selection appropriate?\n"
-        f"4. completeness: Was the request fully resolved?\n\n"
+        f"Score this step on all dimensions (0.0 to 1.0):\n"
+        f"{dim_lines}\n\n"
         f"If any dimension is below 0.7, identify the failure type:\n"
         f"{_FAILURE_LIST}\n\n"
         f"failure_reason: one short phrase, max 12 words. "
         f'Format: "[what failed] at {step.step_name}; [one-word consequence]." '
         f"Example: \"Payment API timed out at process_payment; charge not completed.\"\n\n"
         f"Respond with JSON only:\n"
-        f"{_JSON_TEMPLATE}"
+        f"{json_template}"
     )
 
     return [{"role": "user", "content": user}]

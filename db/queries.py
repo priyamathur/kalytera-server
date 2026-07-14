@@ -590,6 +590,7 @@ _DEFAULTS = dict(
     weight_decision=0.15,
     weight_completeness=0.15,
     pass_threshold=0.70,
+    custom_metrics=[],
 )
 
 
@@ -597,6 +598,12 @@ def get_quality_config(agent_id: str, db: Session) -> Dict[str, Any]:
     row = db.query(AgentQualityConfig).filter(AgentQualityConfig.agent_id == agent_id).first()
     if row is None:
         return {"agent_id": agent_id, **_DEFAULTS}
+    custom: List[Any] = []
+    if getattr(row, "custom_metrics", None):
+        try:
+            custom = json.loads(row.custom_metrics)
+        except (json.JSONDecodeError, TypeError):
+            custom = []
     return {
         "agent_id": row.agent_id,
         "industry": row.industry,
@@ -605,18 +612,22 @@ def get_quality_config(agent_id: str, db: Session) -> Dict[str, Any]:
         "weight_decision": row.weight_decision,
         "weight_completeness": row.weight_completeness,
         "pass_threshold": row.pass_threshold,
+        "custom_metrics": custom,
     }
 
 
 def upsert_quality_config(agent_id: str, updates: Dict[str, Any], db: Session) -> None:
     row = db.query(AgentQualityConfig).filter(AgentQualityConfig.agent_id == agent_id).first()
+    init = {**_DEFAULTS, **updates}
+    if "custom_metrics" in init and isinstance(init["custom_metrics"], list):
+        init["custom_metrics"] = json.dumps(init["custom_metrics"])
     if row is None:
-        row = AgentQualityConfig(agent_id=agent_id, **{**_DEFAULTS, **updates})
+        row = AgentQualityConfig(agent_id=agent_id, **init)
         db.add(row)
     else:
         for k, v in updates.items():
             if hasattr(row, k):
-                setattr(row, k, v)
+                setattr(row, k, json.dumps(v) if k == "custom_metrics" and isinstance(v, list) else v)
     db.commit()
 
 

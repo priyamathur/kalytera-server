@@ -24,6 +24,7 @@ from kalytera.prompts import (
     system_prompt,
 )
 
+
 logger = logging.getLogger(__name__)
 
 _MODEL = "claude-haiku-4-5-20251001"
@@ -47,26 +48,29 @@ def score_step(
     prior_steps: List[StepContext],
     weights: Optional[Dict[str, float]] = None,
     pass_threshold: float = _PASS_THRESHOLD,
+    custom_metrics: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Score one agent step with Claude Haiku.
     Returns a dict matching EvalResult fields. Never raises.
     On double judge failure returns eval_error=True.
+    custom_metrics: list of {"name": "helpfulness", "weight": 0.2, "description": "..."}
     """
     w = weights or _DEFAULT_WEIGHTS
+    custom = custom_metrics or []
     client = _make_client()
 
-    raw = _call_claude(client, build_prompt(step, prior_steps))
-    parsed = _parse_json(raw)
+    raw = _call_claude(client, build_prompt(step, prior_steps, custom_metrics=custom))
+    parsed = _parse_json(raw, custom_names=[m["name"] for m in custom])
 
     if parsed is None:
         raw2 = _call_claude(client, build_retry_prompt(step))
         parsed = _parse_json(raw2)
 
     if parsed is None:
-        return _error_result(step)
+        return _error_result(step, custom)
 
-    return _build_result(parsed, w, pass_threshold, step.step_number)
+    return _build_result(parsed, w, pass_threshold, step.step_number, custom)
 
 
 def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
@@ -86,7 +90,7 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
         .filter(AgentQualityConfig.agent_id == log.agent_id)
         .first()
     )
-    weights, pass_threshold = _weights_from_config(config)
+    weights, pass_threshold, custom_metrics = _weights_from_config(config)
 
     prior_logs = (
         db.query(AgentLog)
@@ -102,7 +106,16 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
     step = _log_to_step(log)
     prior_steps = [_log_to_step(p) for p in reversed(prior_logs)]
 
-    result = score_step(step, prior_steps, weights=weights, pass_threshold=pass_threshold)
+    result = score_step(
+        step, prior_steps,
+        weights=weights,
+        pass_threshold=pass_threshold,
+        custom_metrics=custom_metrics,
+    )
+
+    # custom_scores is a dict — serialize before writing to Text column
+    result_for_db = {k: v for k, v in result.items() if k != "custom_scores"}
+    custom_scores_json = json.dumps(result.get("custom_scores") or {}) or None
 
     row = EvalResult(
         id=str(uuid.uuid4()),
@@ -110,7 +123,8 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
         session_id=log.session_id,
         agent_id=log.agent_id,
         evaluated_at=datetime.now(timezone.utc),
-        **result,
+        custom_scores=custom_scores_json,
+        **result_for_db,
     )
     db.add(row)
     db.commit()
@@ -144,13 +158,15 @@ def _call_claude(
         return ""
 
 
-def _parse_json(text: str) -> Optional[Dict[str, Any]]:
+def _parse_json(
+    text: str,
+    custom_names: Optional[List[str]] = None,
+) -> Optional[Dict[str, Any]]:
     """Parse and validate Claude's JSON response. Returns None if invalid."""
     if not text:
         return None
     try:
         cleaned = text.strip()
-        # Strip code fences if Claude added them despite instructions
         if cleaned.startswith("```"):
             parts = cleaned.split("```")
             cleaned = parts[1].lstrip("json").strip() if len(parts) > 1 else cleaned
@@ -169,6 +185,7 @@ def _build_result(
     weights: Dict[str, float],
     pass_threshold: float,
     step_number: int,
+    custom_metrics: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Compute overall_score from weights. Never trusts the model's own calculation."""
     accuracy = _clamp(parsed.get("accuracy", 0.0))
@@ -176,11 +193,17 @@ def _build_result(
     decision_quality = _clamp(parsed.get("decision_quality", 0.0))
     completeness = _clamp(parsed.get("completeness", 0.0))
 
+    custom = custom_metrics or []
+    custom_scores: Dict[str, float] = {
+        m["name"]: _clamp(parsed.get(m["name"], 0.0)) for m in custom
+    }
+
     overall_score = round(
-        accuracy * weights["accuracy"]
-        + goal_alignment * weights["goal_alignment"]
-        + decision_quality * weights["decision_quality"]
-        + completeness * weights["completeness"],
+        accuracy * weights.get("accuracy", 0.35)
+        + goal_alignment * weights.get("goal_alignment", 0.35)
+        + decision_quality * weights.get("decision_quality", 0.15)
+        + completeness * weights.get("completeness", 0.15)
+        + sum(custom_scores[m["name"]] * weights.get(m["name"], 0.0) for m in custom),
         4,
     )
     passed = overall_score >= pass_threshold
@@ -198,6 +221,7 @@ def _build_result(
         "goal_alignment": goal_alignment,
         "decision_quality": decision_quality,
         "completeness": completeness,
+        "custom_scores": custom_scores,
         "overall_score": overall_score,
         "passed": passed,
         "failure_type": failure_type,
@@ -208,12 +232,16 @@ def _build_result(
     }
 
 
-def _error_result(step: StepContext) -> Dict[str, Any]:
+def _error_result(
+    step: StepContext,
+    custom_metrics: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     return {
         "accuracy": 0.0,
         "goal_alignment": 0.0,
         "decision_quality": 0.0,
         "completeness": 0.0,
+        "custom_scores": {m["name"]: 0.0 for m in (custom_metrics or [])},
         "overall_score": 0.0,
         "passed": False,
         "failure_type": None,
@@ -231,15 +259,29 @@ def _clamp(val: Any) -> float:
         return 0.0
 
 
-def _weights_from_config(config: Any) -> tuple[Dict[str, float], float]:
+def _weights_from_config(
+    config: Any,
+) -> tuple[Dict[str, float], float, List[Dict[str, Any]]]:
     if config is None:
-        return _DEFAULT_WEIGHTS, _PASS_THRESHOLD
-    return {
+        return _DEFAULT_WEIGHTS, _PASS_THRESHOLD, []
+
+    custom_metrics: List[Dict[str, Any]] = []
+    if getattr(config, "custom_metrics", None):
+        try:
+            custom_metrics = json.loads(config.custom_metrics)
+        except (ValueError, TypeError):
+            custom_metrics = []
+
+    weights: Dict[str, float] = {
         "accuracy": config.weight_accuracy,
         "goal_alignment": config.weight_goal_alignment,
         "decision_quality": config.weight_decision,
         "completeness": config.weight_completeness,
-    }, config.pass_threshold
+    }
+    for m in custom_metrics:
+        weights[m["name"]] = float(m.get("weight", 0.0))
+
+    return weights, config.pass_threshold, custom_metrics
 
 
 def _log_to_step(log: Any) -> StepContext:

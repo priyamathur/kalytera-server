@@ -63,6 +63,7 @@ class EvalResult(Base):
     confidence = Column(Float, nullable=True)
     eval_error = Column(Boolean, default=False, nullable=False)
     evaluated_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+    custom_scores = Column(Text, nullable=True)  # JSON: {"helpfulness": 0.85}
 
 
 class LossPattern(Base):
@@ -92,6 +93,7 @@ class AgentQualityConfig(Base):
     weight_decision = Column(Float, nullable=False, default=0.15)
     weight_completeness = Column(Float, nullable=False, default=0.15)
     pass_threshold = Column(Float, nullable=False, default=0.7)
+    custom_metrics = Column(Text, nullable=True)  # JSON: [{"name":"helpfulness","weight":0.2,"description":"..."}]
 
 
 class Organization(Base):

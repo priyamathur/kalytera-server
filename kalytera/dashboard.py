@@ -787,11 +787,89 @@ def _show_overview(agent_id: str) -> None:
             unsafe_allow_html=True,
         )
 
+        # ── Custom metrics ────────────────────────────────────────────────────
+        st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
+        st.markdown(
+            '<p style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;'
+            'letter-spacing:0.06em;margin-bottom:8px">Custom metrics</p>',
+            unsafe_allow_html=True,
+        )
+
+        existing_custom: list = list(cfg.get("custom_metrics") or [])
+        if "custom_metrics_state" not in st.session_state:
+            st.session_state["custom_metrics_state"] = existing_custom
+
+        custom_list: list = st.session_state["custom_metrics_state"]
+        to_remove: Optional[int] = None
+
+        for ci, cm in enumerate(custom_list):
+            cc1, cc2, cc3, cc4 = st.columns([3, 1, 4, 0.6])
+            cc1.markdown(
+                f'<div style="font-size:13px;font-weight:600;color:#1e293b;padding-top:6px">'
+                f'{cm["name"]}</div>'
+                f'<div style="font-size:11px;color:#94a3b8">{cm.get("description","")}</div>',
+                unsafe_allow_html=True,
+            )
+            new_w = cc2.number_input(
+                f"w_{ci}", min_value=1, max_value=50, value=int(cm["weight"] * 100), step=1,
+                key=f"cm_w_{ci}", label_visibility="collapsed",
+            )
+            custom_list[ci]["weight"] = new_w / 100
+            cc3.markdown(
+                f'<div style="padding-top:10px">'
+                f'<div style="flex:1;background:#f1f5f9;border-radius:4px;height:6px">'
+                f'<div style="background:#8b5cf6;width:{new_w*2}%;height:6px;border-radius:4px"></div>'
+                f'</div></div>',
+                unsafe_allow_html=True,
+            )
+            if cc4.button("×", key=f"rm_cm_{ci}", help=f"Remove {cm['name']}"):
+                to_remove = ci
+
+        if to_remove is not None:
+            custom_list.pop(to_remove)
+            st.session_state["custom_metrics_state"] = custom_list
+            st.rerun()
+
+        # Add metric form
+        with st.expander("＋ Add custom metric", expanded=False):
+            nm_col, desc_col, w_col = st.columns([2, 4, 1])
+            new_name = nm_col.text_input("Metric name", placeholder="helpfulness", key="new_cm_name")
+            new_desc = desc_col.text_input("Description", placeholder="Was the agent genuinely helpful?", key="new_cm_desc")
+            new_w_pct = w_col.number_input("Weight %", min_value=1, max_value=50, value=10, step=1, key="new_cm_w")
+            if st.button("Add metric", key="add_cm_btn") and new_name.strip():
+                safe_name = new_name.strip().lower().replace(" ", "_")
+                if not any(m["name"] == safe_name for m in custom_list):
+                    custom_list.append({"name": safe_name, "weight": new_w_pct / 100, "description": new_desc.strip()})
+                    st.session_state["custom_metrics_state"] = custom_list
+                    st.rerun()
+
+        custom_weight_total = int(round(sum(m["weight"] * 100 for m in custom_list)))
+        standard_total = sum(w_vals)
+        grand_total = standard_total + custom_weight_total
+        total_color = "#16a34a" if grand_total == 100 else "#dc2626"
+
+        if custom_list:
+            st.markdown(
+                f'<div style="font-size:11px;color:#64748b;margin-top:4px">'
+                f'Standard: {standard_total}% · Custom: {custom_weight_total}% · '
+                f'<strong style="color:{total_color}">Total: {grand_total}%'
+                f'{"  ✓" if grand_total == 100 else "  — must equal 100%"}</strong></div>',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown(
+                f'<div style="font-size:11px;color:#94a3b8">No custom metrics. '
+                f'Add one above to evaluate dimensions like helpfulness, tone, or compliance.</div>',
+                unsafe_allow_html=True,
+            )
+
+        can_save = grand_total == 100 if custom_list else total == 100
+
         st.markdown('<div style="height:12px"/>', unsafe_allow_html=True)
 
         # ── Save ──────────────────────────────────────────────────────────────
         _, save_col = st.columns([3, 1])
-        if save_col.button("Save", use_container_width=True, disabled=total != 100):
+        if save_col.button("Save", use_container_width=True, disabled=not can_save):
             db3 = _db()
             try:
                 upsert_quality_config(agent_id, {
@@ -801,9 +879,11 @@ def _show_overview(agent_id: str) -> None:
                     "weight_decision":     w_vals[2] / 100,
                     "weight_completeness": w_vals[3] / 100,
                     "pass_threshold":      thresh / 100,
+                    "custom_metrics":      custom_list,
                 }, db3)
             finally:
                 db3.close()
+            st.session_state["custom_metrics_state"] = custom_list
             st.success("Saved. New weights apply to the next evaluation cycle.")
 
 

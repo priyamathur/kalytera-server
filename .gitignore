@@ -128,6 +128,10 @@ web_dashboard.html
 # Large demo/test data scripts (not for public SDK)
 load_100k.py
 
+# Heroku artifacts (we use Render)
+Procfile
+runtime.txt
+
 # Internal seed scripts
 seed_demo.py
 seed_rohan.py
