@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import case, distinct, func
 from sqlalchemy.orm import Session
 
-from db.models import AgentLog, AgentQualityConfig, ApiKey, EvalResult, LossPattern, Organization, User, UsageRecord
+from db.models import AgentLog, AgentQualityConfig, ApiKey, EvalResult, GoldenLabel, LossPattern, Organization, User, UsageRecord
 
 
 # ---------------------------------------------------------------------------
@@ -629,6 +629,64 @@ def upsert_quality_config(agent_id: str, updates: Dict[str, Any], db: Session) -
             if hasattr(row, k):
                 setattr(row, k, json.dumps(v) if k == "custom_metrics" and isinstance(v, list) else v)
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Golden labels — judge calibration
+# ---------------------------------------------------------------------------
+
+def upsert_golden_label(
+    agent_id: str, session_id: str, human_passed: bool, note: str, db: Session
+) -> None:
+    row = db.query(GoldenLabel).filter(
+        GoldenLabel.agent_id == agent_id,
+        GoldenLabel.session_id == session_id,
+    ).first()
+    if row:
+        row.human_passed = human_passed
+        row.note = note
+    else:
+        db.add(GoldenLabel(agent_id=agent_id, session_id=session_id, human_passed=human_passed, note=note))
+    db.commit()
+
+
+def get_golden_label(agent_id: str, session_id: str, db: Session) -> Optional[GoldenLabel]:
+    return db.query(GoldenLabel).filter(
+        GoldenLabel.agent_id == agent_id,
+        GoldenLabel.session_id == session_id,
+    ).first()
+
+
+def get_calibration_stats(agent_id: str, db: Session) -> Dict[str, Any]:
+    """
+    Returns judge–human agreement stats for this agent.
+    Agreement: judge's session verdict (any failed step → session failed) vs human label.
+    """
+    labels = db.query(GoldenLabel).filter(GoldenLabel.agent_id == agent_id).all()
+    if not labels:
+        return {"total_labeled": 0, "agreement_count": 0, "agreement_rate": None, "status": "unlabeled"}
+
+    agreement = 0
+    for label in labels:
+        any_fail = db.query(EvalResult).filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.session_id == label.session_id,
+            EvalResult.passed == False,  # noqa: E712
+            EvalResult.eval_error == False,  # noqa: E712
+        ).first()
+        judge_passed = any_fail is None
+        if judge_passed == label.human_passed:
+            agreement += 1
+
+    total = len(labels)
+    rate = agreement / total
+    status = "excellent" if rate >= 0.90 else ("good" if rate >= 0.80 else "needs_calibration")
+    return {
+        "total_labeled": total,
+        "agreement_count": agreement,
+        "agreement_rate": round(rate, 3),
+        "status": status,
+    }
 
 
 # ---------------------------------------------------------------------------

@@ -148,7 +148,9 @@ def _db():  # type: ignore[return]
 from db.queries import (  # noqa: E402
     get_all_agent_ids,
     get_avg_score_by_step,
+    get_calibration_stats,
     get_failures_by_step,
+    get_golden_label,
     get_latency_values,
     get_patterns_for_agent,
     get_quality_config,
@@ -161,6 +163,7 @@ from db.queries import (  # noqa: E402
     get_todays_stats,
     get_top_failure_types,
     search_eval_failures,
+    upsert_golden_label,
     upsert_quality_config,
 )
 
@@ -461,6 +464,7 @@ def _show_overview(agent_id: str) -> None:
         latencies = get_latency_values(agent_id, 24, db)
         score_buckets = get_score_buckets(agent_id, 24, db)
         step_scores   = get_avg_score_by_step(agent_id, 24, db)
+        calib = get_calibration_stats(agent_id, db)
     finally:
         db.close()
 
@@ -475,12 +479,18 @@ def _show_overview(agent_id: str) -> None:
     # ── KPI row ─────────────────────────────────────────────────────────────
     pass_color = "#16a34a" if pass_pct >= 70 else "#dc2626"
     fail_color = "#dc2626" if failures_24h > 0 else "#16a34a"
-    k1, k2, k3, k4, k5 = st.columns(5)
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), "distinct sessions, 24h"), unsafe_allow_html=True)
     k2.markdown(_kpi_card("Pass Rate", f"{pass_pct:.0f}%", "score ≥ 70", color=pass_color), unsafe_allow_html=True)
     k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "weighted 4 dims"), unsafe_allow_html=True)
     k4.markdown(_kpi_card("Failures", str(failures_24h), "sessions failed, 24h", color=fail_color), unsafe_allow_html=True)
     k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
+    _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#94a3b8"}
+    _CALIB_LABEL = {"excellent": "Calibrated ✓", "good": "Good", "needs_calibration": "Review weights", "unlabeled": "Not yet labeled"}
+    calib_status = calib["status"]
+    calib_val = f"{calib['agreement_rate']*100:.0f}%" if calib["agreement_rate"] is not None else "—"
+    calib_sub = f"{calib['total_labeled']} sessions labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "Label sessions in Trace Viewer"
+    k6.markdown(_kpi_card("Judge Accuracy", calib_val, calib_sub, color=_CALIB_COLOR[calib_status]), unsafe_allow_html=True)
 
     # ── Quality trend + session volume ───────────────────────────────────────
     _section_head("Quality Trend", f"last {TREND_DAYS} days — avg score · pass rate")
@@ -1313,6 +1323,49 @@ def _show_trace(agent_id: str, session_id: str) -> None:
         """,
         unsafe_allow_html=True,
     )
+
+    # ── Golden label — calibrate the judge ───────────────────────────────────
+    db_lbl = _db()
+    try:
+        existing_label = get_golden_label(agent_id, session_id, db_lbl)
+    finally:
+        db_lbl.close()
+
+    lc, mc, rc = st.columns([2, 2, 6])
+    if existing_label is not None:
+        verb = "✓ Labeled: PASSED" if existing_label.human_passed else "✗ Labeled: FAILED"
+        lbl_color = "#16a34a" if existing_label.human_passed else "#dc2626"
+        lc.markdown(
+            f'<div style="font-size:12px;font-weight:700;color:{lbl_color};padding-top:8px">{verb}</div>',
+            unsafe_allow_html=True,
+        )
+        if mc.button("Change label", key="change_lbl"):
+            db_lbl2 = _db()
+            try:
+                upsert_golden_label(agent_id, session_id, not existing_label.human_passed, "", db_lbl2)
+            finally:
+                db_lbl2.close()
+            st.rerun()
+    else:
+        if lc.button("👍 Mark passed", key="lbl_pass", help="Confirm this session passed — trains the judge"):
+            db_lbl2 = _db()
+            try:
+                upsert_golden_label(agent_id, session_id, True, "", db_lbl2)
+            finally:
+                db_lbl2.close()
+            st.rerun()
+        if mc.button("👎 Mark failed", key="lbl_fail", help="Override — this session actually failed"):
+            db_lbl2 = _db()
+            try:
+                upsert_golden_label(agent_id, session_id, False, "", db_lbl2)
+            finally:
+                db_lbl2.close()
+            st.rerun()
+        rc.markdown(
+            '<div style="font-size:11px;color:#94a3b8;padding-top:8px">'
+            'Label sessions to measure and calibrate judge accuracy.</div>',
+            unsafe_allow_html=True,
+        )
 
     # ── Root cause alert — shown immediately if session failed ────────────────
     diag = _build_diagnosis(steps)

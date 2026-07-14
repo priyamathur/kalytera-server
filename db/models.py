@@ -12,7 +12,7 @@ UsageRecord        ← monthly session counters per org (shared across all org's
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Text, UniqueConstraint, Index
 from sqlalchemy import DateTime as SADateTime
 from sqlalchemy.orm import declarative_base
 
@@ -94,6 +94,20 @@ class AgentQualityConfig(Base):
     weight_completeness = Column(Float, nullable=False, default=0.15)
     pass_threshold = Column(Float, nullable=False, default=0.7)
     custom_metrics = Column(Text, nullable=True)  # JSON: [{"name":"helpfulness","weight":0.2,"description":"..."}]
+
+
+class GoldenLabel(Base):
+    """Human ground-truth labels for calibrating the LLM judge."""
+    __tablename__ = "golden_labels"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    agent_id = Column(String, nullable=False, index=True)
+    session_id = Column(String, nullable=False, index=True)
+    human_passed = Column(Boolean, nullable=False)
+    note = Column(String, nullable=True)
+    created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+
+    __table_args__ = (UniqueConstraint("agent_id", "session_id", name="uq_golden_agent_session"),)
 
 
 class Organization(Base):

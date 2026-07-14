@@ -89,6 +89,22 @@ Weights and pass threshold are configurable per agent in the dashboard. You can 
 
 ---
 
+## Calibrate the judge
+
+Every judge has bias. Calibration measures whether Kalytera's LLM judge agrees with your own judgement.
+
+In the Trace Viewer, label any session with **👍 passed** or **👎 failed**. The dashboard shows judge accuracy against your labels and flags when weights need adjustment:
+
+| Agreement | Status |
+|---|---|
+| ≥ 90% | Calibrated ✓ |
+| 80–89% | Good |
+| < 80% | Review your scoring weights |
+
+Label 10–20 sessions to get a reliable calibration reading. The more you label, the more precisely Kalytera can tell you if the judge is drifting.
+
+---
+
 ## `@watch` decorator
 
 Zero-config alternative — wraps a function and captures input, output, and latency:
@@ -113,6 +129,17 @@ docker compose up
 ```
 
 API at `http://localhost:8000`, dashboard at `http://localhost:8501`.
+
+---
+
+## Roadmap
+
+- [x] LLM-as-judge scoring (4 built-in dimensions)
+- [x] Custom metrics (helpfulness, tone, compliance, …)
+- [x] Golden set calibration — label sessions, measure judge accuracy
+- [ ] Cross-model agreement — flag low-confidence evals by comparing two judges
+- [ ] Auto-calibration — suggest weight adjustments when agreement drops below threshold
+- [ ] Team review queue — route low-confidence evals to a human reviewer
 
 ---
 
