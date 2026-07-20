@@ -22,7 +22,7 @@ kalytera.trace(
 
 That's it. Kalytera scores every step with an LLM judge and surfaces failure patterns — what's breaking, at which workflow step, and why.
 
-→ **[Live demo dashboard](https://kalytera-dashboard.onrender.com)** · **[Get an API key](#get-started)**
+→ **[Live demo dashboard](https://app.kalytera.dev)** · **[Get an API key](#get-started)**
 
 ---
 
@@ -31,7 +31,7 @@ That's it. Kalytera scores every step with an LLM judge and surfaces failure pat
 **1. Get a free API key** (no credit card):
 
 ```bash
-curl -s -X POST https://agentiq-api-z9it.onrender.com/signup \
+curl -s -X POST https://api.kalytera.dev/signup \
   -H "Content-Type: application/json" \
   -d '{"email": "you@example.com", "name": "my-agent"}' | python3 -m json.tool
 ```
@@ -45,7 +45,7 @@ import kalytera
 
 kalytera.configure(
     api_key="kly_live_...",
-    api_endpoint="https://agentiq-api-z9it.onrender.com",
+    api_endpoint="https://api.kalytera.dev",
     agent_id="my-agent",
 )
 
@@ -65,7 +65,7 @@ kalytera.trace(
 **3. Open the dashboard** — quality scores appear within 30 seconds:
 
 ```
-https://kalytera-dashboard.onrender.com
+https://app.kalytera.dev
 ```
 
 ---

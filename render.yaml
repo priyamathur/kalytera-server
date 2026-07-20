@@ -45,7 +45,14 @@ services:
           name: kalytera-postgres
           property: internalConnectionString
       - key: KALYTERA_API_ENDPOINT
-        value: https://kalytera-api.onrender.com
+        value: https://api.kalytera.dev
       - key: PYTHONPATH
         value: .
+    autoDeploy: true
+
+  # Marketing website
+  - type: web
+    name: kalytera-site
+    env: static
+    staticPublishPath: ./site
     autoDeploy: true

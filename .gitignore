@@ -89,7 +89,6 @@ causal/
 analytics/
 dashboard/
 docs/
-site/
 api/admin_endpoints.py
 api/analytics_endpoints.py
 api/evaluation_endpoints.py
@@ -113,7 +112,6 @@ integration_test.py
 integration_test_report.json
 intent_classification.py
 kalytera-admin.html
-kalytera-site.html
 load_demo_data.py
 loss_pattern_analyzer.py
 main.py
