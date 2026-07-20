@@ -88,7 +88,9 @@ patterns/
 causal/
 analytics/
 dashboard/
-docs/
+docs/*.md
+docs/demo.html
+docs/architecture-*.html
 api/admin_endpoints.py
 api/analytics_endpoints.py
 api/evaluation_endpoints.py
