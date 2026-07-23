@@ -448,13 +448,17 @@ def _kpi_card(label: str, value: str, subtitle: str, color: str = "#0f172a") -> 
 # VIEW 1 — Overview
 # ═══════════════════════════════════════════════════════════════════════════════
 def _show_overview(agent_id: str) -> None:
-    _hours_map = {"Last 24h": 24, "Last 7 days": 168, "Last 30 days": 720}
-    sel_label = st.selectbox(
-        "Time range", list(_hours_map.keys()), index=1, key="overview_time_range",
-        label_visibility="collapsed",
-    )
+    _hours_map = {"24h": 24, "7 days": 168, "30 days": 720}
+    hdr_col, filter_col = st.columns([5, 1])
+    with hdr_col:
+        _page_header("Agent Overview", "Quality, latency, and failure breakdown")
+    with filter_col:
+        st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+        sel_label = st.selectbox(
+            "Range", list(_hours_map.keys()), index=1,
+            key="overview_time_range", label_visibility="collapsed",
+        )
     sel_hours = _hours_map[sel_label]
-    _page_header("Agent Overview", f"Quality, latency, and failure breakdown — {sel_label.lower()}")
 
     _calib_default = {"total_labeled": 0, "agreement_count": 0, "agreement_rate": None, "status": "unlabeled"}
     db = _db()
@@ -480,16 +484,16 @@ def _show_overview(agent_id: str) -> None:
     p_vals = [int(np.percentile(arr, p)) for p in [50, 75, 90, 95, 99]]
 
     if failures_n == 0 and stats["total"] > 0:
-        st.success(f"No failures in the {sel_label.lower()} — your agent is healthy.", icon="✅")
+        st.success(f"No failures in the {sel_label} — your agent is healthy.", icon="✅")
 
     # ── KPI row ─────────────────────────────────────────────────────────────
     pass_color = "#16a34a" if pass_pct >= 70 else "#dc2626"
     fail_color = "#dc2626" if failures_n > 0 else "#16a34a"
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), f"distinct sessions, {sel_label.lower()}"), unsafe_allow_html=True)
+    k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), f"distinct sessions, {sel_label}"), unsafe_allow_html=True)
     k2.markdown(_kpi_card("Pass Rate", f"{pass_pct:.0f}%", "score ≥ 70", color=pass_color), unsafe_allow_html=True)
     k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "weighted 4 dims"), unsafe_allow_html=True)
-    k4.markdown(_kpi_card("Failures", str(failures_n), f"sessions failed, {sel_label.lower()}", color=fail_color), unsafe_allow_html=True)
+    k4.markdown(_kpi_card("Failures", str(failures_n), f"sessions failed, {sel_label}", color=fail_color), unsafe_allow_html=True)
     k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
     _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#6366f1"}
     _CALIB_LABEL = {"excellent": "Calibrated ✓", "good": "Good", "needs_calibration": "Review weights", "unlabeled": "Not yet labeled"}
@@ -565,7 +569,7 @@ def _show_overview(agent_id: str) -> None:
 
     # ── Latency ─────────────────────────────────────────────────────────────
     if latencies:
-        _section_head("Latency", f"step response time percentiles — {sel_label.lower()}")
+        _section_head("Latency", f"step response time percentiles — {sel_label}")
         lc1, lc2, lc3, lc4 = st.columns(4)
         lc1.markdown(_kpi_card("P50", f"{p_vals[0]:,} ms", "median response"), unsafe_allow_html=True)
         lc2.markdown(_kpi_card("P75", f"{p_vals[1]:,} ms", "75th percentile", color="#8b5cf6"), unsafe_allow_html=True)
@@ -608,7 +612,7 @@ def _show_overview(agent_id: str) -> None:
         st.plotly_chart(fig_sq, use_container_width=True, config={"displayModeBar": False})
 
     # ── Failure Breakdown ─────────────────────────────────────────────────────
-    _section_head("Failure Breakdown", sel_label.lower())
+    _section_head("Failure Breakdown", sel_label)
     col_l, col_r = st.columns(2)
 
     with col_l:
@@ -632,7 +636,7 @@ def _show_overview(agent_id: str) -> None:
                 hide_index=True, use_container_width=True,
             )
         else:
-            st.caption(f"No failures in the {sel_label.lower()}.")
+            st.caption(f"No failures in the {sel_label}.")
 
     with col_r:
         st.markdown(
@@ -667,7 +671,7 @@ def _show_overview(agent_id: str) -> None:
             )
             st.plotly_chart(fig_ft, use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption(f"No failures in the {sel_label.lower()}.")
+            st.caption(f"No failures in the {sel_label}.")
 
     # ── Scoring Configuration ─────────────────────────────────────────────────
     st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
