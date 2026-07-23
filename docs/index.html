@@ -136,16 +136,43 @@ h1 em{color:var(--cyan);font-style:normal}
 .moat-body{font-size:14px;line-height:1.75;color:rgba(232,236,240,0.68)}
 
 /* FEATURES (problem → fix) */
-.feat-lead{font-size:16px;line-height:1.8;color:rgba(232,236,240,0.45);max-width:580px;margin-bottom:52px}
+.feat-lead{font-size:16px;line-height:1.8;color:rgba(232,236,240,0.45);max-width:580px;margin-bottom:56px}
 .feat-list{display:flex;flex-direction:column}
-.feat-item{display:grid;grid-template-columns:1fr 1fr;gap:72px;padding:44px 0;border-bottom:1px solid var(--border);align-items:start}
-.feat-item:last-child{border-bottom:none}
-.feat-problem{font-size:15px;line-height:1.8;color:rgba(232,236,240,0.35);font-style:italic}
-.feat-tag{font-size:11px;font-family:'DM Mono',monospace;color:var(--cyan);margin-bottom:12px;letter-spacing:.3px}
+.feat-item{display:grid;grid-template-columns:5fr 6fr;gap:56px;padding:56px 0;border-bottom:1px solid var(--border);align-items:center}
+.feat-item:last-child{border-bottom:none;padding-bottom:0}
+.feat-problem{font-size:13px;line-height:1.75;color:rgba(232,236,240,0.32);font-style:italic;margin-bottom:20px;padding-bottom:18px;border-bottom:1px solid var(--border)}
+.feat-tag{font-size:11px;font-family:'DM Mono',monospace;color:var(--cyan);margin-bottom:10px;letter-spacing:.3px}
 .feat-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:var(--white);margin-bottom:12px;line-height:1.3}
-.feat-body{font-size:14px;line-height:1.8;color:rgba(232,236,240,0.65)}
+.feat-body{font-size:14px;line-height:1.8;color:rgba(232,236,240,0.62)}
 .feat-body code{color:var(--cyan);font-family:'DM Mono',monospace;font-size:12px}
-@media(max-width:680px){.feat-item{grid-template-columns:1fr;gap:16px}.feat-problem{font-size:13px}}
+/* feature mini-mockups */
+.fmock{background:#0d1117;border:1px solid rgba(255,255,255,0.08);border-radius:12px;overflow:hidden;box-shadow:0 8px 32px rgba(0,0,0,0.4)}
+.fmock-bar{background:#161b22;padding:9px 14px;display:flex;align-items:center;gap:6px;border-bottom:1px solid var(--border)}
+.fmock-title{margin-left:8px;font-size:10px;color:var(--muted);font-family:'DM Mono',monospace}
+.fmock-live{margin-left:auto;font-size:10px;color:var(--green);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace}
+.fmock-live::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.fmock-body{padding:14px 16px;font-family:'DM Mono',monospace}
+.fmock-row{display:flex;align-items:center;padding:7px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:11px;gap:8px}
+.fmock-row:last-child{border-bottom:none}
+.fmock-row.bad{background:rgba(232,85,85,0.05);margin:0 -16px;padding:7px 16px}
+.fmock-row.warn{background:rgba(232,85,85,0.02);margin:0 -16px;padding:7px 16px}
+.fmock-lbl{flex:1;color:rgba(232,236,240,0.55)}
+.fmock-lbl.hi{color:var(--white)}
+.fmock-score{font-size:10px}
+.fmock-pass{color:var(--green)}
+.fmock-fail{color:var(--red)}
+.fmock-hdg{font-size:10px;letter-spacing:.4px;text-transform:uppercase;color:rgba(232,236,240,0.28);margin-bottom:6px;font-family:'DM Mono',monospace}
+.fmock-verdict{font-size:12px;line-height:1.65;color:rgba(232,236,240,0.72);padding:10px 12px;background:rgba(232,85,85,0.06);border-left:2px solid rgba(232,85,85,0.28);border-radius:0 6px 6px 0;margin-bottom:10px}
+.fmock-fix{font-size:11px;line-height:1.65;color:rgba(232,236,240,0.60);padding:8px 12px;background:rgba(168,224,96,0.06);border-left:2px solid rgba(168,224,96,0.25);border-radius:0 6px 6px 0}
+.fmock-hint{margin-top:8px;padding:7px 10px;background:rgba(0,200,232,0.05);border-left:2px solid rgba(0,200,232,0.25);border-radius:0 4px 4px 0;font-size:10px;color:rgba(232,236,240,0.45);font-family:'DM Mono',monospace}
+.fmock-bar-wrap{margin-bottom:10px}
+.fmock-bar-wrap:last-child{margin-bottom:0}
+.fmock-bar-hd{display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px}
+.fmock-bar-track{height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-bottom:3px}
+.fmock-bar-fill{height:100%;border-radius:2px}
+.fmock-bar-note{font-size:10px;color:rgba(232,236,240,0.30)}
+.fmock-div{height:1px;background:var(--border);margin:10px 0}
+@media(max-width:760px){.feat-item{grid-template-columns:1fr;gap:24px}.fmock{display:none}}
 
 /* EXPANDABLE PROMPT */
 .prompt-expand{margin-top:28px}
@@ -494,38 +521,92 @@ def my_agent_step(input: str) -> str:
   <div class="feat-list">
 
     <div class="feat-item">
-      <div class="feat-problem">Existing tools sample 1–10% of traffic. Rare, high-cost failures — infinite loops, cascading tool errors — never appear in the sample. You find out from a $47,000 API bill.</div>
       <div>
+        <div class="feat-problem">Existing tools sample 1–10% of traffic. Rare, high-cost failures — infinite loops, cascading tool errors — never appear in the sample. You find out from a $47,000 API bill.</div>
         <div class="feat-tag">trace everything</div>
         <div class="feat-title">100% coverage. Every step of every session.</div>
-        <div class="feat-body">One line to add. <code>kalytera.trace()</code> is fire-and-forget — under 5ms, never raises, never blocks. If Kalytera is unreachable your agent keeps running. Nothing is sampled. If a failure mode exists in your traffic, you will see it.</div>
+        <div class="feat-body">One line to add. <code>kalytera.trace()</code> is fire-and-forget — under 5ms, never raises, never blocks. Nothing is sampled. If a failure mode exists in your traffic, you will see it.</div>
+      </div>
+      <div class="fmock">
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Session Feed · support_agent</span><span class="fmock-live">live</span></div>
+        <div class="fmock-body">
+          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:12px;font-family:'DM Mono',monospace"><span style="color:rgba(232,236,240,0.35)">1,247 sessions today</span><span style="color:var(--cyan)">100% evaluated</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Session 1249 · classify_intent · 4 steps</span><span class="fmock-score" style="color:var(--green)">91/100</span></div>
+          <div class="fmock-row bad"><span class="fmock-fail">✗</span><span class="fmock-lbl hi">Session 1248 · billing_dispute · 4 steps</span><span class="fmock-score" style="color:var(--red)">34/100</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Session 1247 · account_lookup · 3 steps</span><span class="fmock-score" style="color:var(--green)">94/100</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Session 1246 · password_reset · 2 steps</span><span class="fmock-score" style="color:var(--green)">88/100</span></div>
+          <div class="fmock-row bad"><span class="fmock-fail">✗</span><span class="fmock-lbl hi">Session 1244 · payment_update · 5 steps</span><span class="fmock-score" style="color:var(--red)">28/100</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Session 1243 · order_status · 3 steps</span><span class="fmock-score" style="color:var(--green)">89/100</span></div>
+        </div>
       </div>
     </div>
 
     <div class="feat-item">
-      <div class="feat-problem">Mid-workflow failures produce plausible-looking final outputs. By the time the output is checked, the signal is gone. Developers spend hours in traces trying to find which step caused it.</div>
       <div>
+        <div class="feat-problem">Mid-workflow failures produce plausible-looking final outputs. By the time the output is checked, the signal is gone. Developers spend hours in traces trying to find which step caused it.</div>
         <div class="feat-tag">step-level scoring</div>
         <div class="feat-title">Scored at every step, not just the final answer.</div>
-        <div class="feat-body">Kalytera evaluates each step independently across four dimensions: accuracy, goal alignment, decision quality, and completeness. The failure shows up at the step where it originated — not where it ended up. Quality is calibrated to your industry by default.</div>
+        <div class="feat-body">Kalytera evaluates each step independently across four dimensions: accuracy, goal alignment, decision quality, and completeness. The failure shows up where it originated — not where it ended up.</div>
+      </div>
+      <div class="fmock">
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Session 1248 · billing_dispute · FAILED</span></div>
+        <div class="fmock-body">
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl" style="flex:1">Step 1 — classify_intent</span><span class="fmock-score" style="color:var(--green)">96/100</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl" style="flex:1">Step 2 — retrieve_order</span><span class="fmock-score" style="color:var(--green)">91/100</span></div>
+          <div class="fmock-row bad"><span class="fmock-fail">✗</span><span class="fmock-lbl hi" style="flex:1">Step 3 — payment_policy_api</span><span class="fmock-score" style="color:var(--red)">12/100</span></div>
+          <div class="fmock-row warn"><span class="fmock-fail">✗</span><span class="fmock-lbl" style="flex:1">Step 4 — generate_response</span><span class="fmock-score" style="color:var(--red)">34/100</span></div>
+          <div class="fmock-hint">Failure originated at step 3 — not step 4</div>
+        </div>
       </div>
     </div>
 
     <div class="feat-item">
-      <div class="feat-problem">A 23% failure rate tells you something is wrong. It doesn't tell you which sessions, which step, or what to change. Most eval tools stop at the score.</div>
       <div>
+        <div class="feat-problem">A 23% failure rate tells you something is wrong. It doesn't tell you which sessions, which step, or what to change. Most eval tools stop at the score.</div>
         <div class="feat-tag">root cause</div>
         <div class="feat-title">A sentence you can put in a ticket, not a number.</div>
-        <div class="feat-body">Every failure surfaces with a plain-English root cause: which step, why it failed, how many sessions this week. <em>"Billing disputes fail at step 3 because the payment API returns a timeout when the account has a hold flag — 23 sessions since Tuesday."</em> That's actionable.</div>
+        <div class="feat-body">Every failure surfaces with a plain-English root cause: which step, why it failed, how many sessions this week. Not a score — a sentence your team can act on today.</div>
+      </div>
+      <div class="fmock">
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Kalytera verdict · Session 1248</span></div>
+        <div class="fmock-body">
+          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px"><span style="font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:28px;color:var(--red);letter-spacing:-1px">34</span><span style="font-size:11px;color:rgba(232,236,240,0.30);font-family:'DM Mono',monospace">/100 · FAILED</span></div>
+          <div class="fmock-hdg">Root cause</div>
+          <div class="fmock-verdict">Payment API timed out at step 3. Instead of escalating, the agent told the customer the refund was approved — a claim it had no basis for.</div>
+          <div class="fmock-hdg">Suggested fix</div>
+          <div class="fmock-fix">Add a timeout fallback at step 3: retry once, then escalate to a human instead of guessing the policy outcome.</div>
+        </div>
       </div>
     </div>
 
     <div class="feat-item">
-      <div class="feat-problem">One failure is noise. Twenty-three identical failures is a pattern — but only if something groups them. Without automatic detection, recurring issues stay invisible until a customer escalates.</div>
       <div>
+        <div class="feat-problem">One failure is noise. Twenty-three identical failures is a pattern — but only if something groups them. Without automatic detection, recurring issues stay invisible until a customer escalates.</div>
         <div class="feat-tag">loss patterns</div>
         <div class="feat-title">Recurring failures cluster automatically, ranked by impact.</div>
-        <div class="feat-body">Kalytera runs pattern detection hourly. Failures that share a root cause group into named patterns — ranked by frequency, tagged with first seen, flagged if worsening week over week. You see what to fix first, not a flat list of incidents to triage.</div>
+        <div class="feat-body">Kalytera runs pattern detection hourly. Failures that share a root cause group into named patterns — ranked by frequency, tagged with first seen, flagged if worsening week over week.</div>
+      </div>
+      <div class="fmock">
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Loss Patterns · billing_agent · last 7d</span></div>
+        <div class="fmock-body">
+          <div class="fmock-bar-wrap">
+            <div class="fmock-bar-hd"><span style="color:var(--white)">tool_failure</span><span style="color:var(--red)">47 sessions ↑ worsening</span></div>
+            <div class="fmock-bar-track"><div class="fmock-bar-fill" style="width:67%;background:var(--red);opacity:.65"></div></div>
+            <div class="fmock-bar-note">↳ payment_policy_api timeout at step 3</div>
+          </div>
+          <div class="fmock-div"></div>
+          <div class="fmock-bar-wrap">
+            <div class="fmock-bar-hd"><span style="color:var(--white)">wrong_answer</span><span style="color:rgba(232,236,240,0.45)">31 sessions</span></div>
+            <div class="fmock-bar-track"><div class="fmock-bar-fill" style="width:44%;background:var(--muted)"></div></div>
+            <div class="fmock-bar-note">↳ refund eligibility incorrectly stated</div>
+          </div>
+          <div class="fmock-div"></div>
+          <div class="fmock-bar-wrap">
+            <div class="fmock-bar-hd"><span style="color:var(--white)">incomplete</span><span style="color:rgba(232,236,240,0.45)">16 sessions</span></div>
+            <div class="fmock-bar-track"><div class="fmock-bar-fill" style="width:23%;background:var(--muted);opacity:.5"></div></div>
+            <div class="fmock-bar-note">↳ no confirmation before closing ticket</div>
+          </div>
+        </div>
       </div>
     </div>
 
