@@ -975,6 +975,18 @@ function togglePrompt() {
   chevron.classList.toggle('open', !open);
 }
 
+document.addEventListener('click', function(e) {
+  const wrap = document.querySelector('.prompt-expand');
+  if (!wrap || !wrap.contains(e.target)) {
+    const body = document.getElementById('prompt-body');
+    const chevron = document.getElementById('prompt-chevron');
+    if (body && body.style.display === 'block') {
+      body.style.display = 'none';
+      chevron.classList.remove('open');
+    }
+  }
+});
+
 function copyPrompt() {
   const text = document.getElementById('prompt-text').innerText;
   navigator.clipboard.writeText(text).then(() => {
