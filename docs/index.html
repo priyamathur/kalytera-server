@@ -69,12 +69,13 @@ h1 em{color:var(--cyan);font-style:normal}
 .v-fix-label{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--green);margin-bottom:6px}
 .v-fix{font-size:12.5px;color:rgba(232,236,240,0.82);line-height:1.6;padding:9px 12px;border-left:2px solid var(--green);background:var(--green-bg);border-radius:0 4px 4px 0}
 
-/* STATS */
-.stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--border);border-bottom:1px solid var(--border);margin-top:80px;max-width:1060px;margin-left:auto;margin-right:auto}
-.stat{padding:28px 40px;border-right:1px solid var(--border)}
-.stat:last-child{border-right:none}
-.stat-n{font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:36px;color:var(--cyan);letter-spacing:-1px;margin-bottom:6px}
-.stat-l{font-size:13px;color:rgba(232,236,240,0.72);line-height:1.5}
+/* STATS (vertical, inside problem section) */
+.prob-wrap{display:grid;grid-template-columns:1fr 240px;gap:52px;align-items:start}
+.vstats{display:flex;flex-direction:column;border-left:1px solid var(--border);padding-left:36px}
+.vstat{padding:24px 0;border-bottom:1px solid var(--border)}
+.vstat:last-child{border-bottom:none;padding-bottom:0}
+.vstat-n{font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:42px;color:var(--cyan);letter-spacing:-2px;line-height:1;margin-bottom:8px}
+.vstat-l{font-size:13px;color:rgba(232,236,240,0.55);line-height:1.65}
 
 /* SECTION */
 .sec{padding:72px 56px;max-width:1060px;margin:0 auto}
@@ -291,9 +292,11 @@ footer{border-top:1px solid var(--border);padding:28px 56px;display:flex;justify
   nav{padding:14px 20px}.nav-links .nav-link:not(.nav-cta){display:none}
   .hero,.sec,.cta-wrap{padding-left:20px;padding-right:20px}
   .mockup{margin:0 20px}
-  .stats{grid-template-columns:1fr}
-  .stat{padding:22px 20px;border-right:none;border-bottom:1px solid var(--border)}
-  .stat:last-child{border-bottom:none}
+  .prob-wrap{grid-template-columns:1fr}
+  .vstats{border-left:none;padding-left:0;border-top:1px solid var(--border);padding-top:24px;flex-direction:row;flex-wrap:wrap;gap:0}
+  .vstat{flex:1;min-width:140px;padding:16px 20px 16px 0;border-bottom:none;border-right:1px solid var(--border)}
+  .vstat:last-child{border-right:none}
+  .vstat-n{font-size:32px}
   .prob-grid,.moat-grid,.price-grid{grid-template-columns:1fr}
   .docs-wrap{grid-template-columns:1fr;padding:0 20px}
   .docs-aside{display:none}
@@ -482,21 +485,21 @@ def my_agent_step(input: str) -> str:
   </div>
 </div>
 
-<!-- STATS -->
-<div class="stats">
-  <div class="stat"><div class="stat-n">62%</div><div class="stat-l">Of enterprises already have agents live in production — Sinch 2026</div></div>
-  <div class="stat"><div class="stat-n">74%</div><div class="stat-l">Have rolled back a live agent after a governance failure — in front of real customers</div></div>
-  <div class="stat"><div class="stat-n">32%</div><div class="stat-l">Cite quality as the #1 barrier to production — not cost, not capability</div></div>
-</div>
-
 <!-- PROBLEM -->
-<div class="sec">
-  <div class="sh"><h2>The problem</h2><div class="sh-line"></div></div>
+<div class="sec" style="border-top:1px solid var(--border)">
+  <div class="sh"><h2>AI adoption in enterprises</h2><div class="sh-line"></div></div>
+  <div class="prob-wrap">
   <div class="prob-grid">
     <div class="prob-card"><svg class="prob-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2.5L1.5 17.5h17L10 2.5z" stroke="#e85555" stroke-width="1.5" stroke-linejoin="round"/><line x1="10" y1="8.5" x2="10" y2="12.5" stroke="#e85555" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="15" r="1" fill="#e85555"/></svg><div class="prob-title">No quality layer means failures compound silently</div><div class="prob-body">Existing tools sample traffic and check only the final output. <strong>Failures that start mid-workflow leave no trace at the end.</strong> Developers find out from customer complaints, then spend hours in traces to find which step caused it.</div></div>
     <div class="prob-card"><svg class="prob-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><polyline points="2,16 6,10 11,13 18,4" stroke="#e8a840" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,4 18,4 18,8" stroke="#e8a840" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="prob-title">Enterprises can measure ROI — but not what's driving it</div><div class="prob-body">Experiment frameworks can show whether agent deployment improved outcomes. But without a quality layer, nobody knows which failure patterns dragged performance down. <strong>The overall return is visible. The causes are not.</strong></div></div>
     <div class="prob-card"><svg class="prob-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="5" x2="18" y2="5" stroke="#00c8e8" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="10" x2="18" y2="10" stroke="#00c8e8" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="15" x2="18" y2="15" stroke="#00c8e8" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="5" r="2.5" fill="#0a0d10" stroke="#00c8e8" stroke-width="1.5"/><circle cx="13" cy="10" r="2.5" fill="#0a0d10" stroke="#00c8e8" stroke-width="1.5"/><circle cx="9" cy="15" r="2.5" fill="#0a0d10" stroke="#00c8e8" stroke-width="1.5"/></svg><div class="prob-title">Generic pass/fail scores don't match what your agent is actually for</div><div class="prob-body">A healthcare agent and a marketing agent should not be graded the same way. <strong>Most eval tools give you one generic score with no way to configure what quality actually means for your use case.</strong></div></div>
     <div class="prob-card"><svg class="prob-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 10a7 7 0 0 1 7-7h4.5" stroke="#a8e060" stroke-width="1.5" stroke-linecap="round"/><polyline points="12,1 14.5,3 12,5" stroke="#a8e060" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 10a7 7 0 0 1-7 7H5.5" stroke="#a8e060" stroke-width="1.5" stroke-linecap="round"/><polyline points="8,19 5.5,17 8,15" stroke="#a8e060" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="prob-title">Your agent repeats the same mistake next interaction <span class="np">Next phase</span></div><div class="prob-body">There's no mechanism to warn an agent about a failure before it hits the same step again. Fixing it requires retraining — <strong>which needs labeled data you don't have yet.</strong></div></div>
+  </div>
+  <div class="vstats">
+    <div class="vstat"><div class="vstat-n">62%</div><div class="vstat-l">Of enterprises already have agents live in production — Sinch 2026</div></div>
+    <div class="vstat"><div class="vstat-n">74%</div><div class="vstat-l">Have rolled back a live agent after a governance failure — in front of real customers</div></div>
+    <div class="vstat"><div class="vstat-n">32%</div><div class="vstat-l">Cite quality as the #1 barrier to production — not cost, not capability</div></div>
+  </div>
   </div>
   <div class="incidents">
     <div class="inc">
