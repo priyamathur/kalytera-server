@@ -108,11 +108,9 @@ def get_quality_trend(
     ]
 
 
-def get_todays_stats(agent_id: str, db: Session) -> Dict[str, Any]:
-    """Pass rate, total evals, and distinct active failure types for today."""
-    today_start = datetime.now(timezone.utc).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+def get_todays_stats(agent_id: str, db: Session, hours: int = 24) -> Dict[str, Any]:
+    """Pass rate, total evals, and distinct active failure types for the given window."""
+    today_start = datetime.now(timezone.utc) - timedelta(hours=hours)
     base = (
         db.query(EvalResult)
         .filter(

@@ -448,19 +448,25 @@ def _kpi_card(label: str, value: str, subtitle: str, color: str = "#0f172a") -> 
 # VIEW 1 — Overview
 # ═══════════════════════════════════════════════════════════════════════════════
 def _show_overview(agent_id: str) -> None:
-    _page_header("Agent Overview", "Quality, latency, and failure breakdown for the last 24 hours")
+    _hours_map = {"Last 24h": 24, "Last 7 days": 168, "Last 30 days": 720}
+    sel_label = st.selectbox(
+        "Time range", list(_hours_map.keys()), index=1, key="overview_time_range",
+        label_visibility="collapsed",
+    )
+    sel_hours = _hours_map[sel_label]
+    _page_header("Agent Overview", f"Quality, latency, and failure breakdown — {sel_label.lower()}")
 
     _calib_default = {"total_labeled": 0, "agreement_count": 0, "agreement_rate": None, "status": "unlabeled"}
     db = _db()
     try:
-        stats = get_todays_stats(agent_id, db)
-        extra = get_session_and_latency_stats(agent_id, 24, db)
+        stats = get_todays_stats(agent_id, db, hours=sel_hours)
+        extra = get_session_and_latency_stats(agent_id, sel_hours, db)
         trend = get_quality_trend(agent_id, TREND_DAYS, db)
-        top_types = get_top_failure_types(agent_id, 24, db)
-        step_hot = get_failures_by_step(agent_id, 24, db)
-        latencies = get_latency_values(agent_id, 24, db)
-        score_buckets = get_score_buckets(agent_id, 24, db)
-        step_scores   = get_avg_score_by_step(agent_id, 24, db)
+        top_types = get_top_failure_types(agent_id, sel_hours, db)
+        step_hot = get_failures_by_step(agent_id, sel_hours, db)
+        latencies = get_latency_values(agent_id, sel_hours, db)
+        score_buckets = get_score_buckets(agent_id, sel_hours, db)
+        step_scores   = get_avg_score_by_step(agent_id, sel_hours, db)
         try:
             calib = get_calibration_stats(agent_id, db)
         except Exception:
@@ -468,22 +474,22 @@ def _show_overview(agent_id: str) -> None:
     finally:
         db.close()
 
-    failures_24h = stats["total"] - stats["passed"]
+    failures_n = stats["total"] - stats["passed"]
     pass_pct = stats["pass_rate"] * 100
     arr = np.array(latencies) if latencies else np.array([0])
     p_vals = [int(np.percentile(arr, p)) for p in [50, 75, 90, 95, 99]]
 
-    if failures_24h == 0 and stats["total"] > 0:
-        st.success("No failures in the last 24 hours — your agent is healthy.", icon="✅")
+    if failures_n == 0 and stats["total"] > 0:
+        st.success(f"No failures in the {sel_label.lower()} — your agent is healthy.", icon="✅")
 
     # ── KPI row ─────────────────────────────────────────────────────────────
     pass_color = "#16a34a" if pass_pct >= 70 else "#dc2626"
-    fail_color = "#dc2626" if failures_24h > 0 else "#16a34a"
+    fail_color = "#dc2626" if failures_n > 0 else "#16a34a"
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), "distinct sessions, 24h"), unsafe_allow_html=True)
+    k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), f"distinct sessions, {sel_label.lower()}"), unsafe_allow_html=True)
     k2.markdown(_kpi_card("Pass Rate", f"{pass_pct:.0f}%", "score ≥ 70", color=pass_color), unsafe_allow_html=True)
     k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "weighted 4 dims"), unsafe_allow_html=True)
-    k4.markdown(_kpi_card("Failures", str(failures_24h), "sessions failed, 24h", color=fail_color), unsafe_allow_html=True)
+    k4.markdown(_kpi_card("Failures", str(failures_n), f"sessions failed, {sel_label.lower()}", color=fail_color), unsafe_allow_html=True)
     k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
     _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#6366f1"}
     _CALIB_LABEL = {"excellent": "Calibrated ✓", "good": "Good", "needs_calibration": "Review weights", "unlabeled": "Not yet labeled"}
@@ -559,7 +565,7 @@ def _show_overview(agent_id: str) -> None:
 
     # ── Latency ─────────────────────────────────────────────────────────────
     if latencies:
-        _section_head("Latency", "step response time percentiles — last 24h")
+        _section_head("Latency", f"step response time percentiles — {sel_label.lower()}")
         lc1, lc2, lc3, lc4 = st.columns(4)
         lc1.markdown(_kpi_card("P50", f"{p_vals[0]:,} ms", "median response"), unsafe_allow_html=True)
         lc2.markdown(_kpi_card("P75", f"{p_vals[1]:,} ms", "75th percentile", color="#8b5cf6"), unsafe_allow_html=True)
@@ -602,7 +608,7 @@ def _show_overview(agent_id: str) -> None:
         st.plotly_chart(fig_sq, use_container_width=True, config={"displayModeBar": False})
 
     # ── Failure Breakdown ─────────────────────────────────────────────────────
-    _section_head("Failure Breakdown", "last 24h")
+    _section_head("Failure Breakdown", sel_label.lower())
     col_l, col_r = st.columns(2)
 
     with col_l:
@@ -626,7 +632,7 @@ def _show_overview(agent_id: str) -> None:
                 hide_index=True, use_container_width=True,
             )
         else:
-            st.caption("No failures in the last 24h.")
+            st.caption(f"No failures in the {sel_label.lower()}.")
 
     with col_r:
         st.markdown(
@@ -661,7 +667,7 @@ def _show_overview(agent_id: str) -> None:
             )
             st.plotly_chart(fig_ft, use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption("No failures in the last 24h.")
+            st.caption(f"No failures in the {sel_label.lower()}.")
 
     # ── Scoring Configuration ─────────────────────────────────────────────────
     st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
