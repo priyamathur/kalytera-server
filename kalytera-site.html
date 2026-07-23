@@ -135,12 +135,17 @@ h1 em{color:var(--cyan);font-style:normal}
 .moat-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;margin-bottom:12px;color:var(--white);line-height:1.3}
 .moat-body{font-size:14px;line-height:1.75;color:rgba(232,236,240,0.68)}
 
-/* DIFFERENTIATORS */
-.diff-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:2px;background:var(--border);border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.diff-card{padding:30px 28px;background:var(--bg)}
-.diff-tag{font-size:11px;font-family:'DM Mono',monospace;color:var(--cyan);margin-bottom:14px;letter-spacing:.3px}
-.diff-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;color:var(--white);margin-bottom:10px;line-height:1.35}
-.diff-body{font-size:14px;line-height:1.75;color:rgba(232,236,240,0.62)}
+/* FEATURES (problem → fix) */
+.feat-lead{font-size:16px;line-height:1.8;color:rgba(232,236,240,0.45);max-width:580px;margin-bottom:52px}
+.feat-list{display:flex;flex-direction:column}
+.feat-item{display:grid;grid-template-columns:1fr 1fr;gap:72px;padding:44px 0;border-bottom:1px solid var(--border);align-items:start}
+.feat-item:last-child{border-bottom:none}
+.feat-problem{font-size:15px;line-height:1.8;color:rgba(232,236,240,0.35);font-style:italic}
+.feat-tag{font-size:11px;font-family:'DM Mono',monospace;color:var(--cyan);margin-bottom:12px;letter-spacing:.3px}
+.feat-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;color:var(--white);margin-bottom:12px;line-height:1.3}
+.feat-body{font-size:14px;line-height:1.8;color:rgba(232,236,240,0.65)}
+.feat-body code{color:var(--cyan);font-family:'DM Mono',monospace;font-size:12px}
+@media(max-width:680px){.feat-item{grid-template-columns:1fr;gap:16px}.feat-problem{font-size:13px}}
 
 /* EXPANDABLE PROMPT */
 .prompt-expand{margin-top:28px}
@@ -482,48 +487,48 @@ def my_agent_step(input: str) -> str:
   </div>
 </div>
 
-<!-- HOW IT WORKS -->
+<!-- FEATURES -->
 <div class="sec" style="border-top:1px solid var(--border)">
-  <div class="sh"><h2>How it works</h2><div class="sh-line"></div></div>
-  <div class="how-steps">
-    <div class="how-step"><div class="how-n">1</div><div><div class="how-title">Connect — one line, one decorator</div><div class="how-body"><code>kalytera.configure(api_key="kly_live_...", api_endpoint="https://api.kalytera.dev")</code><br><code>@kalytera.watch</code><br><br>Set your industry for out-of-the-box quality defaults. Kalytera starts evaluating the moment the agent runs. <strong>Nothing else changes.</strong></div></div></div>
-    <div class="how-step"><div class="how-n">2</div><div><div class="how-title">Every interaction gets a quality score — calibrated to your industry</div><div class="how-body">Kalytera scores each step across four dimensions: accuracy, goal alignment, decision quality, and completeness. Every interaction gets a <strong>0–100 quality score, calibrated to your industry by default.</strong> Override any weight from the dashboard — no config required to get started.</div></div></div>
-    <div class="how-step"><div class="how-n">3</div><div><div class="how-title">Loss patterns surface — and every confirmed failure feeds the improvement loop</div><div class="how-body">One-off failures surface immediately. Repeating patterns group automatically with root cause. Every confirmed failure feeds back as labeled training signal. <strong>Not "your agent has a 23% failure rate" — "billing disputes fail because the payment API times out at step 3, happening since last Tuesday. Here's what to fix."</strong></div></div></div>
-  </div>
-  <div style="margin-top:44px">
-    <div class="sh"><h2 style="font-size:14px">Quality defaults by industry</h2><div class="sh-line"></div></div>
-    <table class="itab">
-      <thead><tr><th>Industry</th><th>Accuracy</th><th>Goal alignment</th><th>Decision quality</th><th>Completeness</th></tr></thead>
-      <tbody>
-        <tr><td>Healthcare</td><td>0.50</td><td>0.30</td><td>0.10</td><td>0.10</td></tr>
-        <tr><td>Coding</td><td>0.50</td><td>0.20</td><td>0.20</td><td>0.10</td></tr>
-        <tr><td>Retail / Customer service</td><td>0.25</td><td>0.40</td><td>0.10</td><td>0.25</td></tr>
-        <tr><td>Marketing</td><td>0.20</td><td>0.45</td><td>0.20</td><td>0.15</td></tr>
-        <tr class="hl"><td>Default (any)</td><td>0.35</td><td>0.35</td><td>0.15</td><td>0.15</td></tr>
-      </tbody>
-    </table>
-  </div>
-</div>
+  <div class="sh"><h2>How Kalytera fixes it</h2><div class="sh-line"></div></div>
+  <p class="feat-lead">AI agents fail differently than normal software. You need a different kind of observability to catch it — one that watches every step, not just the final output.</p>
+  <div class="feat-list">
 
-<!-- WHY KALYTERA -->
-<div class="sec" style="border-top:1px solid var(--border)">
-  <div class="sh"><h2>Built differently</h2><div class="sh-line"></div></div>
-  <div class="diff-grid">
-    <div class="diff-card">
-      <div class="diff-tag">coverage</div>
-      <div class="diff-title">Every interaction. Not a sample.</div>
-      <div class="diff-body">Other tools evaluate 1–10% of traffic by default. Rare failure modes — the ones that cost the most — never appear in the sample. Kalytera evaluates every step of every session. If it happened, you see it.</div>
+    <div class="feat-item">
+      <div class="feat-problem">Existing tools sample 1–10% of traffic. Rare, high-cost failures — infinite loops, cascading tool errors — never appear in the sample. You find out from a $47,000 API bill.</div>
+      <div>
+        <div class="feat-tag">trace everything</div>
+        <div class="feat-title">100% coverage. Every step of every session.</div>
+        <div class="feat-body">One line to add. <code>kalytera.trace()</code> is fire-and-forget — under 5ms, never raises, never blocks. If Kalytera is unreachable your agent keeps running. Nothing is sampled. If a failure mode exists in your traffic, you will see it.</div>
+      </div>
     </div>
-    <div class="diff-card">
-      <div class="diff-tag">root cause</div>
-      <div class="diff-title">A sentence you can act on, not a score.</div>
-      <div class="diff-body">Most evals give you a number. Kalytera gives you: <em>"billing_dispute sessions fail at step 3 because the payment API returns a timeout when the account has a hold flag — 23 sessions this week."</em> That's a Jira ticket.</div>
+
+    <div class="feat-item">
+      <div class="feat-problem">Mid-workflow failures produce plausible-looking final outputs. By the time the output is checked, the signal is gone. Developers spend hours in traces trying to find which step caused it.</div>
+      <div>
+        <div class="feat-tag">step-level scoring</div>
+        <div class="feat-title">Scored at every step, not just the final answer.</div>
+        <div class="feat-body">Kalytera evaluates each step independently across four dimensions: accuracy, goal alignment, decision quality, and completeness. The failure shows up at the step where it originated — not where it ended up. Quality is calibrated to your industry by default.</div>
+      </div>
     </div>
-    <div class="diff-card">
-      <div class="diff-tag">zero overhead</div>
-      <div class="diff-title">Your agent won't notice it's being watched.</div>
-      <div class="diff-body"><code style="font-size:12px;color:var(--cyan);font-family:'DM Mono',monospace">kalytera.trace()</code> returns in under 5ms and never raises. If Kalytera is unreachable, your agent keeps running. The observer cannot become the failure.</div>
+
+    <div class="feat-item">
+      <div class="feat-problem">A 23% failure rate tells you something is wrong. It doesn't tell you which sessions, which step, or what to change. Most eval tools stop at the score.</div>
+      <div>
+        <div class="feat-tag">root cause</div>
+        <div class="feat-title">A sentence you can put in a ticket, not a number.</div>
+        <div class="feat-body">Every failure surfaces with a plain-English root cause: which step, why it failed, how many sessions this week. <em>"Billing disputes fail at step 3 because the payment API returns a timeout when the account has a hold flag — 23 sessions since Tuesday."</em> That's actionable.</div>
+      </div>
     </div>
+
+    <div class="feat-item">
+      <div class="feat-problem">One failure is noise. Twenty-three identical failures is a pattern — but only if something groups them. Without automatic detection, recurring issues stay invisible until a customer escalates.</div>
+      <div>
+        <div class="feat-tag">loss patterns</div>
+        <div class="feat-title">Recurring failures cluster automatically, ranked by impact.</div>
+        <div class="feat-body">Kalytera runs pattern detection hourly. Failures that share a root cause group into named patterns — ranked by frequency, tagged with first seen, flagged if worsening week over week. You see what to fix first, not a flat list of incidents to triage.</div>
+      </div>
+    </div>
+
   </div>
 </div>
 
