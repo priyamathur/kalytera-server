@@ -22,23 +22,9 @@ kalytera.trace(
 
 That's it. Kalytera scores every step with an LLM judge and surfaces failure patterns — what's breaking, at which workflow step, and why.
 
+![Kalytera — install, instrument, see failures surface in the dashboard](docs/demo.gif)
+
 → **[Live demo dashboard](https://app.kalytera.dev)** · **[Get an API key](#get-started)**
-
----
-
-## Dashboard
-
-![Agent Overview — quality score trend, pass rate, active failures, latency](docs/dashboard-overview.png)
-
-The **Agent Overview** shows your quality score over time, today's pass rate, failure count, and latency percentiles — at a glance, for any time window.
-
-![Failure Feed — recurring patterns with root cause and suggested fix](docs/dashboard-failures.png)
-
-The **Failure Feed** groups repeated failures by root cause. Every pattern comes with a plain-English explanation of what's breaking and a concrete suggested fix.
-
-![Trace Viewer — step-by-step session browser with scores and diagnosis](docs/dashboard-trace.png)
-
-The **Trace Viewer** lets you drill into any failing session: step-by-step scores, the exact input/output at each step, and a root-cause diagnosis with a one-line fix.
 
 ---
 

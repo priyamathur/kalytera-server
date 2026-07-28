@@ -43,6 +43,12 @@ h1 em{color:var(--cyan);font-style:normal}
 .btn-s:hover{border-color:rgba(255,255,255,0.28);color:var(--white)}
 .note{font-size:13px;color:rgba(232,236,240,0.38);margin-bottom:60px}
 
+/* HERO DEMO */
+.demo-wrap{position:relative;max-width:960px;margin:56px auto 0;width:calc(100% - 80px);border-radius:16px;overflow:hidden;box-shadow:0 0 0 1px rgba(255,255,255,0.04),0 32px 80px rgba(0,0,0,0.5);background:#0d1117;cursor:default}
+.demo-frame{position:absolute;top:0;left:0;width:1280px;height:800px;transform-origin:top left;border:none;pointer-events:none;display:block}
+.demo-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;gap:9px;background:rgba(10,13,16,0.55);color:rgba(232,236,240,0.72);font-size:13px;font-family:'Space Grotesk',sans-serif;font-weight:500;z-index:5;transition:opacity 0.4s;backdrop-filter:blur(2px);pointer-events:none;letter-spacing:0.02em}
+.demo-hint svg{opacity:0.8}
+
 /* HERO MOCKUP */
 .mockup{background:#0d1117;border:1px solid rgba(255,255,255,0.1);border-radius:16px;overflow:hidden;max-width:960px;margin:56px auto 0;width:calc(100% - 80px);box-shadow:0 0 0 1px rgba(255,255,255,0.04),0 32px 80px rgba(0,0,0,0.5)}
 .mock-bar{background:#161b22;padding:10px 16px;display:flex;align-items:center;gap:7px;border-bottom:1px solid var(--border)}
@@ -295,6 +301,7 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
   nav{padding:14px 20px}.nav-links .nav-link:not(.nav-cta){display:none}
   .hero,.sec,.cta-wrap{padding-left:20px;padding-right:20px}
   .mockup{margin:0 20px}
+  .demo-wrap{margin:0 20px;width:calc(100% - 40px)}
   .context-wrap{grid-template-columns:1fr}
   .vstats{border-left:none;padding-left:0;border-top:1px solid var(--border);padding-top:20px;flex-direction:row;flex-wrap:wrap;gap:0}
   .vstat{flex:1;min-width:120px;padding:14px 16px 14px 0;border-bottom:none;border-right:1px solid var(--border)}
@@ -465,28 +472,13 @@ def my_agent_step(input: str) -> str:
   </div>
 </div>
 
-<!-- HERO MOCKUP -->
-<div class="mockup">
-  <div class="mock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="mock-label">Kalytera — Interaction Detail · support_agent · retail</span></div>
-  <div class="mock-body">
-    <div>
-      <div class="mock-head"><span>Interaction 1143 &nbsp;<span class="fail-tag">FAILED</span></span><span style="font-size:11px;color:var(--muted)">just now</span></div>
-      <div class="mock-steps">
-        <div class="st"><div class="si p">✓</div><div><div class="sn">Step 1 — User asked about a refund</div><div class="sd">Agent acknowledged correctly, requested order number.</div></div></div>
-        <div class="st"><div class="si p">✓</div><div><div class="sn">Step 2 — Agent retrieved order history</div><div class="sd">Correct tool call. Order found, eligible for refund.</div></div></div>
-        <div class="st bad"><div class="si f">✗</div><div><div class="sn">Step 3 — Payment policy API timed out</div><div class="sd">Tool call to payment_policy_api timed out after 8s. Agent continued without a response.</div><div class="sr">↳ tool_failure — payment policy API did not return in time</div></div></div>
-        <div class="st"><div class="si f">✗</div><div><div class="sn">Step 4 — Agent answered anyway</div><div class="sd">Told the customer the refund was approved without confirming eligibility.</div><div class="sr">↳ wrong_answer — claim not grounded in tool output</div></div></div>
-      </div>
-    </div>
-    <div class="verdict">
-      <div class="v-label">Kalytera verdict</div>
-      <div class="v-score">34<span style="font-size:18px;opacity:.4">/100</span></div>
-      <div class="v-dims">accuracy 0.2 · goal_alignment 0.6<br>decision_quality 0.3 · completeness 0.7</div>
-      <div class="v-body">Payment policy API timed out at step 3. Instead of retrying or escalating, the agent told the customer the refund was approved — a claim it had no basis for.</div>
-      <div class="v-fix-label">Suggested fix</div>
-      <div class="v-fix">Add a timeout fallback at step 3: retry once, then escalate to a human instead of guessing the policy outcome.</div>
-    </div>
+<!-- HERO DEMO -->
+<div class="demo-wrap" id="hero-demo-wrap">
+  <div class="demo-hint" id="demo-hint">
+    <svg width="15" height="15" viewBox="0 0 15 15" fill="none"><circle cx="7.5" cy="7.5" r="6.5" stroke="currentColor" stroke-width="1.2"/><path d="M6 5l4.5 2.5L6 10V5z" fill="currentColor"/></svg>
+    Hover to play
   </div>
+  <iframe id="hero-demo" src="demo.html" frameborder="0" scrolling="no" class="demo-frame"></iframe>
 </div>
 
 <!-- PROBLEM -->
@@ -1121,6 +1113,41 @@ function showErr(msg) {
   el.textContent = msg;
   el.style.display = 'block';
 }
+
+// ── Hero demo: hover-to-play, click-outside-to-stop ──────────────────────────
+(function() {
+  const wrap = document.getElementById('hero-demo-wrap');
+  const frame = document.getElementById('hero-demo');
+  const hint = document.getElementById('demo-hint');
+  if (!wrap || !frame || !hint) return;
+
+  function scaleFrame() {
+    const s = wrap.offsetWidth / 1280;
+    frame.style.transform = 'scale(' + s + ')';
+    wrap.style.height = Math.round(800 * s) + 'px';
+  }
+  frame.addEventListener('load', scaleFrame);
+  window.addEventListener('resize', scaleFrame);
+  scaleFrame();
+
+  let demoPlaying = false;
+
+  wrap.addEventListener('mouseenter', function() {
+    if (!demoPlaying) {
+      demoPlaying = true;
+      hint.style.opacity = '0';
+      try { frame.contentWindow.startDemo(); } catch(e) {}
+    }
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!wrap.contains(e.target) && demoPlaying) {
+      demoPlaying = false;
+      hint.style.opacity = '1';
+      try { frame.contentWindow.stopDemo(); } catch(e) {}
+    }
+  });
+})();
 </script>
 </body>
 </html>
