@@ -36,33 +36,33 @@ PALETTE: Dict[str, Tuple[str, str]] = {
 }
 
 _FIXES: Dict[str, str] = {
-    "tool_failure":  "Add retry + fallback to every external tool/API call.",
-    "wrong_answer":  "Audit the context injected before each step — the agent is contradicting available data.",
-    "goal_drift":    "Add a goal-alignment check at each decision point to abort when the agent drifts.",
-    "hallucination": "Require the agent to cite a specific retrieved fact before asserting anything.",
-    "context_loss":  "Pass the last 3 conversation turns at every step; the agent is missing prior context.",
-    "incomplete":    "Add a completion checklist at session end to verify every part of the request is done.",
-    "loop":          "Track actions in a session set — break and escalate after the same action appears 3×.",
+    "tool_failure":  "Add exit-code checks after every bash/tool call — retry once, then report the failure explicitly.",
+    "wrong_answer":  "Verify the agent reads the actual file before writing a fix — wrong outputs usually mean unread context.",
+    "goal_drift":    "Re-inject the original task description at each step so the agent cannot drift to unrelated issues.",
+    "hallucination": "Require the agent to look up imports and API signatures in the codebase before using them.",
+    "context_loss":  "Pass the full file path, line numbers, and prior diffs into every step — don't rely on short-term memory.",
+    "incomplete":    "Add a completion checklist: tests passing, changes committed, PR opened — verify all three before closing.",
+    "loop":          "Track executed commands in a set per session — halt and surface an error after the same command runs 3×.",
 }
 
 _FIX_STEP: Dict[str, str] = {
-    "tool_failure":  "Add retry/fallback at **{step}**.",
-    "wrong_answer":  "Fix context injection before **{step}**.",
-    "goal_drift":    "Insert goal check before **{step}**.",
-    "hallucination": "Require citations at **{step}**.",
-    "context_loss":  "Inject conversation history into **{step}**.",
-    "incomplete":    "Add completion check after **{step}**.",
-    "loop":          "Add repetition guard before **{step}**.",
+    "tool_failure":  "Check exit code and retry at **{step}**.",
+    "wrong_answer":  "Read the target file before writing at **{step}**.",
+    "goal_drift":    "Re-inject original task spec before **{step}**.",
+    "hallucination": "Verify import/API exists in repo before **{step}**.",
+    "context_loss":  "Pass file path and prior diff into **{step}**.",
+    "incomplete":    "Add commit + PR check after **{step}**.",
+    "loop":          "Add command dedup guard before **{step}**.",
 }
 
 _FIX_TRACE: Dict[str, str] = {
-    "tool_failure":  "Verify the **{s}** API endpoint, auth token, and request payload.",
-    "wrong_answer":  "Review context available at **{s}** — the response contradicts provided data.",
-    "goal_drift":    "Add a goal check before **{s}** — confirm the agent is on the user's original request.",
-    "hallucination": "Add a grounding constraint at **{s}** — require citation of retrieved facts.",
-    "context_loss":  "Verify prior conversation history is passed into **{s}**.",
-    "incomplete":    "Add a completion check after **{s}** to confirm all parts are addressed.",
-    "loop":          "Add a repetition guard before **{s}** — break if the same action appears 3×.",
+    "tool_failure":  "Check the exit code from **{s}** — add a retry and surface the stderr if it fails again.",
+    "wrong_answer":  "Review what the agent read before **{s}** — the output contradicts what is in the file.",
+    "goal_drift":    "Prepend the original issue/task spec to **{s}** — the agent lost its objective.",
+    "hallucination": "Grep the codebase for the import used at **{s}** — the agent invented a nonexistent API.",
+    "context_loss":  "Confirm the file path and prior changes are passed into **{s}** — agent has no context.",
+    "incomplete":    "Add a post-step check after **{s}**: verify commit hash exists and PR is open.",
+    "loop":          "Log commands executed before **{s}** — break if the same command has already run this session.",
 }
 
 ALL_FT = [
