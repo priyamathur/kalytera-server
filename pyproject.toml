@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kalytera"
-version = "0.1.5"
+version = "0.1.6"
 description = "Real-time quality monitoring and failure detection for production AI agents"
 readme = "README.md"
 license = {text = "MIT"}
