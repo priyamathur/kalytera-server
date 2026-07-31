@@ -162,6 +162,49 @@ def build_retry_prompt(step: StepContext) -> List[Dict[str, str]]:
     return [{"role": "user", "content": user}]
 
 
+def build_session_prompt(steps: List[StepContext]) -> List[Dict[str, str]]:
+    """
+    Returns an Anthropic messages list for session-level evaluation.
+    Sends all steps at once — one Haiku call per complete session instead of per step.
+    """
+    steps_text = _format_all_steps(steps)
+    user = (
+        f"Evaluate this complete agent session ({len(steps)} steps end-to-end).\n\n"
+        f"Session steps:\n{steps_text}\n\n"
+        f"Score the overall session quality on all dimensions (0.0 to 1.0):\n"
+        f"1. accuracy: Were responses factually correct given available context?\n"
+        f"2. goal_alignment: Did the agent serve what the user actually needed?\n"
+        f"3. decision_quality: Was reasoning sound and tool selection appropriate?\n"
+        f"4. completeness: Was the user's request fully resolved by the end?\n"
+        f"5. helpfulness: Did the session practically help the user accomplish their goal?\n"
+        f"6. factuality: Were all claims verifiable and grounded — no hallucinations?\n\n"
+        f"If the session failed, identify the failure type:\n"
+        f"{_FAILURE_LIST}\n\n"
+        f"failure_step: step number where the failure originated (null if passed).\n"
+        f"failure_reason: one short phrase, max 12 words. "
+        f'Format: "[what failed] at step N; [one-word consequence]." '
+        f'Example: "Payment API timed out at step 3; charge not completed."\n\n'
+        f"Respond with JSON only:\n"
+        f"{_JSON_TEMPLATE}"
+    )
+    return [{"role": "user", "content": user}]
+
+
+def _format_all_steps(steps: List[StepContext]) -> str:
+    if not steps:
+        return "  (none)"
+    lines = []
+    for s in steps:
+        tool_text = _format_tool_calls(s.tool_calls)
+        lines.append(
+            f"  Step {s.step_number} ({s.step_name}):\n"
+            f"    Input:  {s.input[:200]!r}\n"
+            f"    Output: {s.output[:200]!r}\n"
+            f"    Tools:  {tool_text}"
+        )
+    return "\n".join(lines)
+
+
 def _format_prior_steps(steps: List[StepContext]) -> str:
     if not steps:
         return "  (none)"

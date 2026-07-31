@@ -21,6 +21,7 @@ from kalytera.prompts import (
     StepContext,
     build_prompt,
     build_retry_prompt,
+    build_session_prompt,
     system_prompt,
 )
 
@@ -73,6 +74,88 @@ def score_step(
         return _error_result(step, custom)
 
     return _build_result(parsed, w, pass_threshold, step.step_number, custom)
+
+
+def score_session(
+    steps: List[StepContext],
+    weights: Optional[Dict[str, float]] = None,
+    pass_threshold: float = _PASS_THRESHOLD,
+) -> Dict[str, Any]:
+    """
+    Score a complete session (all steps) with one Claude Haiku call.
+    Returns a dict matching EvalResult fields. Never raises.
+    Costs ~5× less than per-step scoring for a 5-step session.
+    """
+    if not steps:
+        dummy = StepContext(step_number=0, step_name="unknown", input="", output="")
+        return _error_result(dummy)
+
+    w = weights or _DEFAULT_WEIGHTS
+    client = _make_client()
+
+    raw = _call_claude(client, build_session_prompt(steps))
+    parsed = _parse_json(raw)
+
+    if parsed is None:
+        raw2 = _call_claude(client, build_retry_prompt(steps[-1]))
+        parsed = _parse_json(raw2)
+
+    if parsed is None:
+        return _error_result(steps[-1])
+
+    return _build_result(parsed, w, pass_threshold, steps[-1].step_number)
+
+
+def evaluate_session(session_id: str, db: Any) -> Optional[Dict[str, Any]]:
+    """
+    Fetch all AgentLog rows for a session, score it with one Haiku call,
+    write one EvalResult linked to the session_ended log.
+    Returns the result dict or None if the session has no session_ended log.
+    """
+    from db.models import AgentLog, EvalResult, AgentQualityConfig
+
+    ended_log: Optional[Any] = (
+        db.query(AgentLog)
+        .filter(AgentLog.session_id == session_id, AgentLog.session_ended == True)  # noqa: E712
+        .first()
+    )
+    if ended_log is None:
+        logger.warning("No session_ended log for session %s", session_id)
+        return None
+
+    all_logs = (
+        db.query(AgentLog)
+        .filter(AgentLog.session_id == session_id)
+        .order_by(AgentLog.step_number)
+        .all()
+    )
+    steps = [_log_to_step(log) for log in all_logs]
+
+    config: Optional[Any] = (
+        db.query(AgentQualityConfig)
+        .filter(AgentQualityConfig.agent_id == ended_log.agent_id)
+        .first()
+    )
+    weights, pass_threshold, _ = _weights_from_config(config)
+
+    result = score_session(steps, weights=weights, pass_threshold=pass_threshold)
+
+    result_for_db = {k: v for k, v in result.items() if k != "custom_scores"}
+    custom_scores_json = json.dumps(result.get("custom_scores") or {}) or None
+
+    row = EvalResult(
+        id=str(uuid.uuid4()),
+        log_id=ended_log.id,
+        session_id=session_id,
+        agent_id=ended_log.agent_id,
+        evaluated_at=datetime.now(timezone.utc),
+        custom_scores=custom_scores_json,
+        **result_for_db,
+    )
+    db.add(row)
+    db.commit()
+
+    return result
 
 
 def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
@@ -139,19 +222,27 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 def _make_client() -> anthropic.Anthropic:
-    return anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY", ""))
+    from kalytera.config import BYOK_ANTHROPIC_KEY
+    key = BYOK_ANTHROPIC_KEY or os.getenv("ANTHROPIC_API_KEY", "")
+    return anthropic.Anthropic(api_key=key)
 
 
 def _call_claude(
     client: anthropic.Anthropic,
     messages: List[Dict[str, str]],
 ) -> str:
-    """Call Claude Haiku. Returns raw text or '' on error. Never raises."""
+    """Call Claude Haiku with prompt caching on the system prompt. Never raises."""
     try:
         response = client.messages.create(
             model=_MODEL,
             max_tokens=_MAX_TOKENS,
-            system=system_prompt(),
+            system=[
+                {
+                    "type": "text",
+                    "text": system_prompt(),
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
             messages=messages,
         )
         return response.content[0].text

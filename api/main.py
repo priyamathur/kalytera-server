@@ -22,6 +22,7 @@ from api.database import SessionLocal, get_db, initialize_database
 from db.queries import (
     get_patterns_for_agent,
     get_unevaluated_logs,
+    get_unevaluated_sessions,
     insert_agent_log,
     get_apikey_by_hash,
     get_org_by_id,
@@ -141,31 +142,60 @@ def _require_auth(
 # ---------------------------------------------------------------------------
 
 def _eval_batch() -> None:
-    """Sync: evaluate up to 20 unevaluated logs per agent, across all agents."""
-    from kalytera.judge import evaluate_log
+    """Sync: evaluate unevaluated logs/sessions per agent across all agents."""
+    from kalytera.config import EVAL_MODE
     from db.models import AgentLog
 
     db = SessionLocal()
     try:
         agent_ids = [row[0] for row in db.query(AgentLog.agent_id).distinct().all()]
-        for agent_id in agent_ids:
-            try:
-                logs = get_unevaluated_logs(agent_id, batch_size=20, db=db)
-            except Exception as exc:
-                logger.error("[eval_batch] get_logs agent=%s error: %s", agent_id, exc)
-                db.rollback()
-                continue
-            for log in logs:
-                try:
-                    evaluate_log(log.id, db)
-                except Exception as exc:
-                    logger.error("[eval] log=%s error: %s", log.id, exc)
-                    db.rollback()  # reset aborted transaction so next query works
+        if EVAL_MODE == "session":
+            _eval_sessions(agent_ids, db)
+        else:
+            _eval_steps(agent_ids, db)
     except Exception as exc:
         logger.error("[eval_batch] error: %s", exc)
         db.rollback()
     finally:
         db.close()
+
+
+def _eval_sessions(agent_ids: List[str], db: Any) -> None:
+    """Session-level eval: one Haiku call per complete session (free tier)."""
+    from kalytera.judge import evaluate_session
+
+    for agent_id in agent_ids:
+        try:
+            session_ids = get_unevaluated_sessions(agent_id, batch_size=20, db=db)
+        except Exception as exc:
+            logger.error("[eval_sessions] get_sessions agent=%s error: %s", agent_id, exc)
+            db.rollback()
+            continue
+        for session_id in session_ids:
+            try:
+                evaluate_session(session_id, db)
+            except Exception as exc:
+                logger.error("[eval] session=%s error: %s", session_id, exc)
+                db.rollback()
+
+
+def _eval_steps(agent_ids: List[str], db: Any) -> None:
+    """Step-level eval: one Haiku call per step (paid tier, granular scores)."""
+    from kalytera.judge import evaluate_log
+
+    for agent_id in agent_ids:
+        try:
+            logs = get_unevaluated_logs(agent_id, batch_size=20, db=db)
+        except Exception as exc:
+            logger.error("[eval_steps] get_logs agent=%s error: %s", agent_id, exc)
+            db.rollback()
+            continue
+        for log in logs:
+            try:
+                evaluate_log(log.id, db)
+            except Exception as exc:
+                logger.error("[eval] log=%s error: %s", log.id, exc)
+                db.rollback()
 
 
 def _analysis_batch() -> None:

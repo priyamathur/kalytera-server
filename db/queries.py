@@ -55,6 +55,25 @@ def get_unevaluated_logs(agent_id: str, batch_size: int, db: Session) -> List[Ag
     )
 
 
+def get_unevaluated_sessions(agent_id: str, batch_size: int, db: Session) -> List[str]:
+    """
+    Return session_ids for complete sessions (session_ended=True) that haven't
+    been evaluated yet. Used by session-level eval mode (one Haiku call per session).
+    """
+    evaluated_log_ids = db.query(EvalResult.log_id).filter(EvalResult.agent_id == agent_id)
+    rows = (
+        db.query(AgentLog.session_id)
+        .filter(
+            AgentLog.agent_id == agent_id,
+            AgentLog.session_ended == True,  # noqa: E712
+            AgentLog.id.notin_(evaluated_log_ids),
+        )
+        .limit(batch_size)
+        .all()
+    )
+    return [r[0] for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # Patterns
 # ---------------------------------------------------------------------------

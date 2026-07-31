@@ -656,15 +656,16 @@ def my_agent_step(input: str) -> str:
 <div class="sec">
   <div style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:rgba(232,236,240,0.45);margin-bottom:8px">Pricing</div>
   <div class="docs-h1">Simple, usage-based pricing.</div>
-  <p class="docs-lead">Pay for sessions evaluated. No seat licenses. No surprise bills. Free tier works forever — upgrade when you need more.</p>
+  <p class="docs-lead">Pay for sessions evaluated. No seat licenses. No per-developer fees. Free tier works forever — upgrade when you need more.</p>
   <div class="price-grid">
     <div class="price-card">
       <div class="price-name">Free</div>
       <div class="price-amt">$0</div>
       <div class="price-unit">/ month, forever</div>
-      <div class="price-desc">For individual developers and early exploration.</div>
+      <div class="price-desc">For teams — 10,000 sessions/month shared across your whole org, not per developer.</div>
       <div class="price-feats">
         <div class="price-feat"><span class="tick">✓</span>10,000 sessions / month</div>
+        <div class="price-feat"><span class="tick">✓</span>Session-level quality scores</div>
         <div class="price-feat"><span class="tick">✓</span>All 3 dashboard views</div>
         <div class="price-feat"><span class="tick">✓</span>Loss pattern detection</div>
         <div class="price-feat"><span class="tick">✓</span>Plain-English root cause</div>
@@ -681,6 +682,7 @@ def my_agent_step(input: str) -> str:
       <div class="price-feats">
         <div class="price-feat"><span class="tick">✓</span>50,000 sessions / month</div>
         <div class="price-feat"><span class="tick">✓</span>Everything in Free</div>
+        <div class="price-feat"><span class="tick">✓</span>Per-step scores (granular debugging)</div>
         <div class="price-feat"><span class="tick">✓</span>Custom quality weights</div>
         <div class="price-feat"><span class="tick">✓</span>Multiple API keys (staging, prod)</div>
         <div class="price-feat"><span class="tick">✓</span>Team members — unlimited</div>
@@ -702,9 +704,12 @@ def my_agent_step(input: str) -> str:
       <button class="btn-s" onclick="openSignup('growth')">Start with Growth →</button>
     </div>
   </div>
-  <div style="margin-top:40px;padding:28px;border:1px solid var(--border);border-radius:12px;background:var(--card)">
+  <div style="margin-top:24px;padding:20px 24px;border:1px solid rgba(0,200,232,0.15);border-radius:10px;background:rgba(0,200,232,0.04);font-size:12px;color:rgba(232,236,240,0.55);line-height:1.75">
+    <strong style="color:rgba(232,236,240,0.8)">How the free tier stays free:</strong> Kalytera evaluates each session as a whole — one LLM call per session end-to-end, not per step. This keeps evaluation costs low enough to offer 10,000 sessions/month at $0, shared across your entire org. Per-step granular scoring unlocks on Starter and above.
+  </div>
+  <div style="margin-top:16px;padding:28px;border:1px solid var(--border);border-radius:12px;background:var(--card)">
     <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;margin-bottom:8px">Enterprise — custom contract</div>
-    <div style="font-size:12px;color:rgba(232,236,240,0.42);max-width:580px;line-height:1.7;margin-bottom:18px">200K+ sessions/month. Kubernetes deployment in your VPC. SAML SSO, RBAC, SOC 2, BAA. Dedicated support and SLA. Contact us to get started.</div>
+    <div style="font-size:12px;color:rgba(232,236,240,0.42);max-width:580px;line-height:1.7;margin-bottom:18px">200K+ sessions/month. Kubernetes deployment in your VPC. SAML SSO, RBAC, SOC 2, BAA. Bring Your Own Anthropic API key (BYOK). Dedicated support and SLA. Contact us to get started.</div>
     <a href="mailto:priya@kalytera.ai" style="display:inline-block;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:11px;padding:10px 20px;border:1px solid var(--border);border-radius:7px;color:var(--white);text-decoration:none">Contact priya@kalytera.ai →</a>
   </div>
 </div>

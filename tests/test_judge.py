@@ -1,20 +1,27 @@
 """Tests for kalytera/judge.py — scoring logic, JSON parsing, error handling."""
 import json
-from typing import Any, Dict, List, Optional
-from unittest.mock import MagicMock, patch
-
-import pytest
+from typing import List
+from unittest.mock import patch
 
 from kalytera.judge import (
     _build_result,
     _clamp,
     _error_result,
     _parse_json,
+    score_session,
     score_step,
 )
 from kalytera.prompts import StepContext
 
-_WEIGHTS = {"accuracy": 0.35, "goal_alignment": 0.35, "decision_quality": 0.15, "completeness": 0.15}
+# Weights that sum to 1.0 across all six scoring dimensions.
+_WEIGHTS = {
+    "accuracy": 0.35,
+    "goal_alignment": 0.35,
+    "decision_quality": 0.15,
+    "completeness": 0.15,
+    "helpfulness": 0.0,
+    "factuality": 0.0,
+}
 _PASS_THRESHOLD = 0.7
 
 
@@ -32,13 +39,17 @@ def _good_json(
     goal_alignment: float = 0.9,
     decision_quality: float = 0.85,
     completeness: float = 0.9,
+    helpfulness: float = 0.9,
+    factuality: float = 0.9,
 ) -> str:
     return json.dumps({
         "accuracy": accuracy,
         "goal_alignment": goal_alignment,
         "decision_quality": decision_quality,
         "completeness": completeness,
-        "overall_score": 0.9,         # model's value — we recompute
+        "helpfulness": helpfulness,
+        "factuality": factuality,
+        "overall_score": 0.9,         # model's value — we recompute from weights
         "passed": True,
         "failure_type": None,
         "failure_step": None,
@@ -53,6 +64,8 @@ def _failure_json(failure_type: str = "tool_failure") -> str:
         "goal_alignment": 0.4,
         "decision_quality": 0.3,
         "completeness": 0.2,
+        "helpfulness": 0.2,
+        "factuality": 0.2,
         "overall_score": 0.3,
         "passed": False,
         "failure_type": failure_type,
@@ -151,8 +164,8 @@ def test_build_result_passed_clears_failure_fields() -> None:
 
 
 def test_build_result_custom_weights() -> None:
-    parsed = json.loads(_good_json(accuracy=1.0, goal_alignment=0.0, decision_quality=0.0, completeness=0.0))
-    weights = {"accuracy": 1.0, "goal_alignment": 0.0, "decision_quality": 0.0, "completeness": 0.0}
+    parsed = json.loads(_good_json(accuracy=1.0, goal_alignment=0.0, decision_quality=0.0, completeness=0.0, helpfulness=0.0, factuality=0.0))
+    weights = {"accuracy": 1.0, "goal_alignment": 0.0, "decision_quality": 0.0, "completeness": 0.0, "helpfulness": 0.0, "factuality": 0.0}
     result = _build_result(parsed, weights, _PASS_THRESHOLD, step_number=1)
     assert result["overall_score"] == 1.0
 
@@ -202,7 +215,7 @@ def test_score_step_eval_error_on_double_failure() -> None:
 def test_score_step_uses_prior_context() -> None:
     """Verify prior_steps are passed to build_prompt (not build_retry_prompt)."""
     prior = [_step(n=1, name="fetch_order")]
-    with patch("kalytera.judge._call_claude", return_value=_good_json()) as mock_call:
+    with patch("kalytera.judge._call_claude", return_value=_good_json()):
         with patch("kalytera.judge.build_prompt", wraps=__import__("kalytera.prompts", fromlist=["build_prompt"]).build_prompt) as mock_bp:
             score_step(_step(n=2), prior_steps=prior)
             args = mock_bp.call_args
@@ -210,9 +223,10 @@ def test_score_step_uses_prior_context() -> None:
 
 
 def test_score_step_custom_weights() -> None:
-    weights = {"accuracy": 1.0, "goal_alignment": 0.0, "decision_quality": 0.0, "completeness": 0.0}
+    weights = {"accuracy": 1.0, "goal_alignment": 0.0, "decision_quality": 0.0, "completeness": 0.0, "helpfulness": 0.0, "factuality": 0.0}
     raw = json.dumps({
         "accuracy": 0.8, "goal_alignment": 0.0, "decision_quality": 0.0, "completeness": 0.0,
+        "helpfulness": 0.0, "factuality": 0.0,
         "overall_score": 0.8, "passed": True, "failure_type": None,
         "failure_step": None, "failure_reason": None, "confidence": 0.9,
     })
@@ -228,3 +242,50 @@ def test_score_step_custom_pass_threshold() -> None:
     )):
         result = score_step(_step(), prior_steps=[], pass_threshold=0.95)
     assert result["passed"] is False
+
+
+# --- score_session ---
+
+def _steps(count: int = 3) -> List[StepContext]:
+    names = ["retrieve_policy", "calculate_refund", "process_payment"]
+    return [_step(n=i + 1, name=names[i % len(names)]) for i in range(count)]
+
+
+def test_score_session_passes_on_good_response() -> None:
+    with patch("kalytera.judge._call_claude", return_value=_good_json()):
+        result = score_session(_steps())
+    assert result["passed"] is True
+    assert result["eval_error"] is False
+    assert 0.0 <= result["overall_score"] <= 1.0
+
+
+def test_score_session_failure_on_low_scores() -> None:
+    with patch("kalytera.judge._call_claude", return_value=_failure_json("goal_drift")):
+        result = score_session(_steps())
+    assert result["passed"] is False
+    assert result["failure_type"] == "goal_drift"
+
+
+def test_score_session_retries_on_bad_json() -> None:
+    responses = ["not json", _good_json()]
+    with patch("kalytera.judge._call_claude", side_effect=responses):
+        result = score_session(_steps())
+    assert result["eval_error"] is False
+
+
+def test_score_session_eval_error_on_double_failure() -> None:
+    with patch("kalytera.judge._call_claude", return_value=""):
+        result = score_session(_steps())
+    assert result["eval_error"] is True
+
+
+def test_score_session_empty_steps_returns_error() -> None:
+    result = score_session([])
+    assert result["eval_error"] is True
+
+
+def test_score_session_one_call_for_multi_step_session() -> None:
+    """Verify score_session makes exactly 2 API calls max (1 attempt + 1 optional retry)."""
+    with patch("kalytera.judge._call_claude", return_value=_good_json()) as mock_call:
+        score_session(_steps(count=5))
+    assert mock_call.call_count == 1  # good response on first try — no retry
