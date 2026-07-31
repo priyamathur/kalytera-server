@@ -22,7 +22,7 @@ kalytera.trace(
 
 That's it. Kalytera scores every step with an LLM judge and surfaces failure patterns — what's breaking, at which workflow step, and why.
 
-![Kalytera dashboard — quality scores, failure patterns, and trace viewer](docs/demo.gif)
+![Kalytera dashboard — quality scores, failure patterns, and trace viewer](https://raw.githubusercontent.com/priyamathur/kalytera-server/main/site/demo.gif)
 
 → **[Live demo dashboard](https://app.kalytera.dev)** · **[Get an API key](#get-started)**
 
