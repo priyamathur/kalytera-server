@@ -143,13 +143,12 @@ def _require_auth(
 
 def _eval_batch() -> None:
     """Sync: evaluate unevaluated logs/sessions per agent across all agents."""
-    from kalytera.config import EVAL_MODE
     from db.models import AgentLog
 
     db = SessionLocal()
     try:
         agent_ids = [row[0] for row in db.query(AgentLog.agent_id).distinct().all()]
-        if EVAL_MODE == "session":
+        if os.getenv("KALYTERA_EVAL_MODE", "session") == "session":
             _eval_sessions(agent_ids, db)
         else:
             _eval_steps(agent_ids, db)

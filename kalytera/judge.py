@@ -1,10 +1,17 @@
 """
-agentiq/judge.py — scores agent steps using Claude Haiku.
+kalytera/judge.py — LLM-agnostic agent quality judge.
 Runs asynchronously. Never called in the trace path.
 
 Public API:
   score_step()      — pure scoring function, no DB side effects (testable)
+  score_session()   — score a full session in one LLM call (free-tier mode)
   evaluate_log()    — fetch log from DB, score it, write EvalResult
+  evaluate_session()— fetch session logs, score as one unit, write EvalResult
+
+Supported judge providers (KALYTERA_JUDGE_PROVIDER env var):
+  anthropic  — Claude Haiku 4.5 (default); prompt caching enabled
+  openai     — GPT-4o mini
+  gemini     — Gemini 1.5 Flash
 """
 import json
 import logging
@@ -28,7 +35,9 @@ from kalytera.prompts import (
 
 logger = logging.getLogger(__name__)
 
-_MODEL = "claude-haiku-4-5-20251001"
+_DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+_DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
+_DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
 _MAX_TOKENS = 512
 _PASS_THRESHOLD = 0.7
 
@@ -54,20 +63,19 @@ def score_step(
     custom_metrics: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
-    Score one agent step with Claude Haiku.
+    Score one agent step using the configured judge provider.
     Returns a dict matching EvalResult fields. Never raises.
     On double judge failure returns eval_error=True.
     custom_metrics: list of {"name": "helpfulness", "weight": 0.2, "description": "..."}
     """
     w = weights or _DEFAULT_WEIGHTS
     custom = custom_metrics or []
-    client = _make_client()
 
-    raw = _call_claude(client, build_prompt(step, prior_steps, custom_metrics=custom))
+    raw = _call_judge(build_prompt(step, prior_steps, custom_metrics=custom))
     parsed = _parse_json(raw, custom_names=[m["name"] for m in custom])
 
     if parsed is None:
-        raw2 = _call_claude(client, build_retry_prompt(step))
+        raw2 = _call_judge(build_retry_prompt(step))
         parsed = _parse_json(raw2)
 
     if parsed is None:
@@ -82,22 +90,21 @@ def score_session(
     pass_threshold: float = _PASS_THRESHOLD,
 ) -> Dict[str, Any]:
     """
-    Score a complete session (all steps) with one Claude Haiku call.
+    Score a complete session (all steps) with one LLM call.
     Returns a dict matching EvalResult fields. Never raises.
-    Costs ~5× less than per-step scoring for a 5-step session.
+    Costs ~5x less than per-step scoring for a 5-step session.
     """
     if not steps:
         dummy = StepContext(step_number=0, step_name="unknown", input="", output="")
         return _error_result(dummy)
 
     w = weights or _DEFAULT_WEIGHTS
-    client = _make_client()
 
-    raw = _call_claude(client, build_session_prompt(steps))
+    raw = _call_judge(build_session_prompt(steps))
     parsed = _parse_json(raw)
 
     if parsed is None:
-        raw2 = _call_claude(client, build_retry_prompt(steps[-1]))
+        raw2 = _call_judge(build_retry_prompt(steps[-1]))
         parsed = _parse_json(raw2)
 
     if parsed is None:
@@ -108,7 +115,7 @@ def score_session(
 
 def evaluate_session(session_id: str, db: Any) -> Optional[Dict[str, Any]]:
     """
-    Fetch all AgentLog rows for a session, score it with one Haiku call,
+    Fetch all AgentLog rows for a session, score it with one LLM call,
     write one EvalResult linked to the session_ended log.
     Returns the result dict or None if the session has no session_ended log.
     """
@@ -198,7 +205,6 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
         custom_metrics=custom_metrics,
     )
 
-    # custom_scores is a dict — serialize before writing to Text column
     result_for_db = {k: v for k, v in result.items() if k != "custom_scores"}
     custom_scores_json = json.dumps(result.get("custom_scores") or {}) or None
 
@@ -218,44 +224,91 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
 
 
 # ---------------------------------------------------------------------------
-# Private helpers
+# Provider dispatch
 # ---------------------------------------------------------------------------
 
-def _make_client() -> anthropic.Anthropic:
-    from kalytera.config import BYOK_ANTHROPIC_KEY
-    key = BYOK_ANTHROPIC_KEY or os.getenv("ANTHROPIC_API_KEY", "")
-    return anthropic.Anthropic(api_key=key)
-
-
-def _call_claude(
-    client: anthropic.Anthropic,
-    messages: List[Dict[str, str]],
-) -> str:
-    """Call Claude Haiku with prompt caching on the system prompt. Never raises."""
+def _call_judge(messages: List[Dict[str, str]]) -> str:
+    """
+    Dispatch to the configured LLM judge provider. Never raises.
+    Reads KALYTERA_JUDGE_PROVIDER at call time so env changes take effect immediately.
+    """
+    provider = os.getenv("KALYTERA_JUDGE_PROVIDER", "anthropic").lower()
     try:
-        response = client.messages.create(
-            model=_MODEL,
-            max_tokens=_MAX_TOKENS,
-            system=[
-                {
-                    "type": "text",
-                    "text": system_prompt(),
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ],
-            messages=messages,
-        )
-        return response.content[0].text
+        if provider == "openai":
+            return _call_openai(messages)
+        elif provider in ("google", "gemini"):
+            return _call_gemini(messages)
+        else:
+            return _call_anthropic(messages)
     except Exception as exc:
-        logger.error("Claude API call failed: %s", exc)
+        logger.error("Judge call failed [provider=%s]: %s", provider, exc)
         return ""
 
+
+def _call_anthropic(messages: List[Dict[str, str]]) -> str:
+    """Call Claude Haiku with prompt caching on the system prompt."""
+    model = os.getenv("KALYTERA_JUDGE_MODEL", "") or _DEFAULT_ANTHROPIC_MODEL
+    key = os.getenv("BYOK_ANTHROPIC_API_KEY", "") or os.getenv("ANTHROPIC_API_KEY", "")
+    client = anthropic.Anthropic(api_key=key)
+    response = client.messages.create(
+        model=model,
+        max_tokens=_MAX_TOKENS,
+        system=[
+            {
+                "type": "text",
+                "text": system_prompt(),
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        messages=messages,
+    )
+    return response.content[0].text
+
+
+def _call_openai(messages: List[Dict[str, str]]) -> str:
+    """Call OpenAI (gpt-4o-mini by default)."""
+    import openai as openai_lib  # lazy — only required when provider=openai
+    model = os.getenv("KALYTERA_JUDGE_MODEL", "") or _DEFAULT_OPENAI_MODEL
+    key = os.getenv("BYOK_OPENAI_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
+    client = openai_lib.OpenAI(api_key=key)
+    full_messages: List[Dict[str, str]] = [
+        {"role": "system", "content": system_prompt()},
+        *messages,
+    ]
+    resp = client.chat.completions.create(
+        model=model,
+        messages=full_messages,
+        max_tokens=_MAX_TOKENS,
+    )
+    content = resp.choices[0].message.content
+    return content if content is not None else ""
+
+
+def _call_gemini(messages: List[Dict[str, str]]) -> str:
+    """Call Google Gemini (gemini-1.5-flash by default)."""
+    import google.generativeai as genai  # lazy — only required when provider=gemini
+    model_name = os.getenv("KALYTERA_JUDGE_MODEL", "") or _DEFAULT_GEMINI_MODEL
+    key = os.getenv("BYOK_GOOGLE_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
+    genai.configure(api_key=key)
+    model = genai.GenerativeModel(model_name, system_instruction=system_prompt())
+    user_text = messages[-1]["content"] if messages else ""
+    response = model.generate_content(
+        user_text,
+        generation_config={"max_output_tokens": _MAX_TOKENS},
+    )
+    text: str = response.text if response.text else ""
+    return text
+
+
+# ---------------------------------------------------------------------------
+# Private helpers
+# ---------------------------------------------------------------------------
 
 def _parse_json(
     text: str,
     custom_names: Optional[List[str]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Parse and validate Claude's JSON response. Returns None if invalid."""
+    """Parse and validate the judge's JSON response. Returns None if invalid."""
     if not text:
         return None
     try:
