@@ -304,6 +304,85 @@ div[data-testid="stSidebarCollapsedControl"],
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# AUTH GATE — API key login, validated against /billing/usage
+# ═══════════════════════════════════════════════════════════════════════════════
+import requests as _requests
+
+
+def _validate_key(key: str) -> Optional[Dict[str, Any]]:
+    try:
+        r = _requests.get(
+            "https://api.kalytera.dev/billing/usage",
+            headers={"Authorization": f"Bearer {key}"},
+            timeout=5,
+        )
+        return r.json() if r.status_code == 200 else None
+    except Exception:
+        return None
+
+
+if not st.session_state.get("authenticated"):
+    _, col, _ = st.columns([1, 1.2, 1])
+    with col:
+        st.markdown('<div style="height:72px"/>', unsafe_allow_html=True)
+        st.markdown("""
+        <div style="text-align:center;margin-bottom:32px">
+          <div style="display:inline-flex;align-items:center;gap:10px;margin-bottom:18px">
+            <div style="background:linear-gradient(135deg,#6366f1,#8b5cf6);width:42px;height:42px;
+                        border-radius:11px;display:flex;align-items:center;justify-content:center;
+                        font-size:26px;box-shadow:0 2px 10px rgba(99,102,241,0.3)">⚡</div>
+            <div style="font-size:28px;font-weight:900;color:#0f172a;letter-spacing:-0.03em">Kalytera</div>
+          </div>
+          <div style="font-size:22px;font-weight:800;color:#0f172a;margin-bottom:6px">Welcome back</div>
+          <div style="font-size:14px;color:#64748b;line-height:1.5">
+            Paste your API key to access your dashboard.<br/>
+            <span style="font-size:12px">No password needed — your key is your login.</span>
+          </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        with st.form("login_form"):
+            _key_input = st.text_input(
+                "API key",
+                type="password",
+                placeholder="kly_live_...",
+                label_visibility="collapsed",
+            )
+            _submitted = st.form_submit_button("Sign in →", use_container_width=True)
+
+        if _submitted:
+            if not _key_input.startswith("kly_live_"):
+                st.error("That doesn't look right — Kalytera API keys start with `kly_live_`")
+            else:
+                with st.spinner("Verifying…"):
+                    _usage = _validate_key(_key_input)
+                if _usage:
+                    st.session_state.update({
+                        "authenticated": True,
+                        "api_key": _key_input,
+                        "org_name": _usage.get("org_name", ""),
+                        "tier": _usage.get("tier", "free"),
+                        "sessions_used": _usage.get("sessions_used", 0),
+                        "sessions_limit": _usage.get("sessions_limit", 10000),
+                    })
+                    st.rerun()
+                else:
+                    st.error("Invalid key. Check it at kalytera.dev or email priya@kalytera.ai")
+
+        st.markdown("""
+        <div style="text-align:center;margin-top:20px;font-size:12px;color:#94a3b8">
+          No key yet?
+          <a href="https://kalytera.dev" target="_blank"
+             style="color:#6366f1;font-weight:600;text-decoration:none">
+            Get one free at kalytera.dev →
+          </a>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.stop()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════════
 with st.sidebar:
@@ -379,13 +458,44 @@ with st.sidebar:
         )
 
     st.markdown('<hr style="margin:20px 0 12px"/>', unsafe_allow_html=True)
+
+    # ── Org info + usage bar ──────────────────────────────────────────────────
+    _org = st.session_state.get("org_name", "")
+    _tier = st.session_state.get("tier", "free")
+    _used = st.session_state.get("sessions_used", 0)
+    _limit = st.session_state.get("sessions_limit", 10000)
+    _pct = min(round(_used / _limit * 100) if _limit else 0, 100)
+    _bar_color = "#ef4444" if _pct >= 90 else "#6366f1"
     st.markdown(
-        '<p style="font-size:11px;color:#94a3b8;padding:0 4px;line-height:1.7">'
+        f"""
+        <div style="padding:11px 13px;background:#f8fafc;border-radius:10px;
+                    border:1px solid #e2e8f0;margin-bottom:10px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+            <span style="font-size:11px;color:#94a3b8;font-weight:700;
+                         text-transform:uppercase;letter-spacing:0.08em">{_tier}</span>
+            <span style="font-size:11px;color:#64748b">{_used:,} / {_limit:,}</span>
+          </div>
+          <div style="background:#e2e8f0;border-radius:4px;height:4px">
+            <div style="background:{_bar_color};width:{_pct}%;height:4px;border-radius:4px"></div>
+          </div>
+          {"" if not _org else f'<div style="font-size:11px;color:#94a3b8;margin-top:5px">{_org}</div>'}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    if st.button("Sign out", use_container_width=True, key="signout_btn"):
+        for _k in ["authenticated", "api_key", "org_name", "tier", "sessions_used", "sessions_limit"]:
+            st.session_state.pop(_k, None)
+        st.rerun()
+
+    st.markdown(
+        '<p style="font-size:11px;color:#94a3b8;padding:4px 4px 0;line-height:1.7">'
         'Evals every 30s&nbsp;·&nbsp;Patterns hourly</p>',
         unsafe_allow_html=True,
     )
     st.markdown(
-        '<a href="http://localhost:8000/docs" target="_blank" '
+        '<a href="https://api.kalytera.dev/docs" target="_blank" '
         'style="font-size:11px;color:#94a3b8;text-decoration:none;padding:0 4px">'
         '→ API docs</a>',
         unsafe_allow_html=True,
