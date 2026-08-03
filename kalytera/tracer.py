@@ -26,14 +26,17 @@ _api_key: str = ""
 def init(api_key: str, agent_id: str = "", api_endpoint: str = "") -> None:
     """Configure Kalytera. Call once at startup before the first trace."""
     global _agent_id, _api_key, _api_endpoint
+    _auto_id = not agent_id
     _agent_id = agent_id or str(uuid.uuid4())[:8]
     _api_key = api_key
     _api_endpoint = api_endpoint or _cfg.DEFAULT_ENDPOINT
     _ensure_worker()
+    id_note = f"  ⚠  agent_id auto-set to '{_agent_id}' — pass agent_id='..' to configure() to use a stable name\n" if _auto_id else ""
     print(
-        f"✓ Kalytera connected\n"
-        f"  Evaluating every step in real time\n"
-        f"  Dashboard: {_api_endpoint}/dashboard"
+        f"✓ Kalytera connected  (agent_id='{_agent_id}')\n"
+        f"{id_note}"
+        f"  Dashboard: https://app.kalytera.dev\n"
+        f"  Sending to: {_api_endpoint}"
     )
 
 

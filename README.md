@@ -9,7 +9,10 @@ pip install kalytera
 ```python
 import kalytera
 
-kalytera.configure(api_key="kly_live_...")
+kalytera.configure(
+    api_key="kly_live_...",
+    agent_id="my-agent",
+)
 
 kalytera.trace(
     session_id="session-001",

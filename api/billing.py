@@ -95,6 +95,14 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)):
         "api_key_prefix": key_row.key_prefix,
         "tier": org.tier,
         "sessions_per_month": TIERS["free"]["sessions"],
+        "api_endpoint": "https://api.kalytera.dev",
+        "dashboard_url": "https://app.kalytera.dev",
+        "next_steps": (
+            "1. pip install kalytera  "
+            "2. kalytera.configure(api_key='<your_key>', agent_id='<your-agent-name>')  "
+            "3. Add kalytera.trace() after each agent step  "
+            "4. Open https://app.kalytera.dev to see scores"
+        ),
     }
 
     if req.plan == "free":

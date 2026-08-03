@@ -342,7 +342,7 @@ h1{font-family:'Syne',sans-serif;font-weight:800;font-size:26px;letter-spacing:-
 <span class="kw">import</span> kalytera
 kalytera.<span class="fn">configure</span>(
   api_key=<span class="str">"kly_live_..."</span>,
-  api_endpoint=<span class="str">"https://agentiq-api-z9it.onrender.com"</span>
+  agent_id=<span class="str">"my-agent"</span>,
 )
 
 <span class="kw">@</span>kalytera.<span class="fn">watch</span>
