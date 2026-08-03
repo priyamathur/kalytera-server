@@ -14,7 +14,8 @@ from typing import Any, Callable, Dict, List, Optional
 
 import aiohttp
 
-from kalytera import config as _cfg
+from . import config as _cfg
+
 
 _queue: Queue[Dict[str, Any]] = Queue(maxsize=500)
 _worker: Optional[threading.Thread] = None

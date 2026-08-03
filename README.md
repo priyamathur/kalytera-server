@@ -43,7 +43,25 @@ curl -s -X POST https://api.kalytera.dev/signup \
 
 Copy the `api_key` from the response (looks like `kly_live_...`).
 
-**2. Install and trace:**
+**2. Install and verify it works:**
+
+```bash
+pip install kalytera
+```
+
+```bash
+python3 -c "
+import kalytera
+kalytera.configure(api_key='kly_live_...', agent_id='my-agent')
+kalytera.trace(session_id='test-001', step_number=1, step_name='test', input='hello', output='world')
+import time; time.sleep(2)
+print('Done — check https://app.kalytera.dev')
+"
+```
+
+You should see `✓ Kalytera connected  (agent_id='my-agent')` — your first trace is now being scored.
+
+**3. Add to your agent:**
 
 ```python
 import kalytera
