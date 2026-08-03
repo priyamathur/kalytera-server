@@ -8,7 +8,10 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import case, distinct, func
 from sqlalchemy.orm import Session
 
-from db.models import AgentLog, AgentQualityConfig, ApiKey, EvalResult, GoldenLabel, LossPattern, Organization, User, UsageRecord
+from db.models import AgentLog, AgentOrg, AgentQualityConfig, ApiKey, EvalResult, GoldenLabel, LossPattern, Organization, User, UsageRecord
+
+# agent_ids always visible to every authenticated user (demo / onboarding data)
+DEMO_AGENT_IDS: List[str] = ["demo-agent"]
 
 
 # ---------------------------------------------------------------------------
@@ -38,6 +41,27 @@ def insert_agent_log(payload: Dict[str, Any], db: Session) -> AgentLog:
     db.commit()
     db.refresh(row)
     return row
+
+
+def upsert_agent_org(agent_id: str, org_id: str, db: Session) -> None:
+    """Record that this org owns this agent_id. Safe to call on every trace."""
+    now = datetime.now(timezone.utc)
+    row = db.query(AgentOrg).filter(AgentOrg.agent_id == agent_id).first()
+    if row is None:
+        db.add(AgentOrg(agent_id=agent_id, org_id=org_id, first_seen=now, last_seen=now))
+    else:
+        row.last_seen = now
+    db.commit()
+
+
+def get_agent_ids_for_org(org_id: str, db: Session) -> List[str]:
+    """Return agent_ids owned by this org, plus shared demo agents."""
+    owned = [
+        r.agent_id
+        for r in db.query(AgentOrg.agent_id).filter(AgentOrg.org_id == org_id).all()
+    ]
+    combined = list(dict.fromkeys(owned + DEMO_AGENT_IDS))  # owned first, deduped
+    return combined
 
 
 def get_unevaluated_logs(agent_id: str, batch_size: int, db: Session) -> List[AgentLog]:

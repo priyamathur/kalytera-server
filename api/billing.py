@@ -391,6 +391,7 @@ def get_usage(
     limit = tier_cfg["sessions"]
     keys = list_keys_for_org(org.id, db)
     return {
+        "org_id": org.id,
         "org_name": org.name,
         "tier": org.tier,
         "period": period,

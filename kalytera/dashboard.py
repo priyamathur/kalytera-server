@@ -146,6 +146,7 @@ def _db():  # type: ignore[return]
 
 # ── Imports ───────────────────────────────────────────────────────────────────
 from db.queries import (  # noqa: E402
+    get_agent_ids_for_org,
     get_all_agent_ids,
     get_avg_score_by_step,
     get_calibration_stats,
@@ -360,6 +361,7 @@ if not st.session_state.get("authenticated"):
                     st.session_state.update({
                         "authenticated": True,
                         "api_key": _key_input,
+                        "org_id": _usage.get("org_id", ""),
                         "org_name": _usage.get("org_name", ""),
                         "tier": _usage.get("tier", "free"),
                         "sessions_used": _usage.get("sessions_used", 0),
@@ -412,7 +414,11 @@ with st.sidebar:
     )
     _db_s = _db()
     try:
-        _all_agents = get_all_agent_ids(_db_s)
+        _org_id = st.session_state.get("org_id", "")
+        if _org_id:
+            _all_agents = get_agent_ids_for_org(_org_id, _db_s)
+        else:
+            _all_agents = get_all_agent_ids(_db_s)
     except Exception:
         _all_agents = []
     finally:

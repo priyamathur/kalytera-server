@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from api.database import SessionLocal, get_db, initialize_database
 from db.queries import (
+    get_agent_ids_for_org,
     get_patterns_for_agent,
     get_unevaluated_logs,
     get_unevaluated_sessions,
@@ -28,6 +29,7 @@ from db.queries import (
     get_org_by_id,
     get_current_usage,
     increment_session_count,
+    upsert_agent_org,
 )
 from api.billing import router as billing_router, TIERS, hash_key
 
@@ -372,7 +374,20 @@ async def post_trace(
     if org is not None:
         period = datetime.now(timezone.utc).strftime("%Y-%m")
         increment_session_count(org.id, period, db)
+        upsert_agent_org(payload.agent_id, org.id, db)
     return TraceResponse(id=payload.id, status="accepted")
+
+
+@app.get("/agents", response_model=List[str])
+async def list_agents(
+    org=Depends(_require_auth),
+    db: Session = Depends(get_db),
+) -> List[str]:
+    """Return agent_ids owned by this org plus shared demo agents."""
+    if org is None:
+        from db.queries import DEMO_AGENT_IDS
+        return DEMO_AGENT_IDS
+    return get_agent_ids_for_org(org.id, db)
 
 
 @app.get(
@@ -381,11 +396,16 @@ async def post_trace(
 )
 async def get_patterns(
     agent_id: str,
-    _: None = Depends(_require_auth),
+    org=Depends(_require_auth),
     db: Session = Depends(get_db),
 ) -> List[PatternOut]:
     """
     Return LossPattern rows for one agent, sorted by pct_of_all_failures desc.
-    Multi-tenant: results are scoped to the requested agent_id.
+    Multi-tenant: agent_id must belong to the requesting org or be a demo agent.
     """
+    if org is not None:
+        allowed = get_agent_ids_for_org(org.id, db)
+        if agent_id not in allowed:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=403, detail="Agent not found in your organization")
     return get_patterns_for_agent(agent_id, db)

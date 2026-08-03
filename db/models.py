@@ -175,3 +175,16 @@ class UsageRecord(Base):
     updated_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
 
     __table_args__ = (UniqueConstraint("org_id", "period", name="uq_usage_org_period"),)
+
+
+class AgentOrg(Base):
+    """
+    Maps agent_id → org_id. Populated on every POST /trace with a customer key.
+    Enables per-org dashboard scoping without modifying agent_logs.
+    """
+    __tablename__ = "agent_orgs"
+
+    agent_id = Column(String, primary_key=True)
+    org_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
+    first_seen = Column(SADateTime(timezone=True), default=_now, nullable=False)
+    last_seen = Column(SADateTime(timezone=True), default=_now, nullable=False)
