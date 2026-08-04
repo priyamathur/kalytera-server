@@ -5,13 +5,19 @@ Start it once:
     kalytera proxy --port 8787 --api-key kly_live_... --agent-id my-agent
 
 Then point your agent at it (no other code changes):
-    export OPENAI_BASE_URL=http://localhost:8787/v1
-    export ANTHROPIC_BASE_URL=http://localhost:8787
+    export OPENAI_BASE_URL=http://localhost:8787/v1       # OpenAI, Groq, Together, Mistral …
+    export ANTHROPIC_BASE_URL=http://localhost:8787        # Anthropic SDK
 
-Supports:
-    POST /v1/chat/completions   — OpenAI + any compatible provider
-    POST /v1/messages           — Anthropic
-    Everything else             — forwarded to OpenAI transparently
+Provider is auto-detected from the API key in the Authorization header:
+    sk-ant-*    → Anthropic
+    gsk_*       → Groq
+    together_*  → Together AI
+    fw_*        → Fireworks AI
+    key-*       → Mistral
+    sk-*        → OpenAI  (default)
+
+For custom / self-hosted providers pass --upstream:
+    kalytera proxy --upstream https://my-llm.internal ...
 """
 from __future__ import annotations
 
@@ -24,8 +30,34 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from aiohttp import ClientSession, ClientTimeout, web
 
-_OPENAI_UPSTREAM = "https://api.openai.com"
-_ANTHROPIC_UPSTREAM = "https://api.anthropic.com"
+# Maps API-key prefix → upstream base URL.
+# The forwarded URL is always:  upstream_base + request.path
+# e.g. Groq key prefix "gsk_" → base "https://api.groq.com/openai"
+#      client sends  POST /v1/chat/completions
+#      proxy sends   POST https://api.groq.com/openai/v1/chat/completions  ✓
+_PROVIDER_MAP: Dict[str, str] = {
+    "sk-ant-":    "https://api.anthropic.com",      # Anthropic
+    "gsk_":       "https://api.groq.com/openai",    # Groq
+    "together_":  "https://api.together.xyz",        # Together AI
+    "fw_":        "https://api.fireworks.ai/inference",  # Fireworks AI
+    "key-":       "https://api.mistral.ai",          # Mistral
+    "Bearer pc-": "https://api.perplexity.ai",       # Perplexity
+}
+_DEFAULT_UPSTREAM = "https://api.openai.com"
+_ANTHROPIC_UPSTREAM = "https://api.anthropic.com"   # always used for /v1/messages
+
+
+def _detect_upstream(auth_header: str, override: Optional[str] = None) -> Tuple[str, str]:
+    """Return (provider_name, upstream_base_url) for a given Authorization header value."""
+    if override:
+        return "custom", override
+    token = auth_header.removeprefix("Bearer ").strip() if auth_header else ""
+    for prefix, base in _PROVIDER_MAP.items():
+        if token.startswith(prefix):
+            name = base.split("//")[1].split(".")[1]  # e.g. "groq", "anthropic"
+            return name, base
+    return "openai", _DEFAULT_UPSTREAM
+
 
 # Headers that must not be forwarded to upstream
 _HOP_BY_HOP = frozenset({
@@ -117,11 +149,13 @@ class KalyteraProxy:
         agent_id: str,
         port: int = 8787,
         kalytera_endpoint: str = "https://api.kalytera.dev",
+        upstream: Optional[str] = None,
     ) -> None:
         self.api_key = api_key
         self.agent_id = agent_id
         self.port = port
         self._endpoint = kalytera_endpoint.rstrip("/")
+        self._upstream_override = upstream  # None = auto-detect from API key
         self._tracker = _SessionTracker()
         self._http: Optional[ClientSession] = None
 
@@ -191,7 +225,11 @@ class KalyteraProxy:
         input_text = _messages_to_text(messages)
         step_name = model
         fwd_headers = _forward_headers(request.headers)
-        upstream_url = f"{_OPENAI_UPSTREAM}/v1/chat/completions"
+        provider, upstream_base = _detect_upstream(
+            request.headers.get("Authorization", ""), self._upstream_override
+        )
+        upstream_url = f"{upstream_base}/v1/chat/completions"
+        print(f"[kalytera] → {provider}  {model}")
 
         if is_streaming:
             return await self._stream(
@@ -363,7 +401,10 @@ class KalyteraProxy:
     async def handle_passthrough(self, request: web.Request) -> web.Response:
         path = request.path
         qs = request.query_string
-        url = f"{_OPENAI_UPSTREAM}{path}" + (f"?{qs}" if qs else "")
+        _, upstream_base = _detect_upstream(
+            request.headers.get("Authorization", ""), self._upstream_override
+        )
+        url = f"{upstream_base}{path}" + (f"?{qs}" if qs else "")
         body_bytes = await request.read()
         fwd_headers = _forward_headers(request.headers)
         try:
@@ -387,14 +428,16 @@ class KalyteraProxy:
         return app
 
     def run(self) -> None:
+        upstream_note = f"  upstream : {self._upstream_override}  (manual override)\n" if self._upstream_override else "  upstream : auto-detected from API key\n"
         print(
             f"\n✓ Kalytera proxy running  (port {self.port})\n"
             f"  agent_id : {self.agent_id}\n"
             f"  reports to : {self._endpoint}\n"
+            f"{upstream_note}"
             f"\n"
             f"  Point your agent at it:\n"
-            f"    OPENAI_BASE_URL=http://localhost:{self.port}/v1\n"
-            f"    ANTHROPIC_BASE_URL=http://localhost:{self.port}\n"
+            f"    OPENAI_BASE_URL=http://localhost:{self.port}/v1   # OpenAI, Groq, Together, Mistral, Fireworks…\n"
+            f"    ANTHROPIC_BASE_URL=http://localhost:{self.port}    # Anthropic SDK\n"
             f"\n"
             f"  All LLM calls captured automatically.\n"
             f"  Press Ctrl+C to stop.\n"

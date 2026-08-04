@@ -27,6 +27,7 @@ def _cmd_proxy(args: argparse.Namespace) -> None:
         agent_id=agent_id,
         port=args.port,
         kalytera_endpoint=args.endpoint,
+        upstream=args.upstream or None,
     ).run()
 
 
@@ -42,6 +43,7 @@ def main() -> None:
     proxy_p.add_argument("--api-key", default="", metavar="KEY", help="Kalytera API key (or KALYTERA_API_KEY env var)")
     proxy_p.add_argument("--agent-id", default="", metavar="ID", help="Agent ID for this proxy (or KALYTERA_AGENT_ID env var)")
     proxy_p.add_argument("--endpoint", default="https://api.kalytera.dev", metavar="URL", help="Kalytera API endpoint")
+    proxy_p.add_argument("--upstream", default="", metavar="URL", help="Override upstream LLM URL (default: auto-detect from API key)")
 
     args = parser.parse_args()
 

@@ -18,6 +18,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from kalytera.proxy import (
     KalyteraProxy,
     _SessionTracker,
+    _detect_upstream,
     _messages_to_text,
     _parse_anthropic_chunk,
     _parse_openai_chunk,
@@ -65,6 +66,54 @@ def _mock_upstream(body: bytes, status: int = 200) -> MagicMock:
     cm.status = status
     cm.headers = {"Content-Type": "application/json"}
     return cm
+
+
+# ── unit: provider detection ─────────────────────────────────────────────────
+
+class TestDetectUpstream:
+    def test_openai_key(self) -> None:
+        name, base = _detect_upstream("Bearer sk-abc123")
+        assert name == "openai"
+        assert base == "https://api.openai.com"
+
+    def test_anthropic_key(self) -> None:
+        name, base = _detect_upstream("Bearer sk-ant-abc123")
+        assert name == "anthropic"
+        assert base == "https://api.anthropic.com"
+
+    def test_groq_key(self) -> None:
+        name, base = _detect_upstream("Bearer gsk_abc123")
+        assert name == "groq"
+        assert base == "https://api.groq.com/openai"
+
+    def test_together_key(self) -> None:
+        name, base = _detect_upstream("Bearer together_abc123")
+        assert "together" in base
+
+    def test_fireworks_key(self) -> None:
+        name, base = _detect_upstream("Bearer fw_abc123")
+        assert "fireworks" in base
+
+    def test_mistral_key(self) -> None:
+        name, base = _detect_upstream("Bearer key-abc123")
+        assert "mistral" in base
+
+    def test_unknown_key_defaults_to_openai(self) -> None:
+        _, base = _detect_upstream("Bearer unknown_xyz")
+        assert base == "https://api.openai.com"
+
+    def test_empty_header_defaults_to_openai(self) -> None:
+        _, base = _detect_upstream("")
+        assert base == "https://api.openai.com"
+
+    def test_manual_override_wins(self) -> None:
+        name, base = _detect_upstream("Bearer sk-abc123", override="https://my-llm.internal")
+        assert name == "custom"
+        assert base == "https://my-llm.internal"
+
+    def test_override_wins_even_for_known_key(self) -> None:
+        _, base = _detect_upstream("Bearer gsk_groq_key", override="https://custom.api.com")
+        assert base == "https://custom.api.com"
 
 
 # ── unit: helpers ─────────────────────────────────────────────────────────────
