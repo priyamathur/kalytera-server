@@ -507,6 +507,14 @@ with st.sidebar:
         unsafe_allow_html=True,
     )
 
+    # DB diagnostic — shows which DB the dashboard is hitting
+    _db_url = os.getenv("DATABASE_URL", "sqlite:///./kalytera.db")
+    _db_label = "neon/pg" if "neon" in _db_url or "postgresql" in _db_url else "sqlite (local)"
+    st.markdown(
+        f'<p style="font-size:10px;color:#64748b;padding:4px 4px 0">DB: {_db_label}</p>',
+        unsafe_allow_html=True,
+    )
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SHARED HELPERS
@@ -577,6 +585,8 @@ def _show_overview(agent_id: str) -> None:
     sel_hours = _hours_map[sel_label]
 
     _calib_default = {"total_labeled": 0, "agreement_count": 0, "agreement_rate": None, "status": "unlabeled"}
+    _empty_stats = {"total": 0, "passed": 0, "pass_rate": 0.0}
+    _empty_extra = {"avg_session_len": 0, "avg_latency_ms": 0}
     db = _db()
     try:
         stats = get_todays_stats(agent_id, db, hours=sel_hours)
@@ -591,6 +601,11 @@ def _show_overview(agent_id: str) -> None:
             calib = get_calibration_stats(agent_id, db)
         except Exception:
             calib = _calib_default
+    except Exception as _db_exc:
+        db.close()
+        st.error(f"Database error: {_db_exc}", icon="🔴")
+        st.info("Check that the Render dashboard service has DATABASE_URL set to your Neon URL.")
+        return
     finally:
         db.close()
 
@@ -795,6 +810,8 @@ def _show_overview(agent_id: str) -> None:
         db2 = _db()
         try:
             cfg = get_quality_config(agent_id, db2)
+        except Exception:
+            cfg = None
         finally:
             db2.close()
 
@@ -1038,6 +1055,10 @@ def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
     try:
         patterns = get_patterns_for_agent(agent_id, db)
         recent = get_recent_eval_failures(agent_id, 50, db)
+    except Exception as _db_exc:
+        db.close()
+        st.error(f"Database error: {_db_exc}", icon="🔴")
+        return
     finally:
         db.close()
 
@@ -1407,6 +1428,10 @@ def _show_trace(agent_id: str, session_id: str) -> None:
     db = _db()
     try:
         steps = get_session_steps(session_id, db)
+    except Exception as _db_exc:
+        db.close()
+        st.error(f"Database error loading trace: {_db_exc}", icon="🔴")
+        return
     finally:
         db.close()
 
@@ -1460,6 +1485,8 @@ def _show_trace(agent_id: str, session_id: str) -> None:
     db_lbl = _db()
     try:
         existing_label = get_golden_label(agent_id, session_id, db_lbl)
+    except Exception:
+        existing_label = None
     finally:
         db_lbl.close()
 
@@ -1682,6 +1709,10 @@ def _show_session_browser(agent_id: str) -> None:
             since_hours=hours_map[time_lbl],
             sort_by=sort_map[sort_lbl],
         )
+    except Exception as _db_exc:
+        db.close()
+        st.error(f"Database error: {_db_exc}", icon="🔴")
+        return
     finally:
         db.close()
 
