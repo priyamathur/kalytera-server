@@ -54,6 +54,9 @@ dev = [
     "mypy",
 ]
 
+[project.scripts]
+kalytera = "kalytera.__main__:main"
+
 [project.urls]
 Homepage = "https://kalytera.ai"
 Documentation = "https://github.com/priyamathur/kalytera-server#readme"
