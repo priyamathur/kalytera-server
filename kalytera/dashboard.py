@@ -134,9 +134,18 @@ def _short_reason(reason: Optional[str], ft: Optional[str], step_name: str) -> s
 # ── DB helpers ────────────────────────────────────────────────────────────────
 @st.cache_resource
 def _engine():  # type: ignore[return]
-    from api.database import engine, initialize_database
-    initialize_database()
-    return engine
+    from sqlalchemy import create_engine
+    from sqlalchemy.pool import NullPool
+    _url = os.getenv("DATABASE_URL", "sqlite:///./kalytera.db")
+    if "sqlite" in _url:
+        return create_engine(_url, connect_args={"check_same_thread": False})
+    # NullPool: each session opens/closes one real connection — avoids
+    # exhausting Neon's free-tier connection limit when the API pool is also active.
+    return create_engine(
+        _url,
+        poolclass=NullPool,
+        connect_args={"connect_timeout": 10},
+    )
 
 
 def _db():  # type: ignore[return]
@@ -412,8 +421,9 @@ with st.sidebar:
         'text-transform:uppercase;margin-bottom:4px;padding:0 4px">AGENT</p>',
         unsafe_allow_html=True,
     )
-    _db_s = _db()
+    _db_s = None
     try:
+        _db_s = _db()
         _org_id = st.session_state.get("org_id", "")
         if _org_id:
             _all_agents = get_agent_ids_for_org(_org_id, _db_s)
@@ -422,7 +432,8 @@ with st.sidebar:
     except Exception:
         _all_agents = []
     finally:
-        _db_s.close()
+        if _db_s is not None:
+            _db_s.close()
 
     if _all_agents:
         _def = _all_agents.index("demo-agent") if "demo-agent" in _all_agents else 0
@@ -587,8 +598,9 @@ def _show_overview(agent_id: str) -> None:
     _calib_default = {"total_labeled": 0, "agreement_count": 0, "agreement_rate": None, "status": "unlabeled"}
     _empty_stats = {"total": 0, "passed": 0, "pass_rate": 0.0}
     _empty_extra = {"avg_session_len": 0, "avg_latency_ms": 0}
-    db = _db()
+    db = None
     try:
+        db = _db()
         stats = get_todays_stats(agent_id, db, hours=sel_hours)
         extra = get_session_and_latency_stats(agent_id, sel_hours, db)
         trend = get_quality_trend(agent_id, TREND_DAYS, db)
@@ -602,12 +614,12 @@ def _show_overview(agent_id: str) -> None:
         except Exception:
             calib = _calib_default
     except Exception as _db_exc:
-        db.close()
         st.error(f"Database error: {_db_exc}", icon="🔴")
         st.info("Check that the Render dashboard service has DATABASE_URL set to your Neon URL.")
         return
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
     failures_n = stats["total"] - stats["passed"]
     pass_pct = stats["pass_rate"] * 100
@@ -807,13 +819,15 @@ def _show_overview(agent_id: str) -> None:
     # ── Scoring Configuration ─────────────────────────────────────────────────
     st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
     with st.expander("⚙  Scoring Configuration", expanded=False):
-        db2 = _db()
+        db2 = None
         try:
+            db2 = _db()
             cfg = get_quality_config(agent_id, db2)
         except Exception:
             cfg = None
         finally:
-            db2.close()
+            if db2 is not None:
+                db2.close()
 
         _PRESETS: Dict[str, Dict[str, Any]] = {
             "Default":          dict(weight_accuracy=0.25, weight_goal_alignment=0.25, weight_decision=0.15, weight_completeness=0.15, weight_helpfulness=0.10, weight_factuality=0.10, pass_threshold=0.70),
@@ -1027,8 +1041,9 @@ def _show_overview(agent_id: str) -> None:
         # ── Save ──────────────────────────────────────────────────────────────
         _, save_col = st.columns([3, 1])
         if save_col.button("Save", use_container_width=True, disabled=not can_save):
-            db3 = _db()
+            db3 = None
             try:
+                db3 = _db()
                 upsert_quality_config(agent_id, {
                     "industry": _industry_key_map.get(selected_preset_label, "default"),
                     "weight_accuracy":       w_vals[0] / 100,
@@ -1040,8 +1055,11 @@ def _show_overview(agent_id: str) -> None:
                     "pass_threshold":      thresh / 100,
                     "custom_metrics":      custom_list,
                 }, db3)
+            except Exception as _e:
+                st.error(f"Save failed: {_e}")
             finally:
-                db3.close()
+                if db3 is not None:
+                    db3.close()
             st.session_state["custom_metrics_state"] = custom_list
             st.success("Saved. New weights apply to the next evaluation cycle.")
 
@@ -1051,16 +1069,17 @@ def _show_overview(agent_id: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 @st.fragment(run_every=AUTO_REFRESH_S)
 def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
-    db = _db()
+    db = None
     try:
+        db = _db()
         patterns = get_patterns_for_agent(agent_id, db)
         recent = get_recent_eval_failures(agent_id, 50, db)
     except Exception as _db_exc:
-        db.close()
         st.error(f"Database error: {_db_exc}", icon="🔴")
         return
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
     if not patterns and not recent:
         st.success("No failures found for this agent.", icon="✅")
@@ -1425,15 +1444,16 @@ def _show_trace(agent_id: str, session_id: str) -> None:
         st.session_state["selected_session"] = ""
         st.rerun()
 
-    db = _db()
+    db = None
     try:
+        db = _db()
         steps = get_session_steps(session_id, db)
     except Exception as _db_exc:
-        db.close()
         st.error(f"Database error loading trace: {_db_exc}", icon="🔴")
         return
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
     if not steps:
         st.warning(f"No steps found for session `{session_id}`.")
@@ -1482,13 +1502,15 @@ def _show_trace(agent_id: str, session_id: str) -> None:
     )
 
     # ── Golden label — calibrate the judge ───────────────────────────────────
-    db_lbl = _db()
+    db_lbl = None
     try:
+        db_lbl = _db()
         existing_label = get_golden_label(agent_id, session_id, db_lbl)
     except Exception:
         existing_label = None
     finally:
-        db_lbl.close()
+        if db_lbl is not None:
+            db_lbl.close()
 
     lc, mc, rc = st.columns([2, 2, 6])
     if existing_label is not None:
@@ -1499,26 +1521,38 @@ def _show_trace(agent_id: str, session_id: str) -> None:
             unsafe_allow_html=True,
         )
         if mc.button("Change label", key="change_lbl"):
-            db_lbl2 = _db()
+            db_lbl2 = None
             try:
+                db_lbl2 = _db()
                 upsert_golden_label(agent_id, session_id, not existing_label.human_passed, "", db_lbl2)
+            except Exception:
+                pass
             finally:
-                db_lbl2.close()
+                if db_lbl2 is not None:
+                    db_lbl2.close()
             st.rerun()
     else:
         if lc.button("👍 Mark passed", key="lbl_pass", help="Confirm this session passed — trains the judge"):
-            db_lbl2 = _db()
+            db_lbl2 = None
             try:
+                db_lbl2 = _db()
                 upsert_golden_label(agent_id, session_id, True, "", db_lbl2)
+            except Exception:
+                pass
             finally:
-                db_lbl2.close()
+                if db_lbl2 is not None:
+                    db_lbl2.close()
             st.rerun()
         if mc.button("👎 Mark failed", key="lbl_fail", help="Override — this session actually failed"):
-            db_lbl2 = _db()
+            db_lbl2 = None
             try:
+                db_lbl2 = _db()
                 upsert_golden_label(agent_id, session_id, False, "", db_lbl2)
+            except Exception:
+                pass
             finally:
-                db_lbl2.close()
+                if db_lbl2 is not None:
+                    db_lbl2.close()
             st.rerun()
         rc.markdown(
             '<div style="font-size:11px;color:#94a3b8;padding-top:8px">'
@@ -1698,8 +1732,9 @@ def _show_session_browser(agent_id: str) -> None:
         "Last 24h": 24, "Last 7 days": 168, "All time": None,
     }
 
-    db = _db()
+    db = None
     try:
+        db = _db()
         sessions = get_recent_failing_sessions(
             agent_id,
             limit=SESSION_LIMIT,
@@ -1710,11 +1745,11 @@ def _show_session_browser(agent_id: str) -> None:
             sort_by=sort_map[sort_lbl],
         )
     except Exception as _db_exc:
-        db.close()
         st.error(f"Database error: {_db_exc}", icon="🔴")
         return
     finally:
-        db.close()
+        if db is not None:
+            db.close()
 
     if not sessions:
         st.info("No failing sessions match the current filters. Try expanding the time range.")
