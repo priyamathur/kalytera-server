@@ -32,6 +32,7 @@ from db.queries import (
     upsert_agent_org,
 )
 from api.billing import router as billing_router, TIERS, hash_key
+from api.proxy_router import router as proxy_router
 
 logger = logging.getLogger(__name__)
 
@@ -286,11 +287,13 @@ app = FastAPI(title="Kalytera", version="1.0.0", docs_url="/docs", lifespan=_lif
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET", "POST"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+    allow_headers=["Authorization", "Content-Type", "X-Kalytera-Agent-Id", "X-Kalytera-Session-Id",
+                   "anthropic-version", "x-api-key"],
 )
 
 app.include_router(billing_router)
+app.include_router(proxy_router)
 
 
 # ---------------------------------------------------------------------------
