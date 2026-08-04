@@ -135,15 +135,18 @@ def _short_reason(reason: Optional[str], ft: Optional[str], step_name: str) -> s
 @st.cache_resource
 def _engine():  # type: ignore[return]
     from sqlalchemy import create_engine
-    from sqlalchemy.pool import NullPool
     _url = os.getenv("DATABASE_URL", "sqlite:///./kalytera.db")
     if "sqlite" in _url:
         return create_engine(_url, connect_args={"check_same_thread": False})
-    # NullPool: each session opens/closes one real connection — avoids
-    # exhausting Neon's free-tier connection limit when the API pool is also active.
+    # Dedicated pool of 2 — separate from the API's pool, reused across queries
+    # so there's no per-query handshake overhead. max_overflow=0 caps at exactly 2.
     return create_engine(
         _url,
-        poolclass=NullPool,
+        pool_size=2,
+        max_overflow=0,
+        pool_timeout=20,
+        pool_pre_ping=True,
+        pool_recycle=300,
         connect_args={"connect_timeout": 10},
     )
 
