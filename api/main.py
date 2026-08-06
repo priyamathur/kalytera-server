@@ -452,8 +452,19 @@ async def debug_register_agent(
     if not org:
         return {"error": "org not found"}
     try:
+        from db.models import AgentOrg
         upsert_agent_org(agent_id, org.id, db)
-        return {"success": True, "agent_id": agent_id, "org_id": org.id}
+        count_after = db.query(AgentOrg).filter(AgentOrg.org_id == org.id).count()
+        all_rows = [r.agent_id for r in db.query(AgentOrg).all()]
+        db_url = os.getenv("DATABASE_URL", "NOT SET")[:40]
+        return {
+            "success": True,
+            "agent_id": agent_id,
+            "org_id": org.id,
+            "count_after_upsert": count_after,
+            "all_agent_orgs": all_rows,
+            "db_url_prefix": db_url,
+        }
     except Exception as exc:
         return {"error": str(exc), "agent_id": agent_id, "org_id": org.id}
 
