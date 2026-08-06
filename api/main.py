@@ -435,6 +435,29 @@ async def debug_auth_check(
         return {"error": str(exc), "token_prefix": token[:20]}
 
 
+@app.post("/debug/register-agent")
+async def debug_register_agent(
+    agent_id: str,
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Temporary: directly call upsert_agent_org and report what happens."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return {"error": "no bearer token"}
+    token = authorization[len("Bearer "):]
+    row = get_apikey_by_hash(hash_key(token), db)
+    if not row:
+        return {"error": "key not found in api_keys table"}
+    org = get_org_by_id(row.org_id, db)
+    if not org:
+        return {"error": "org not found"}
+    try:
+        upsert_agent_org(agent_id, org.id, db)
+        return {"success": True, "agent_id": agent_id, "org_id": org.id}
+    except Exception as exc:
+        return {"error": str(exc), "agent_id": agent_id, "org_id": org.id}
+
+
 @app.get(
     "/agents/{agent_id}/patterns",
     response_model=List[PatternOut],
