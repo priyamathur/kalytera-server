@@ -412,17 +412,25 @@ with st.sidebar:
         'text-transform:uppercase;margin-bottom:4px;padding:0 4px">AGENT</p>',
         unsafe_allow_html=True,
     )
-    _db_s = _db()
-    try:
-        _org_id = st.session_state.get("org_id", "")
-        if _org_id:
-            _all_agents = get_agent_ids_for_org(_org_id, _db_s)
-        else:
+    _stored_key = st.session_state.get("api_key", "")
+    if _stored_key:
+        try:
+            _ar = _requests.get(
+                "https://api.kalytera.dev/agents",
+                headers={"Authorization": f"Bearer {_stored_key}"},
+                timeout=5,
+            )
+            _all_agents = _ar.json() if _ar.status_code == 200 else []
+        except Exception:
+            _all_agents = []
+    else:
+        _db_s = _db()
+        try:
             _all_agents = get_all_agent_ids(_db_s)
-    except Exception:
-        _all_agents = []
-    finally:
-        _db_s.close()
+        except Exception:
+            _all_agents = []
+        finally:
+            _db_s.close()
 
     if _all_agents:
         _def = _all_agents.index("demo-agent") if "demo-agent" in _all_agents else 0
