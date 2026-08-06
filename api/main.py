@@ -366,6 +366,7 @@ kalytera.<span class="fn">configure</span>(
 @app.post("/trace", response_model=TraceResponse, status_code=201)
 async def post_trace(
     payload: TracePayload,
+    request: Request,
     org=Depends(_require_auth),
     db: Session = Depends(get_db),
 ) -> TraceResponse:
@@ -374,6 +375,18 @@ async def post_trace(
     Writes an AgentLog row, increments monthly usage for customer keys.
     """
     insert_agent_log(payload.model_dump(), db)
+
+    # If _require_auth returned None (dev mode / no KALYTERA_API_KEY set),
+    # still try to resolve the org from the Authorization header so that
+    # upsert_agent_org runs and the agent appears in the dashboard.
+    if org is None:
+        auth_hdr = request.headers.get("Authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            _token = auth_hdr[len("Bearer "):]
+            _row = get_apikey_by_hash(hash_key(_token), db)
+            if _row:
+                org = get_org_by_id(_row.org_id, db)
+
     if org is not None:
         period = datetime.now(timezone.utc).strftime("%Y-%m")
         increment_session_count(org.id, period, db)
