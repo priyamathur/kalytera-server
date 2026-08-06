@@ -401,6 +401,31 @@ async def list_agents(
     return get_agent_ids_for_org(org.id, db)
 
 
+@app.get("/debug/auth-check")
+async def debug_auth_check(
+    authorization: Optional[str] = Header(default=None),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Temporary diagnostic endpoint — remove after debugging."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return {"error": "no bearer token"}
+    token = authorization[len("Bearer "):]
+    key_hash = hash_key(token)
+    try:
+        row = get_apikey_by_hash(key_hash, db)
+        admin_key = os.getenv("KALYTERA_API_KEY", "")
+        return {
+            "token_prefix": token[:20],
+            "key_hash_prefix": key_hash[:16],
+            "admin_key_set": bool(admin_key),
+            "row_found": row is not None,
+            "is_active": row.is_active if row else None,
+            "org_id": row.org_id if row else None,
+        }
+    except Exception as exc:
+        return {"error": str(exc), "token_prefix": token[:20]}
+
+
 @app.get(
     "/agents/{agent_id}/patterns",
     response_model=List[PatternOut],
