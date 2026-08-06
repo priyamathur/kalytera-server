@@ -412,15 +412,24 @@ async def debug_auth_check(
     token = authorization[len("Bearer "):]
     key_hash = hash_key(token)
     try:
+        from db.models import AgentOrg
         row = get_apikey_by_hash(key_hash, db)
         admin_key = os.getenv("KALYTERA_API_KEY", "")
+        org_id = row.org_id if row else None
+        agent_orgs: List[str] = []
+        if org_id:
+            agent_orgs = [
+                r.agent_id
+                for r in db.query(AgentOrg).filter(AgentOrg.org_id == org_id).all()
+            ]
         return {
             "token_prefix": token[:20],
             "key_hash_prefix": key_hash[:16],
             "admin_key_set": bool(admin_key),
             "row_found": row is not None,
             "is_active": row.is_active if row else None,
-            "org_id": row.org_id if row else None,
+            "org_id": org_id,
+            "agent_orgs_in_db": agent_orgs,
         }
     except Exception as exc:
         return {"error": str(exc), "token_prefix": token[:20]}
