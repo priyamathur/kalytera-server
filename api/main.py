@@ -12,7 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, List, Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request, status
+from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
@@ -90,27 +90,35 @@ def _require_auth(
 ) -> Optional[Any]:
     """
     Returns the Organization for customer keys (kly_live_*).
-    Returns None for the master admin key or in dev mode (no rate limiting).
+    Returns None for the master admin key or unauthenticated dev-mode requests.
     Raises 429 when the org has exhausted its monthly session limit.
+
+    Behaviour when KALYTERA_API_KEY is not set (dev/misconfigured):
+      - No auth header → return None (allow unauthenticated)
+      - Valid customer key → still resolve to org so endpoints work correctly
+      - Unrecognised key → return None (allow through)
     """
     admin_key = os.getenv("KALYTERA_API_KEY", "")
-    if not admin_key:
-        return None  # dev mode — no key configured
 
     if not authorization or not authorization.startswith("Bearer "):
+        if not admin_key:
+            return None  # dev mode — no master key configured, allow unauthenticated
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization: Bearer <key> header required",
         )
+
     token = authorization[len("Bearer "):]
 
     # Master admin key — bypass rate limiting
-    if token == admin_key:
+    if admin_key and token == admin_key:
         return None
 
-    # Customer key — resolve to org via ApiKey table
+    # Customer key — always resolve via ApiKey table regardless of admin_key
     api_key_row = get_apikey_by_hash(hash_key(token), db)
     if not api_key_row:
+        if not admin_key:
+            return None  # dev mode — unknown key, allow through
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
     org = get_org_by_id(api_key_row.org_id, db)
@@ -366,7 +374,6 @@ kalytera.<span class="fn">configure</span>(
 @app.post("/trace", response_model=TraceResponse, status_code=201)
 async def post_trace(
     payload: TracePayload,
-    request: Request,
     org=Depends(_require_auth),
     db: Session = Depends(get_db),
 ) -> TraceResponse:
@@ -375,18 +382,6 @@ async def post_trace(
     Writes an AgentLog row, increments monthly usage for customer keys.
     """
     insert_agent_log(payload.model_dump(), db)
-
-    # If _require_auth returned None (dev mode / no KALYTERA_API_KEY set),
-    # still try to resolve the org from the Authorization header so that
-    # upsert_agent_org runs and the agent appears in the dashboard.
-    if org is None:
-        auth_hdr = request.headers.get("Authorization", "")
-        if auth_hdr.startswith("Bearer "):
-            _token = auth_hdr[len("Bearer "):]
-            _row = get_apikey_by_hash(hash_key(_token), db)
-            if _row:
-                org = get_org_by_id(_row.org_id, db)
-
     if org is not None:
         period = datetime.now(timezone.utc).strftime("%Y-%m")
         increment_session_count(org.id, period, db)
