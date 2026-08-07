@@ -45,12 +45,17 @@ def insert_agent_log(payload: Dict[str, Any], db: Session) -> AgentLog:
 
 def upsert_agent_org(agent_id: str, org_id: str, db: Session) -> None:
     """Record that this org owns this agent_id. Safe to call on every trace."""
+    from sqlalchemy import text
     now = datetime.now(timezone.utc)
-    row = db.query(AgentOrg).filter(AgentOrg.agent_id == agent_id).first()
-    if row is None:
-        db.add(AgentOrg(agent_id=agent_id, org_id=org_id, first_seen=now, last_seen=now))
-    else:
-        row.last_seen = now
+    db.execute(
+        text("""
+            INSERT INTO agent_orgs (agent_id, org_id, first_seen, last_seen)
+            VALUES (:agent_id, :org_id, :now, :now)
+            ON CONFLICT (agent_id) DO UPDATE
+            SET org_id = :org_id, last_seen = :now
+        """),
+        {"agent_id": agent_id, "org_id": org_id, "now": now},
+    )
     db.commit()
 
 

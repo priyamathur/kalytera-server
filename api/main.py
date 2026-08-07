@@ -452,21 +452,24 @@ async def debug_register_agent(
     if not org:
         return {"error": "org not found"}
     try:
-        from db.models import AgentOrg
+        from sqlalchemy import text
         upsert_agent_org(agent_id, org.id, db)
-        count_after = db.query(AgentOrg).filter(AgentOrg.org_id == org.id).count()
-        all_rows = [r.agent_id for r in db.query(AgentOrg).all()]
-        db_url = os.getenv("DATABASE_URL", "NOT SET")[:40]
+        # Verify with raw SQL (bypasses ORM cache)
+        raw = db.execute(
+            text("SELECT agent_id, org_id FROM agent_orgs WHERE org_id = :oid"),
+            {"oid": org.id},
+        ).fetchall()
+        db_url = os.getenv("DATABASE_URL", "NOT SET")[:50]
         return {
             "success": True,
             "agent_id": agent_id,
             "org_id": org.id,
-            "count_after_upsert": count_after,
-            "all_agent_orgs": all_rows,
+            "raw_rows_after": [{"agent_id": r[0], "org_id": r[1]} for r in raw],
             "db_url_prefix": db_url,
         }
     except Exception as exc:
-        return {"error": str(exc), "agent_id": agent_id, "org_id": org.id}
+        import traceback
+        return {"error": str(exc), "traceback": traceback.format_exc(), "agent_id": agent_id}
 
 
 @app.get(
