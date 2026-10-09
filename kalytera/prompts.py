@@ -156,7 +156,7 @@ def build_retry_prompt(step: StepContext) -> List[Dict[str, str]]:
         f"Output: {step.output[:200]}\n\n"
         f'JSON format (0.0-1.0 for scores):\n'
         f'{{"accuracy":0.0,"goal_alignment":0.0,"decision_quality":0.0,'
-        f'"completeness":0.0,"overall_score":0.0,"passed":true,'
+        f'"completeness":0.0,"helpfulness":0.0,"factuality":0.0,"overall_score":0.0,"passed":true,'
         f'"failure_type":null,"failure_step":null,"failure_reason":null,"confidence":0.0}}'
     )
     return [{"role": "user", "content": user}]

@@ -69,6 +69,20 @@ def get_agent_ids_for_org(org_id: str, db: Session) -> List[str]:
     return combined
 
 
+def get_log_by_id(log_id: str, db: Session) -> Optional[AgentLog]:
+    return db.query(AgentLog).filter(AgentLog.id == log_id).first()
+
+
+def get_eval_for_log(log_id: str, db: Session) -> Optional[EvalResult]:
+    """Most recent EvalResult attached to this log (session-mode results attach to the session_ended log)."""
+    return (
+        db.query(EvalResult)
+        .filter(EvalResult.log_id == log_id)
+        .order_by(EvalResult.evaluated_at.desc())
+        .first()
+    )
+
+
 def get_unevaluated_logs(agent_id: str, batch_size: int, db: Session) -> List[AgentLog]:
     """Return AgentLog rows that have no corresponding EvalResult yet."""
     evaluated_ids = db.query(EvalResult.log_id).filter(EvalResult.agent_id == agent_id)

@@ -85,3 +85,121 @@ def test_init_sets_agent_id() -> None:
     kalytera.init(api_key="test-key", agent_id="my-agent")
     assert tracer._agent_id == "my-agent"
     assert tracer._api_key == "test-key"
+
+
+# --- session_ended, visible errors, check() ---
+
+def test_trace_accepts_session_ended() -> None:
+    payload = tracer._build_payload("s1", 3, "respond", "in", "out", None, None, None, True)
+    assert payload["session_ended"] is True
+
+
+def test_trace_defaults_session_ended_false() -> None:
+    payload = tracer._build_payload("s1", 1, "step", "in", "out", None, None, None, False)
+    assert payload["session_ended"] is False
+
+
+def test_watch_marks_session_ended() -> None:
+    captured: list = []
+    original = tracer.trace
+    tracer_trace = lambda **kw: captured.append(kw)  # noqa: E731
+    try:
+        kalytera.tracer.trace = tracer_trace  # type: ignore[assignment]
+
+        @kalytera.watch
+        def agent(x: str) -> str:
+            return x
+
+        agent("hi")
+    finally:
+        kalytera.tracer.trace = original  # type: ignore[assignment]
+    assert captured and captured[0]["session_ended"] is True
+
+
+def test_rejected_key_message_is_printed_once(capsys) -> None:
+    tracer._notified.clear()
+    for _ in range(3):
+        tracer._notify(*tracer._connection_problem(401, None))
+    err = capsys.readouterr().err
+    assert err.count("API key rejected") == 1
+
+
+def test_connection_problem_classification() -> None:
+    assert tracer._connection_problem(200, None) is None
+    assert tracer._connection_problem(401, None)[0] == "auth"
+    assert tracer._connection_problem(403, None)[0] == "auth"
+    assert tracer._connection_problem(429, None)[0] == "limit"
+    assert tracer._connection_problem(None, "connection refused")[0] == "network"
+    assert tracer._connection_problem(500, None)[0] == "http_500"
+
+
+def test_init_does_not_claim_connected(capsys) -> None:
+    kalytera.init(api_key="test-key", agent_id="my-agent", verify=False)
+    out = capsys.readouterr().out
+    assert "connected" not in out.lower()
+    assert "kalytera.check()" in out
+
+
+def test_init_without_key_warns(capsys) -> None:
+    kalytera.init(api_key="", agent_id="my-agent", verify=False)
+    assert "no API key" in capsys.readouterr().err
+
+
+def _fake_http(responses):
+    calls = []
+
+    def fake(method, path, body=None):
+        calls.append((method, path))
+        for prefix, resp in responses:
+            if f"{method} {path}".startswith(prefix):
+                return resp
+        raise AssertionError(f"unexpected request {method} {path}")
+    return fake, calls
+
+
+def test_check_reports_rejected_key(monkeypatch, capsys) -> None:
+    kalytera.init(api_key="bad-key", agent_id="a", verify=False)
+    fake, _ = _fake_http([("GET /agents", (401, {"detail": "Invalid API key"}, None))])
+    monkeypatch.setattr(tracer, "_http", fake)
+    assert kalytera.check() is False
+    assert "API key rejected" in capsys.readouterr().out
+
+
+def test_check_reports_unreachable(monkeypatch, capsys) -> None:
+    kalytera.init(api_key="k", agent_id="a", verify=False)
+    fake, _ = _fake_http([("GET /agents", (None, None, "connection refused"))])
+    monkeypatch.setattr(tracer, "_http", fake)
+    assert kalytera.check() is False
+    assert "can't reach" in capsys.readouterr().out
+
+
+def test_check_success_waits_for_score(monkeypatch, capsys) -> None:
+    kalytera.init(api_key="k", agent_id="a", verify=False)
+    fake, calls = _fake_http([
+        ("GET /agents", (200, ["a"], None)),
+        ("POST /trace", (201, {"status": "accepted"}, None)),
+        ("GET /trace/", (200, {"status": "scored", "overall_score": 0.91, "passed": True}, None)),
+    ])
+    monkeypatch.setattr(tracer, "_http", fake)
+    assert kalytera.check(timeout=5) is True
+    out = capsys.readouterr().out
+    assert "API key accepted" in out and "recorded" in out and "0.91" in out
+    assert [c[0] for c in calls] == ["GET", "POST", "GET"]
+
+
+def test_check_handles_server_without_eval_endpoint(monkeypatch, capsys) -> None:
+    kalytera.init(api_key="k", agent_id="a", verify=False)
+    fake, _ = _fake_http([
+        ("GET /agents", (200, ["a"], None)),
+        ("POST /trace", (201, {"status": "accepted"}, None)),
+        ("GET /trace/", (404, {"detail": "Not Found"}, None)),
+    ])
+    monkeypatch.setattr(tracer, "_http", fake)
+    assert kalytera.check(timeout=5) is True
+    assert "doesn't report scores" in capsys.readouterr().out
+
+
+def test_check_without_key(capsys) -> None:
+    kalytera.init(api_key="", agent_id="a", verify=False)
+    assert kalytera.check() is False
+    assert "No API key" in capsys.readouterr().out

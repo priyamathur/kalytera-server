@@ -558,7 +558,7 @@ def my_agent_step(input: str) -> str:
         <div class="feat-problem">Mid-workflow failures produce plausible-looking final outputs. By the time the output is checked, the signal is gone. Developers spend hours in traces trying to find which step caused it.</div>
         <div class="feat-tag">step-level scoring</div>
         <div class="feat-title">Scored at every step, not just the final answer.</div>
-        <div class="feat-body">Kalytera evaluates each step independently across four dimensions: accuracy, goal alignment, decision quality, and completeness. The failure shows up where it originated — not where it ended up.</div>
+        <div class="feat-body">Kalytera evaluates each step independently across six dimensions: accuracy, goal alignment, decision quality, completeness, helpfulness, and factuality. The failure shows up where it originated — not where it ended up.</div>
       </div>
       <div class="fmock">
         <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Session 1248 · billing_dispute · FAILED</span></div>
@@ -816,13 +816,15 @@ kalytera.<span class="fn">configure</span>(
     <!-- QUALITY -->
     <div id="doc-quality" style="display:none">
       <div class="docs-h1">Quality scoring</div>
-      <p class="docs-lead">Every interaction gets a quality score from 0 to 100, computed from four dimensions evaluated by an LLM judge on every step.</p>
-      <div class="docs-h2">The four dimensions</div>
+      <p class="docs-lead">Every interaction gets a quality score from 0 to 100, computed from six dimensions evaluated by an LLM judge.</p>
+      <div class="docs-h2">The six dimensions</div>
       <div class="pt">
         <div class="pr"><div class="pname">accuracy</div><div class="ptype">0.0–1.0</div><div class="pdesc">Was the response factually correct given available context and tool outputs?</div></div>
         <div class="pr"><div class="pname">goal_alignment</div><div class="ptype">0.0–1.0</div><div class="pdesc">Did the agent serve what the user actually needed — not just the literal request?</div></div>
         <div class="pr"><div class="pname">decision_quality</div><div class="ptype">0.0–1.0</div><div class="pdesc">Was the reasoning sound and tool selection appropriate and well-sequenced?</div></div>
         <div class="pr"><div class="pname">completeness</div><div class="ptype">0.0–1.0</div><div class="pdesc">Was the request fully resolved, or did the agent stop short?</div></div>
+        <div class="pr"><div class="pname">helpfulness</div><div class="ptype">0.0–1.0</div><div class="pdesc">Did the response have practical value the user could act on?</div></div>
+        <div class="pr"><div class="pname">factuality</div><div class="ptype">0.0–1.0</div><div class="pdesc">Were all claims grounded and verifiable — no hallucinations?</div></div>
       </div>
       <div class="docs-h2">Pass threshold</div>
       <p class="docs-p">An interaction passes when <span class="ic">overall_score ≥ 0.7</span>. Configurable per agent from the dashboard.</p>
@@ -882,7 +884,7 @@ kalytera.<span class="fn">configure</span>(
       <p class="docs-lead">Authenticates Kalytera and sets defaults. Call once at startup before any trace() calls.</p>
       <div class="cb"><pre>kalytera.<span class="fn">configure</span>(
   api_key: <span class="kw">str</span>,
-  api_endpoint: <span class="kw">str</span> = <span class="str">"http://localhost:8000"</span>,
+  api_endpoint: <span class="kw">str</span> = <span class="str">"https://api.kalytera.dev"</span>,
   agent_id: <span class="kw">str</span> | <span class="kw">None</span> = <span class="kw">None</span>,
 ) -&gt; <span class="kw">None</span></pre></div>
       <div class="pt">
@@ -933,7 +935,7 @@ kalytera.<span class="fn">configure</span>(
 input · output · tool_calls · latency_ms · timestamp</pre></div>
       <div class="docs-h2">EvalResult</div>
       <div class="cb"><pre>log_id · accuracy · goal_alignment · decision_quality
-completeness · overall_score · passed · failure_type · failure_reason</pre></div>
+completeness · helpfulness · factuality · overall_score · passed · failure_type · failure_reason</pre></div>
       <div class="docs-h2">LossPattern</div>
       <div class="cb"><pre>agent_id · pattern_type · pattern_value · failure_count
 failure_rate · pct_of_all_failures · root_cause · is_worsening</pre></div>

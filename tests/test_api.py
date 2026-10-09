@@ -175,11 +175,12 @@ def test_post_trace_no_key_configured_allows_all(client: TestClient) -> None:
 
 
 def test_post_trace_wrong_key_returns_401(authed_client: TestClient) -> None:
-    r = authed_client.post(
-        "/trace",
-        json=_trace_payload(),
-        headers={"Authorization": "Bearer wrong-key"},
-    )
+    with patch("api.main.get_apikey_by_hash", return_value=None):
+        r = authed_client.post(
+            "/trace",
+            json=_trace_payload(),
+            headers={"Authorization": "Bearer wrong-key"},
+        )
     assert r.status_code == 401
 
 
@@ -241,3 +242,34 @@ def test_get_patterns_correct_key(authed_client: TestClient) -> None:
             headers={"Authorization": "Bearer test-secret"},
         )
     assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# GET /trace/{log_id}/eval
+# ---------------------------------------------------------------------------
+
+def test_trace_eval_pending_then_scored(client: TestClient) -> None:
+    log = MagicMock(agent_id="demo-agent")
+    with patch("api.main.get_log_by_id", return_value=log), \
+         patch("api.main.get_eval_for_log", return_value=None):
+        resp = client.get("/trace/log-1/eval")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "pending"
+
+    result = MagicMock(overall_score=0.82, passed=True, failure_type=None, failure_reason=None, eval_error=False)
+    with patch("api.main.get_log_by_id", return_value=log), \
+         patch("api.main.get_eval_for_log", return_value=result):
+        resp = client.get("/trace/log-1/eval")
+    body = resp.json()
+    assert body["status"] == "scored" and body["overall_score"] == 0.82 and body["passed"] is True
+
+
+def test_trace_eval_unknown_log_404(client: TestClient) -> None:
+    with patch("api.main.get_log_by_id", return_value=None):
+        resp = client.get("/trace/nope/eval")
+    assert resp.status_code == 404
+
+
+def test_trace_eval_requires_auth_when_key_configured(authed_client: TestClient) -> None:
+    resp = authed_client.get("/trace/log-1/eval")
+    assert resp.status_code == 401

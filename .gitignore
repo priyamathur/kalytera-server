@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 venv/
+.venv/
 env/
 ENV/
 
@@ -100,7 +101,7 @@ api/pattern_endpoints.py
 api/security.py
 autonomous_llm_judge.py
 comprehensive_agentiq_test.py
-config.py
+/config.py
 debug_intent.py
 deploy_to_render.sh
 dashboard_render.yaml
@@ -116,7 +117,7 @@ intent_classification.py
 kalytera-admin.html
 load_demo_data.py
 loss_pattern_analyzer.py
-main.py
+/main.py
 run_with_review.sh
 simple_dashboard.py
 test_evaluation_simple.py

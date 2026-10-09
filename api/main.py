@@ -1,6 +1,7 @@
 """
 Kalytera API — core endpoints + billing.
   POST /trace                        — receive AgentLog from tracer
+  GET  /trace/{log_id}/eval          — scoring status for one step (kalytera.check())
   GET  /agents/{agent_id}/patterns   — return LossPattern rows
   /billing/*                         — usage, checkout, webhook
   /admin/tenants                     — tenant management
@@ -21,6 +22,8 @@ from sqlalchemy.orm import Session
 from api.database import SessionLocal, get_db, initialize_database
 from db.queries import (
     get_agent_ids_for_org,
+    get_eval_for_log,
+    get_log_by_id,
     get_patterns_for_agent,
     get_unevaluated_logs,
     get_unevaluated_sessions,
@@ -387,6 +390,43 @@ async def post_trace(
         increment_session_count(org.id, period, db)
         upsert_agent_org(payload.agent_id, org.id, db)
     return TraceResponse(id=payload.id, status="accepted")
+
+
+class TraceEvalOut(BaseModel):
+    id: str
+    status: str                       # "pending" | "scored"
+    overall_score: Optional[float] = None
+    passed: Optional[bool] = None
+    failure_type: Optional[str] = None
+    failure_reason: Optional[str] = None
+    eval_error: Optional[bool] = None
+
+
+@app.get("/trace/{log_id}/eval", response_model=TraceEvalOut)
+async def get_trace_eval(
+    log_id: str,
+    org=Depends(_require_auth),
+    db: Session = Depends(get_db),
+) -> TraceEvalOut:
+    """
+    Scoring status for one traced step — used by kalytera.check() to confirm the
+    first step was scored. 404 if the step doesn't exist or belongs to another org.
+    """
+    log = get_log_by_id(log_id, db)
+    if log is None or (org is not None and log.agent_id not in get_agent_ids_for_org(org.id, db)):
+        raise HTTPException(status_code=404, detail="trace not found")
+    result = get_eval_for_log(log_id, db)
+    if result is None:
+        return TraceEvalOut(id=log_id, status="pending")
+    return TraceEvalOut(
+        id=log_id,
+        status="scored",
+        overall_score=result.overall_score,
+        passed=result.passed,
+        failure_type=result.failure_type,
+        failure_reason=result.failure_reason,
+        eval_error=result.eval_error,
+    )
 
 
 @app.get("/agents", response_model=List[str])

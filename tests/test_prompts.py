@@ -151,7 +151,7 @@ def test_failure_types_count() -> None:
 
 
 def test_expected_keys_count() -> None:
-    assert len(EXPECTED_KEYS) == 10
+    assert len(EXPECTED_KEYS) == 12
 
 
 def test_all_seven_failure_types_present() -> None:

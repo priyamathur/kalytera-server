@@ -33,7 +33,19 @@ That's it. Kalytera scores every step with an LLM judge and surfaces failure pat
 
 ## Get started
 
-**1. Get a free API key** (no credit card):
+**0. See it work first — no account needed:**
+
+```bash
+pip install kalytera
+kalytera demo
+```
+
+This runs a bundled billing-agent session through Kalytera's checks on your machine and shows the step where it broke.
+
+**1. Get a free API key** (no credit card) at **[kalytera.dev](https://kalytera.dev)** → *Get API key*. Your key looks like `kly_live_...`.
+
+<details>
+<summary>Prefer the terminal?</summary>
 
 ```bash
 curl -s -X POST https://api.kalytera.dev/signup \
@@ -41,36 +53,32 @@ curl -s -X POST https://api.kalytera.dev/signup \
   -d '{"email": "you@example.com", "name": "my-agent"}' | python3 -m json.tool
 ```
 
-Copy the `api_key` from the response (looks like `kly_live_...`).
+</details>
 
-**2. Install and verify it works:**
-
-```bash
-pip install kalytera
-```
+**2. Confirm your key works end-to-end:**
 
 ```bash
-python3 -c "
-import kalytera
-kalytera.configure(api_key='kly_live_...', agent_id='my-agent')
-kalytera.trace(session_id='test-001', step_number=1, step_name='test', input='hello', output='world')
-import time; time.sleep(2)
-print('Done — check https://app.kalytera.dev')
-"
+KALYTERA_API_KEY=kly_live_... kalytera check
 ```
 
-You should see `✓ Kalytera connected  (agent_id='my-agent')` — your first trace is now being scored.
+`check` verifies the key, records a test step, and waits for the server to score it:
+
+```
+Kalytera check
+  ✓ API key accepted
+  ✓ Test step recorded  (agent_id='kalytera-check', session_id='kalytera-check-…')
+  … waiting for the server to score it (up to 90s)
+  ✓ Scored by the LLM judge: overall 0.88  (passed)
+```
+
+If something is wrong you get a specific reason — a rejected key, the monthly limit, or an unreachable server — instead of an empty dashboard. The same check is available in Python as `kalytera.check()`.
 
 **3. Add to your agent:**
 
 ```python
 import kalytera
 
-kalytera.configure(
-    api_key="kly_live_...",
-    api_endpoint="https://api.kalytera.dev",
-    agent_id="my-agent",
-)
+kalytera.configure(api_key="kly_live_...", agent_id="my-agent")
 
 # Call after every step in your agent workflow
 kalytera.trace(
@@ -81,21 +89,29 @@ kalytera.trace(
     output="You can cancel anytime. No refunds for partial months.",
     tool_calls=[{"name": "policy_api", "success": True, "latency_ms": 210}],
 )
+
+# Mark the last step so the session is scored
+kalytera.trace(
+    session_id="session-001",
+    step_number=2,
+    step_name="respond",
+    input="Draft reply",
+    output="You can cancel anytime from Settings → Billing.",
+    session_ended=True,
+)
 ```
 
-`trace()` returns in under 5ms. It never raises. If the server is unreachable, your agent keeps running.
+`trace()` returns in under 5ms and never raises — sending happens on a background thread. If your key is rejected or the server is unreachable, Kalytera prints one clear warning to stderr instead of failing silently; your agent keeps running either way.
 
-**3. Open the dashboard** — quality scores appear within 30 seconds:
+**4. Open the dashboard** at **[app.kalytera.dev](https://app.kalytera.dev)** — scores appear within a minute of a session ending.
 
-```
-https://app.kalytera.dev
-```
+Requires Python 3.11+.
 
 ---
 
 ## What Kalytera detects
 
-Every step is scored across six dimensions by an LLM judge (Claude Haiku):
+Each session is scored across six dimensions by an LLM judge (Claude Haiku) — or every individual step when per-step scoring is enabled:
 
 | Dimension | Default weight | What it measures |
 |---|---|---|
@@ -153,13 +169,20 @@ cp .env.example .env        # add ANTHROPIC_API_KEY and DATABASE_URL
 docker compose up
 ```
 
-API at `http://localhost:8000`, dashboard at `http://localhost:8501`.
+API at `http://localhost:8000`, dashboard at `http://localhost:8501`. Point the SDK at it with `kalytera.configure(api_key=..., api_endpoint="http://localhost:8000")`.
+
+To develop or run the tests without Docker, use **Python 3.11** (pinned in `.python-version`; the server dependencies don't build on 3.13 yet):
+
+```bash
+pip install -e ".[server,dev]"
+pytest
+```
 
 ---
 
 ## Roadmap
 
-- [x] LLM-as-judge scoring (4 built-in dimensions)
+- [x] LLM-as-judge scoring (6 built-in dimensions)
 - [x] Custom metrics (helpfulness, tone, compliance, …)
 - [x] Golden set calibration — label sessions, measure judge accuracy
 - [ ] Cross-model agreement — flag low-confidence evals by comparing two judges

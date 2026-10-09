@@ -1,7 +1,10 @@
 import os
 
 DEFAULT_ENDPOINT: str = os.getenv("KALYTERA_API_ENDPOINT", "https://api.kalytera.dev")
-REQUEST_TIMEOUT: float = 5.0
+# Generous: the hosted API can take ~10s to wake from idle. Sends happen on a
+# background thread, so this never delays the caller.
+REQUEST_TIMEOUT: float = 20.0
+SEND_RETRIES: int = 1
 ERROR_LOG_PATH: str = os.path.expanduser("~/.kalytera/errors.log")
 
 # ---------------------------------------------------------------------------
