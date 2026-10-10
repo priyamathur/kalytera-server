@@ -289,7 +289,9 @@ def _connection_problem(status: Optional[int], err: Optional[str]) -> Optional[T
     return None
 
 
-def _http(method: str, path: str, body: Optional[Dict[str, Any]] = None) -> Tuple[Optional[int], Any, Optional[str]]:
+def _http(
+    method: str, path: str, body: Optional[Dict[str, Any]] = None, timeout: Optional[float] = None,
+) -> Tuple[Optional[int], Any, Optional[str]]:
     """Blocking stdlib request for check()/verification. Returns (status, json_body, network_error)."""
     endpoint = _api_endpoint or _cfg.DEFAULT_ENDPOINT
     data = json.dumps(body).encode() if body is not None else None
@@ -298,7 +300,7 @@ def _http(method: str, path: str, body: Optional[Dict[str, Any]] = None) -> Tupl
     if _api_key:
         req.add_header("Authorization", f"Bearer {_api_key}")
     try:
-        with urllib.request.urlopen(req, timeout=_cfg.REQUEST_TIMEOUT) as resp:
+        with urllib.request.urlopen(req, timeout=timeout or _cfg.REQUEST_TIMEOUT) as resp:
             return resp.status, _json_or_none(resp.read()), None
     except urllib.error.HTTPError as exc:
         return exc.code, _json_or_none(exc.read()), None

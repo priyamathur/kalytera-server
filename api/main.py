@@ -3,6 +3,7 @@ Kalytera API — core endpoints + billing.
   POST /trace                        — receive AgentLog from tracer
   GET  /trace/{log_id}/eval          — scoring status for one step (kalytera.check())
   GET  /agents/{agent_id}/patterns   — return LossPattern rows
+  /rules, /guard                     — guard rules (api/guard_api.py)
   /billing/*                         — usage, checkout, webhook
   /admin/tenants                     — tenant management
 """
@@ -36,6 +37,7 @@ from db.queries import (
 )
 from api.billing import router as billing_router, TIERS, hash_key
 from api.proxy_router import router as proxy_router
+from api.guard_api import build_router as build_guard_router
 
 logger = logging.getLogger(__name__)
 
@@ -87,14 +89,14 @@ class PatternOut(BaseModel):
 # Auth + rate limiting
 # ---------------------------------------------------------------------------
 
-def _require_auth(
+def _resolve_org(
     authorization: Optional[str] = Header(default=None),
     db: Session = Depends(get_db),
 ) -> Optional[Any]:
     """
     Returns the Organization for customer keys (kly_live_*).
     Returns None for the master admin key or unauthenticated dev-mode requests.
-    Raises 429 when the org has exhausted its monthly session limit.
+    Does not check the monthly session limit — see _require_auth.
 
     Behaviour when KALYTERA_API_KEY is not set (dev/misconfigured):
       - No auth header → return None (allow unauthenticated)
@@ -127,6 +129,16 @@ def _require_auth(
     org = get_org_by_id(api_key_row.org_id, db)
     if not org:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Organization not found")
+    return org
+
+
+def _require_auth(
+    org=Depends(_resolve_org),
+    db: Session = Depends(get_db),
+) -> Optional[Any]:
+    """_resolve_org, plus 429 when the org has exhausted its monthly session limit."""
+    if org is None:
+        return None
 
     # Check monthly rate limit (shared across all keys in this org)
     period = datetime.now(timezone.utc).strftime("%Y-%m")
@@ -305,6 +317,7 @@ app.add_middleware(
 
 app.include_router(billing_router)
 app.include_router(proxy_router)
+app.include_router(build_guard_router(_resolve_org))
 
 
 # ---------------------------------------------------------------------------

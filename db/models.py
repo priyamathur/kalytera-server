@@ -188,3 +188,48 @@ class AgentOrg(Base):
     org_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
     first_seen = Column(SADateTime(timezone=True), default=_now, nullable=False)
     last_seen = Column(SADateTime(timezone=True), default=_now, nullable=False)
+
+
+class GuardRule(Base):
+    """
+    One version of a guard rule (see kalytera/rules.py). Append-only: editing,
+    promoting or demoting a rule inserts a new version, so history is the audit
+    trail. The current rule is the highest version with is_active=True.
+    """
+    __tablename__ = "guard_rules"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    org_id = Column(String, nullable=True, index=True)   # null = admin/dev-mode key
+    agent_id = Column(String, nullable=False, index=True)
+    rule_id = Column(String, nullable=False)
+    version = Column(Integer, nullable=False)
+    mode = Column(String, nullable=False)                # shadow | enforce
+    body = Column(Text, nullable=False)                  # full rule JSON
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("org_id", "agent_id", "rule_id", "version", name="uq_guard_rule_version"),
+    )
+
+
+class GuardEvent(Base):
+    """
+    One guard() decision. Written for every check, including errors, so the
+    dashboard can count shadow would-blocks per rule. Not counted as a session.
+    """
+    __tablename__ = "guard_events"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    org_id = Column(String, nullable=True, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    session_id = Column(String, nullable=False, index=True)
+    tool = Column(String, nullable=False)
+    args_hash = Column(String, nullable=False)
+    decision = Column(String, nullable=False)            # ALLOW | DENY | ESCALATE
+    rule_id = Column(String, nullable=True)              # enforce-mode rule that decided
+    rule_version = Column(Integer, nullable=True)
+    shadow_hits = Column(Text, nullable=True)            # JSON: [{rule_id, rule_version, action}]
+    error = Column(Text, nullable=True)
+    source = Column(String, nullable=False, default="sdk")  # sdk | api
+    timestamp = Column(SADateTime(timezone=True), default=_now, nullable=False, index=True)

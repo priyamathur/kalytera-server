@@ -1,0 +1,252 @@
+"""Tests for guard rules: the /rules + /guard API (api/guard_api.py) and kalytera.guard()."""
+import time
+from types import SimpleNamespace
+from typing import Any, Dict, Generator, Optional, Tuple
+from unittest.mock import MagicMock, patch
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+with patch("api.database.initialize_database", return_value=True), \
+     patch("api.database.engine", MagicMock()), \
+     patch("api.database.SessionLocal", MagicMock()):
+    from api.main import _resolve_org, app
+
+import kalytera
+from api.database import get_db
+from db.models import Base, EvalResult
+import importlib
+guard_mod = importlib.import_module("kalytera.guard")
+from kalytera import tracer
+
+AGENT = "billing-agent"
+
+REFUND_CAP: Dict[str, Any] = {
+    "id": "refund_cap",
+    "agent_id": AGENT,
+    "match": {"tool": "refund_api", "args": [{"field": "amount", "op": ">", "value": 500}]},
+    "action": "DENY",
+    "reason": "Refunds over 500 need review",
+}
+
+
+@pytest.fixture()
+def env() -> Generator[SimpleNamespace, None, None]:
+    """In-memory SQLite + a switchable org; the SDK's HTTP calls are routed to the TestClient."""
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(bind=engine)
+    Session = sessionmaker(bind=engine)
+    state = SimpleNamespace(org=SimpleNamespace(id="org-1"), api_up=True, session=Session)
+
+    def _db() -> Generator[Any, None, None]:
+        db = Session()
+        try:
+            yield db
+        finally:
+            db.close()
+
+    app.dependency_overrides[get_db] = _db
+    app.dependency_overrides[_resolve_org] = lambda: state.org
+    client = TestClient(app)
+    state.client = client
+
+    def fake_http(method: str, path: str, body: Optional[Dict[str, Any]] = None,
+                  timeout: Optional[float] = None) -> Tuple[Optional[int], Any, Optional[str]]:
+        if not state.api_up:
+            return None, None, "Connection refused"
+        resp = client.request(method, path, json=body)
+        return resp.status_code, resp.json(), None
+
+    guard_mod._reset()
+    with patch.object(tracer, "_http", fake_http), patch.object(tracer, "_agent_id", AGENT), \
+         patch.object(guard_mod, "_send", lambda batch: fake_http("POST", "/guard/events", {"events": batch})):
+        yield state
+    guard_mod.flush()
+    guard_mod._reset()
+    app.dependency_overrides.clear()
+
+
+def _create(env: SimpleNamespace, rule: Dict[str, Any] = REFUND_CAP) -> Dict[str, Any]:
+    resp = env.client.post("/rules", json=rule)
+    assert resp.status_code == 201, resp.text
+    return resp.json()
+
+
+def _stats(env: SimpleNamespace, rule_id: str = "refund_cap") -> Dict[str, Any]:
+    guard_mod.flush()
+    return env.client.get(f"/rules/{rule_id}/stats", params={"agent_id": AGENT}).json()
+
+
+# ---------------------------------------------------------------------------
+# Rules API
+# ---------------------------------------------------------------------------
+
+def test_new_rule_starts_in_shadow_even_if_enforce_requested(env: SimpleNamespace) -> None:
+    rule = _create(env, {**REFUND_CAP, "mode": "enforce", "version": 7})
+    assert rule["mode"] == "shadow" and rule["version"] == 1
+
+
+def test_invalid_rule_rejected_with_reason(env: SimpleNamespace) -> None:
+    bad = {**REFUND_CAP, "match": {"tool": "t", "args": [{"field": "a", "op": "~", "value": 1}]}}
+    resp = env.client.post("/rules", json=bad)
+    assert resp.status_code == 422
+    assert "op must be one of" in resp.json()["detail"]
+
+
+def test_duplicate_rule_conflicts(env: SimpleNamespace) -> None:
+    _create(env)
+    assert env.client.post("/rules", json=REFUND_CAP).status_code == 409
+
+
+def test_promote_demote_and_edit_create_versions(env: SimpleNamespace) -> None:
+    _create(env)
+    promoted = env.client.post("/rules/refund_cap/promote", params={"agent_id": AGENT}).json()
+    assert promoted["rule"]["mode"] == "enforce" and promoted["rule"]["version"] == 2
+    assert "would_block" in promoted["shadow_summary"]
+    assert env.client.post("/rules/refund_cap/promote", params={"agent_id": AGENT}).status_code == 409
+
+    edited = env.client.put("/rules/refund_cap", json={
+        **REFUND_CAP, "mode": "shadow", "reason": "new reason",
+    }).json()
+    assert edited["version"] == 3 and edited["mode"] == "enforce"  # edit never changes mode
+    assert edited["reason"] == "new reason"
+
+    demoted = env.client.post("/rules/refund_cap/demote", params={"agent_id": AGENT}).json()
+    assert demoted["rule"]["mode"] == "shadow" and demoted["rule"]["version"] == 4
+
+    shown = env.client.get("/rules/refund_cap", params={"agent_id": AGENT}).json()
+    assert [v["version"] for v in shown["versions"]] == [4, 3, 2, 1]
+    listed = env.client.get("/rules", params={"agent_id": AGENT}).json()["rules"]
+    assert [(r["id"], r["version"]) for r in listed] == [("refund_cap", 4)]
+
+
+def test_delete_removes_rule(env: SimpleNamespace) -> None:
+    _create(env)
+    assert env.client.delete("/rules/refund_cap", params={"agent_id": AGENT}).status_code == 200
+    assert env.client.get("/rules", params={"agent_id": AGENT}).json()["rules"] == []
+    assert env.client.get("/rules/refund_cap/stats", params={"agent_id": AGENT}).status_code == 404
+
+
+def test_rules_are_scoped_to_org(env: SimpleNamespace) -> None:
+    _create(env)
+    env.org = SimpleNamespace(id="org-2")
+    assert env.client.get("/rules", params={"agent_id": AGENT}).json()["rules"] == []
+    assert env.client.post("/rules/refund_cap/promote", params={"agent_id": AGENT}).status_code == 404
+    _create(env)  # same id is free in another org
+
+
+def test_post_guard_enforce_and_count_in_window(env: SimpleNamespace) -> None:
+    _create(env, {
+        "id": "refund_loop", "agent_id": AGENT, "match": {"tool": "refund_api"},
+        "session_conditions": [{"type": "count_in_window", "tool": "refund_api",
+                                "op": ">=", "value": 3, "window_seconds": 600}],
+        "action": "ESCALATE", "reason": "3+ refunds",
+    })
+    env.client.post("/rules/refund_loop/promote", params={"agent_id": AGENT})
+    call = {"agent_id": AGENT, "tool": "refund_api", "args": {"amount": 1}, "session_id": "s1"}
+    decisions = [env.client.post("/guard", json=call).json()["decision"] for _ in range(3)]
+    assert decisions == ["ALLOW", "ALLOW", "ESCALATE"]
+    assert env.client.post("/guard", json={**call, "session_id": "s2"}).json()["decision"] == "ALLOW"
+
+
+# ---------------------------------------------------------------------------
+# SDK guard()
+# ---------------------------------------------------------------------------
+
+def test_enforce_mode_denies_matching_call(env: SimpleNamespace) -> None:
+    _create(env)
+    env.client.post("/rules/refund_cap/promote", params={"agent_id": AGENT})
+    d = kalytera.guard("refund_api", {"amount": 900}, session_id="s1")
+    assert d.decision == "DENY" and not d.allowed
+    assert d.rule_id == "refund_cap" and d.rule_version == 2
+    assert kalytera.guard("refund_api", {"amount": 100}, session_id="s1").allowed
+    assert _stats(env)["denied"] == 1
+
+
+def test_shadow_mode_never_changes_return_value(env: SimpleNamespace) -> None:
+    _create(env)
+    d = kalytera.guard("refund_api", {"amount": 900}, session_id="s1")
+    assert d.decision == "ALLOW" and d.allowed and d.rule_id == ""
+    assert [h.rule_id for h in d.shadow_hits] == ["refund_cap"]
+    kalytera.guard("refund_api", {"amount": 800}, session_id="s2")
+    kalytera.guard("refund_api", {"amount": 10}, session_id="s3")
+    stats = _stats(env)
+    assert stats["would_block"] == 2 and stats["would_block_sessions"] == 2 and stats["denied"] == 0
+
+
+def test_shadow_stats_count_sessions_that_failed(env: SimpleNamespace) -> None:
+    _create(env)
+    kalytera.guard("refund_api", {"amount": 900}, session_id="bad-session")
+    kalytera.guard("refund_api", {"amount": 900}, session_id="good-session")
+    db = env.session()
+    for sid, passed in [("bad-session", False), ("good-session", True)]:
+        db.add(EvalResult(log_id=sid, session_id=sid, agent_id=AGENT, accuracy=0.5, goal_alignment=0.5,
+                          decision_quality=0.5, completeness=0.5, overall_score=0.5, passed=passed))
+    db.commit()
+    db.close()
+    assert _stats(env)["would_block_sessions_that_failed"] == 1
+
+
+def test_api_unreachable_before_rules_load_fails_open(env: SimpleNamespace) -> None:
+    env.api_up = False
+    d = kalytera.guard("refund_api", {"amount": 900}, session_id="s1")
+    assert d.decision == "ALLOW"
+    assert "rules unavailable" in d.error
+
+
+def test_api_unreachable_after_load_uses_cached_rules(env: SimpleNamespace) -> None:
+    _create(env)
+    env.client.post("/rules/refund_cap/promote", params={"agent_id": AGENT})
+    assert kalytera.guard("refund_api", {"amount": 900}).decision == "DENY"
+    env.api_up = False
+    with patch.object(guard_mod, "REFRESH_S", 0.0):
+        guard_mod._refresh("billing-agent")  # the refresh fails…
+        d = kalytera.guard("refund_api", {"amount": 900})
+    assert d.decision == "DENY"  # …but the cached rule still applies
+    assert "using 1 cached rule" in d.error
+
+
+def test_evaluation_error_respects_fail_closed(env: SimpleNamespace) -> None:
+    _create(env, {**REFUND_CAP, "fail_closed": True})
+    kalytera.guard("refund_api", {"amount": 1})  # load rules
+    with patch.object(guard_mod, "evaluate", side_effect=RuntimeError("boom")):
+        assert kalytera.guard("refund_api", {"amount": 1}).decision == "DENY"
+        assert kalytera.guard("other_tool", {}).decision == "ALLOW"
+
+
+def test_guard_never_raises_on_bad_input(env: SimpleNamespace) -> None:
+    d = kalytera.guard("refund_api", "not a dict", session_id=None)  # type: ignore[arg-type]
+    assert d.decision == "ALLOW"
+
+
+def test_every_call_produces_an_event_including_errors(env: SimpleNamespace) -> None:
+    env.api_up = False
+    kalytera.guard("refund_api", {"amount": 1}, session_id="s1")
+    env.api_up = True
+    _create(env)
+    guard_mod._refresh(AGENT)  # the SDK retries a failed fetch after RETRY_S; don't wait for it
+    kalytera.guard("refund_api", {"amount": 900}, session_id="s1")
+    guard_mod.flush()
+    from db.models import GuardEvent
+    db = env.session()
+    events = db.query(GuardEvent).order_by(GuardEvent.timestamp).all()
+    db.close()
+    assert len(events) == 2
+    assert events[0].error and "rules unavailable" in events[0].error
+    assert events[1].shadow_hits and "refund_cap" in events[1].shadow_hits
+    assert events[1].args_hash and "900" not in events[1].args_hash  # args are hashed, not stored
+
+
+def test_cached_guard_p99_under_5ms(env: SimpleNamespace) -> None:
+    _create(env)
+    kalytera.guard("refund_api", {"amount": 1})  # load rules
+    timings = []
+    for i in range(500):
+        start = time.perf_counter()
+        kalytera.guard("refund_api", {"amount": i}, session_id="perf")
+        timings.append(time.perf_counter() - start)
+    timings.sort()
+    assert timings[int(len(timings) * 0.99)] < 0.005

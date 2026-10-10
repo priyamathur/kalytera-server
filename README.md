@@ -130,6 +130,46 @@ Weights and pass threshold are configurable per agent in the dashboard. You can 
 
 ---
 
+## Guard rules — block a known failure before it happens
+
+`trace()` tells you what went wrong. `guard()` stops the next one. Check a tool call against your rules before it runs:
+
+```python
+d = kalytera.guard("refund_api", {"amount": 900}, session_id=session_id)
+if not d.allowed:               # DENY or ESCALATE
+    return f"Needs review: {d.reason}"
+refund_api(amount=900)
+```
+
+Rules are JSON. Every rule starts in **shadow mode**: it records what it *would* have blocked and never changes `guard()`'s answer. Promote it once the shadow numbers look right.
+
+```bash
+cat > refund_cap.json <<'JSON'
+{"id": "refund_cap",
+ "match": {"tool": "refund_api", "args": [{"field": "amount", "op": ">", "value": 500}]},
+ "action": "DENY",
+ "reason": "Refunds over 500 need review"}
+JSON
+
+export KALYTERA_API_KEY=kly_live_... KALYTERA_AGENT_ID=my-agent
+kalytera rules add refund_cap.json          # created in shadow mode
+kalytera guard refund_api --args '{"amount": 900}'   # ALLOW, shadow: refund_cap would DENY
+kalytera rules stats refund_cap             # would-blocks so far
+kalytera rules promote refund_cap           # now enforced
+kalytera guard refund_api --args '{"amount": 900}'   # DENY
+```
+
+- **Operators:** `==` `!=` `>` `>=` `<` `<=` `in`. Fields can be nested: `"customer.tier"`. All conditions in a rule must hold.
+- **Repeated calls:** `"session_conditions": [{"type": "count_in_window", "tool": "refund_api", "op": ">=", "value": 3, "window_seconds": 600}]` matches the 3rd call in 10 minutes within one session.
+- **Actions:** `DENY` or `ESCALATE` (your code decides what escalation means).
+- **Fast:** rules are cached in your process and refreshed every 30 s — a check makes no network call and no LLM call.
+- **Fail-open:** if Kalytera is unreachable, `guard()` uses the last rules it loaded, or returns `ALLOW` if it never loaded any, and says why in `d.error`. Add `"fail_closed": true` to a rule to deny instead when evaluation fails. `guard()` never raises.
+- **Private:** decisions are recorded with a hash of the arguments, never the arguments themselves.
+- **Every change is a new version:** `kalytera rules show refund_cap` lists them. Also: `list`, `demote`, `delete`.
+- **Not using Python?** `POST /guard` with `{"agent_id", "tool", "args", "session_id"}` returns the same decision.
+
+---
+
 ## Calibrate the judge
 
 Every judge has bias. Calibration measures whether Kalytera's LLM judge agrees with your own judgement.
@@ -189,14 +229,15 @@ pytest
 - [x] Golden set calibration — label sessions, measure judge accuracy
 - [x] Loss pattern detection — failures grouped by tool and workflow step
 
-**Next — from failure pattern to blocking rule**
+**Now — from failure pattern to blocking rule**
 
+- [x] Shadow mode — rules log what they *would* have blocked, without changing agent behavior
+- [x] Enforce mode — `kalytera.guard()` checks cached rules in-process (no LLM call) before an action runs
+- [x] Versioned rules — every edit, promote and demote is a new version; every decision is recorded
+- [ ] Rules view in the dashboard — shadow counts, promote and demote
 - [ ] Draft rules — turn a detected failure pattern into an editable rule
-- [ ] Shadow mode — rules log what they *would* have blocked, without changing agent behavior
-- [ ] Enforce mode — `kalytera.guard()` checks cached rules in-process (no LLM call) before an action runs
-- [ ] Audit trail — every block, allow and rule change recorded
 
-Tracing stays fire-and-forget: `trace()` will never block, even after `guard()` ships.
+Tracing stays fire-and-forget: `trace()` never blocks. Only `guard()` can block, and only rules you promoted.
 
 **Later**
 

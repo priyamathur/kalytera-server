@@ -1,0 +1,285 @@
+"""
+Guard rules API — storage and server-side evaluation for kalytera.guard().
+
+  GET    /rules?agent_id=X              — current rules (the SDK caches these)
+  POST   /rules                         — create a rule (version 1, shadow by default)
+  GET    /rules/{rule_id}?agent_id=X    — current rule + version history
+  PUT    /rules/{rule_id}               — edit: new version, mode unchanged
+  POST   /rules/{rule_id}/promote       — shadow → enforce (new version)
+  POST   /rules/{rule_id}/demote        — enforce → shadow (new version)
+  DELETE /rules/{rule_id}?agent_id=X    — deactivate every version
+  GET    /rules/{rule_id}/stats?agent_id=X — would-block / deny counts
+  POST   /guard                         — evaluate one call server-side (non-Python callers)
+  POST   /guard/events                  — decisions reported by the SDK
+
+Scoped by org: a key only sees its own org's rules. Guard traffic never
+counts against the monthly session limit. See docs/specs/failure-to-rule.md.
+"""
+import hashlib
+import json
+from datetime import datetime, timedelta, timezone
+from typing import Any, Callable, Dict, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from api.database import get_db
+from db.models import EvalResult, GuardEvent, GuardRule
+from kalytera.rules import ALLOW, ENFORCE, SHADOW, RuleError, SessionHistory, evaluate, parse_rule
+
+MAX_EVENTS_PER_BATCH = 500
+
+
+class GuardRequest(BaseModel):
+    agent_id: str
+    tool: str
+    args: Dict[str, Any] = Field(default_factory=dict)
+    session_id: str = ""
+
+
+class GuardEventIn(BaseModel):
+    agent_id: str
+    session_id: str = ""
+    tool: str
+    args_hash: str = ""
+    decision: str
+    rule_id: Optional[str] = None
+    rule_version: Optional[int] = None
+    shadow_hits: List[Dict[str, Any]] = Field(default_factory=list)
+    error: Optional[str] = None
+    timestamp: Optional[datetime] = None
+
+
+class GuardEventsIn(BaseModel):
+    events: List[GuardEventIn]
+
+
+def args_hash(args: Dict[str, Any]) -> str:
+    """Stable short hash of call arguments — events record this, never raw args."""
+    raw = json.dumps(args, sort_keys=True, default=str).encode()
+    return hashlib.sha256(raw).hexdigest()[:16]
+
+
+def _org_id(org: Any) -> Optional[str]:
+    return org.id if org is not None else None
+
+
+def _current_rows(db: Session, org_id: Optional[str], agent_id: str) -> List[GuardRule]:
+    """Highest active version of every rule for this org + agent."""
+    rows = (
+        db.query(GuardRule)
+        .filter(GuardRule.org_id.is_(None) if org_id is None else GuardRule.org_id == org_id)
+        .filter(GuardRule.agent_id == agent_id, GuardRule.is_active.is_(True))
+        .order_by(GuardRule.rule_id, GuardRule.version.desc())
+        .all()
+    )
+    latest: Dict[str, GuardRule] = {}
+    for row in rows:
+        latest.setdefault(row.rule_id, row)
+    return sorted(latest.values(), key=lambda r: r.created_at)
+
+
+def _versions(db: Session, org_id: Optional[str], agent_id: str, rule_id: str) -> List[GuardRule]:
+    return (
+        db.query(GuardRule)
+        .filter(GuardRule.org_id.is_(None) if org_id is None else GuardRule.org_id == org_id)
+        .filter(GuardRule.agent_id == agent_id, GuardRule.rule_id == rule_id, GuardRule.is_active.is_(True))
+        .order_by(GuardRule.version.desc())
+        .all()
+    )
+
+
+def _body(row: GuardRule) -> Dict[str, Any]:
+    return json.loads(row.body)
+
+
+def _validate(raw: Dict[str, Any]) -> Dict[str, Any]:
+    try:
+        parse_rule(raw)
+    except RuleError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return raw
+
+
+def _insert(db: Session, org_id: Optional[str], raw: Dict[str, Any]) -> Dict[str, Any]:
+    raw = _validate(raw)
+    db.add(GuardRule(
+        org_id=org_id, agent_id=raw["agent_id"], rule_id=raw["id"],
+        version=raw["version"], mode=raw["mode"], body=json.dumps(raw),
+    ))
+    db.commit()
+    return raw
+
+
+def _require_current(db: Session, org_id: Optional[str], agent_id: str, rule_id: str) -> GuardRule:
+    versions = _versions(db, org_id, agent_id, rule_id)
+    if not versions:
+        raise HTTPException(status_code=404, detail=f"rule {rule_id} not found for agent {agent_id}")
+    return versions[0]
+
+
+def _new_version(db: Session, org_id: Optional[str], current: GuardRule, changes: Dict[str, Any]) -> Dict[str, Any]:
+    raw = {**_body(current), **changes, "version": current.version + 1}
+    return _insert(db, org_id, raw)
+
+
+def _history_from_events(db: Session, org_id: Optional[str], agent_id: str, session_id: str,
+                         window_seconds: float) -> SessionHistory:
+    """Allowed calls in this session, for count_in_window when evaluating server-side."""
+    history = SessionHistory()
+    if not session_id:
+        return history
+    since = datetime.now(timezone.utc) - timedelta(seconds=window_seconds)
+    rows = (
+        db.query(GuardEvent.tool, GuardEvent.timestamp)
+        .filter(GuardEvent.org_id.is_(None) if org_id is None else GuardEvent.org_id == org_id)
+        .filter(GuardEvent.agent_id == agent_id, GuardEvent.session_id == session_id,
+                GuardEvent.decision == ALLOW, GuardEvent.timestamp >= since)
+        .all()
+    )
+    for tool, ts in rows:
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        history.record(session_id, tool, ts.timestamp())
+    return history
+
+
+def _record(db: Session, org_id: Optional[str], ev: GuardEventIn, source: str) -> None:
+    db.add(GuardEvent(
+        org_id=org_id, agent_id=ev.agent_id, session_id=ev.session_id or "", tool=ev.tool,
+        args_hash=ev.args_hash, decision=ev.decision, rule_id=ev.rule_id or None,
+        rule_version=ev.rule_version, shadow_hits=json.dumps(ev.shadow_hits) if ev.shadow_hits else None,
+        error=ev.error, source=source, timestamp=ev.timestamp or datetime.now(timezone.utc),
+    ))
+
+
+def build_router(resolve_org: Callable[..., Any]) -> APIRouter:
+    """resolve_org: the API-key dependency (no session-limit check)."""
+    router = APIRouter(tags=["guard"])
+
+    @router.get("/rules")
+    async def list_rules(agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        return {"agent_id": agent_id, "rules": [_body(r) for r in _current_rows(db, _org_id(org), agent_id)]}
+
+    @router.post("/rules", status_code=201)
+    async def create_rule(rule: Dict[str, Any], org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        if not isinstance(rule.get("agent_id"), str) or not rule["agent_id"]:
+            raise HTTPException(status_code=422, detail="agent_id is required")
+        if _versions(db, _org_id(org), rule["agent_id"], str(rule.get("id", ""))):
+            raise HTTPException(status_code=409, detail=f"rule {rule.get('id')} already exists — use PUT to edit")
+        # New rules always start in shadow mode; enforcing needs an explicit promote.
+        return _insert(db, _org_id(org), {**rule, "version": 1, "mode": SHADOW})
+
+    @router.get("/rules/{rule_id}")
+    async def get_rule(rule_id: str, agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        versions = _versions(db, _org_id(org), agent_id, rule_id)
+        if not versions:
+            raise HTTPException(status_code=404, detail=f"rule {rule_id} not found for agent {agent_id}")
+        return {
+            "rule": _body(versions[0]),
+            "versions": [{"version": v.version, "mode": v.mode, "created_at": v.created_at} for v in versions],
+        }
+
+    @router.put("/rules/{rule_id}")
+    async def edit_rule(rule_id: str, rule: Dict[str, Any], org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        current = _require_current(db, _org_id(org), str(rule.get("agent_id", "")), rule_id)
+        # Mode only changes through promote/demote.
+        changes = {k: v for k, v in rule.items() if k not in ("id", "agent_id", "version", "mode")}
+        return _new_version(db, _org_id(org), current, changes)
+
+    @router.post("/rules/{rule_id}/promote")
+    async def promote_rule(rule_id: str, agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        current = _require_current(db, _org_id(org), agent_id, rule_id)
+        if current.mode == ENFORCE:
+            raise HTTPException(status_code=409, detail=f"rule {rule_id} is already in enforce mode")
+        return {"rule": _new_version(db, _org_id(org), current, {"mode": ENFORCE}),
+                "shadow_summary": _stats(db, _org_id(org), agent_id, rule_id)}
+
+    @router.post("/rules/{rule_id}/demote")
+    async def demote_rule(rule_id: str, agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        current = _require_current(db, _org_id(org), agent_id, rule_id)
+        if current.mode == SHADOW:
+            raise HTTPException(status_code=409, detail=f"rule {rule_id} is already in shadow mode")
+        return {"rule": _new_version(db, _org_id(org), current, {"mode": SHADOW})}
+
+    @router.delete("/rules/{rule_id}")
+    async def delete_rule(rule_id: str, agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        versions = _versions(db, _org_id(org), agent_id, rule_id)
+        if not versions:
+            raise HTTPException(status_code=404, detail=f"rule {rule_id} not found for agent {agent_id}")
+        for v in versions:
+            v.is_active = False
+        db.commit()
+        return {"rule_id": rule_id, "status": "deleted"}
+
+    @router.get("/rules/{rule_id}/stats")
+    async def rule_stats(rule_id: str, agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        _require_current(db, _org_id(org), agent_id, rule_id)
+        return _stats(db, _org_id(org), agent_id, rule_id)
+
+    @router.post("/guard")
+    async def guard(req: GuardRequest, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        oid = _org_id(org)
+        rules = [parse_rule(_body(r)) for r in _current_rows(db, oid, req.agent_id)]
+        window = max((c["window_seconds"] for r in rules for c in r.session_conditions), default=0)
+        history = _history_from_events(db, oid, req.agent_id, req.session_id, window) if window else None
+        d = evaluate(rules, req.tool, req.args, req.session_id, history)
+        hits = [{"rule_id": h.rule_id, "rule_version": h.rule_version, "action": h.action} for h in d.shadow_hits]
+        _record(db, oid, GuardEventIn(
+            agent_id=req.agent_id, session_id=req.session_id, tool=req.tool, args_hash=args_hash(req.args),
+            decision=d.decision, rule_id=d.rule_id or None, rule_version=d.rule_version or None, shadow_hits=hits,
+        ), source="api")
+        db.commit()
+        return {"decision": d.decision, "rule_id": d.rule_id, "rule_version": d.rule_version,
+                "reason": d.reason, "shadow_hits": hits}
+
+    @router.post("/guard/events", status_code=202)
+    async def guard_events(batch: GuardEventsIn, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        events = batch.events[:MAX_EVENTS_PER_BATCH]
+        for ev in events:
+            _record(db, _org_id(org), ev, source="sdk")
+        db.commit()
+        return {"accepted": len(events)}
+
+    return router
+
+
+def _stats(db: Session, org_id: Optional[str], agent_id: str, rule_id: str) -> Dict[str, Any]:
+    """Shadow would-blocks and enforce decisions for one rule, across all its versions."""
+    base = (
+        db.query(GuardEvent)
+        .filter(GuardEvent.org_id.is_(None) if org_id is None else GuardEvent.org_id == org_id)
+        .filter(GuardEvent.agent_id == agent_id)
+    )
+    enforced = dict(
+        base.filter(GuardEvent.rule_id == rule_id)
+        .with_entities(GuardEvent.decision, func.count())
+        .group_by(GuardEvent.decision).all()
+    )
+    # shadow_hits is JSON text; LIKE narrows, json.loads confirms.
+    would_block_sessions: set = set()
+    would_block = 0
+    for session_id, hits in base.filter(GuardEvent.shadow_hits.like(f'%"{rule_id}"%')).with_entities(
+        GuardEvent.session_id, GuardEvent.shadow_hits
+    ):
+        if any(h.get("rule_id") == rule_id for h in json.loads(hits or "[]")):
+            would_block += 1
+            would_block_sessions.add(session_id)
+    failed = 0
+    if would_block_sessions:
+        failed = (
+            db.query(func.count(func.distinct(EvalResult.session_id)))
+            .filter(EvalResult.agent_id == agent_id, EvalResult.session_id.in_(would_block_sessions),
+                    EvalResult.passed.is_(False))
+            .scalar() or 0
+        )
+    return {
+        "rule_id": rule_id,
+        "would_block": would_block,
+        "would_block_sessions": len(would_block_sessions),
+        "would_block_sessions_that_failed": failed,
+        "denied": enforced.get("DENY", 0),
+        "escalated": enforced.get("ESCALATE", 0),
+    }
