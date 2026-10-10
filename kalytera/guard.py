@@ -20,6 +20,7 @@ import hashlib
 import json
 import threading
 import time
+from collections import deque
 from queue import Empty, Full, Queue
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -31,6 +32,8 @@ RETRY_S = 10.0            # wait before retrying a failed fetch
 FIRST_FETCH_TIMEOUT = 3.0  # the first guard() for an agent waits at most this long for rules
 FLUSH_S = 1.0
 MAX_BATCH = 200
+EVENT_RETRY_S = 10.0      # wait before resending decisions that failed to send
+MAX_UNSENT = 2000         # decisions kept for resending while the API is down (oldest dropped)
 
 _lock = threading.Lock()
 # agent_id -> (rules, fetched_at monotonic, last error)
@@ -39,6 +42,8 @@ _refreshing: Dict[str, bool] = {}
 _history = SessionHistory()
 _events: "Queue[Dict[str, Any]]" = Queue(maxsize=5000)
 _sender: Optional[threading.Thread] = None
+_unsent: "deque[Dict[str, Any]]" = deque(maxlen=MAX_UNSENT)
+_last_send_failure = 0.0
 
 
 def guard(
@@ -169,29 +174,46 @@ def _ensure_sender() -> None:
 
 
 def _sender_loop() -> None:
+    global _last_send_failure
     while True:
+        batch: List[Dict[str, Any]] = []
         try:
-            batch = [_events.get(timeout=FLUSH_S)]
+            batch.append(_events.get(timeout=FLUSH_S))
         except Empty:
-            continue
-        while len(batch) < MAX_BATCH:
+            pass
+        while batch and len(batch) < MAX_BATCH:
             try:
                 batch.append(_events.get_nowait())
             except Empty:
                 break
+        taken = len(batch)
+        if _unsent and time.monotonic() - _last_send_failure >= EVENT_RETRY_S:
+            batch = list(_unsent) + batch
+            _unsent.clear()
         try:
-            _send(batch)
+            for i in range(0, len(batch), MAX_BATCH):
+                chunk = batch[i:i + MAX_BATCH]
+                if not _send(chunk):
+                    _unsent.extend(batch[i:])
+                    _last_send_failure = time.monotonic()
+                    break
         finally:
-            for _ in batch:
+            for _ in range(taken):
                 _events.task_done()
 
 
-def _send(batch: List[Dict[str, Any]]) -> None:
+def _send(batch: List[Dict[str, Any]]) -> bool:
+    """POST decisions. Returns False if they should be resent later."""
     status, _body, err = _tracer._http("POST", "/guard/events", {"events": batch})
-    if status != 202:
-        problem = _tracer._connection_problem(status, err)
-        reason = _plain(problem[1]) if problem else f"HTTP {status}"
-        _tracer._notify("guard_events", f"✗ Kalytera guard: decisions not recorded — {reason}")
+    if status == 202:
+        return True
+    if status is not None and 400 <= status < 500 and status != 429:
+        _tracer._notify("guard_events", f"✗ Kalytera guard: decisions rejected (HTTP {status})")
+        return True  # the server won't accept them on retry either
+    problem = _tracer._connection_problem(status, err)
+    reason = _plain(problem[1]) if problem else f"HTTP {status}"
+    _tracer._notify("guard_events", f"✗ Kalytera guard: decisions not recorded yet — {reason}; will retry")
+    return False
 
 
 def _plain(msg: str) -> str:
@@ -219,6 +241,7 @@ def _reset() -> None:
         _cache.clear()
         _refreshing.clear()
     _history = SessionHistory()
+    _unsent.clear()
     while True:
         try:
             _events.get_nowait()

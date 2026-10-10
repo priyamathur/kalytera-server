@@ -9,6 +9,7 @@ Guard rules API — storage and server-side evaluation for kalytera.guard().
   POST   /rules/{rule_id}/demote        — enforce → shadow (new version)
   DELETE /rules/{rule_id}?agent_id=X    — deactivate every version
   GET    /rules/{rule_id}/stats?agent_id=X — would-block / deny counts
+  POST   /rules/draft                   — draft a rule from a LossPattern (not saved)
   POST   /guard                         — evaluate one call server-side (non-Python callers)
   POST   /guard/events                  — decisions reported by the SDK
 
@@ -26,10 +27,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from db.models import EvalResult, GuardEvent, GuardRule
+from db.models import AgentLog, EvalResult, GuardEvent, GuardRule, LossPattern
+from kalytera.drafts import draft_rule
 from kalytera.rules import ALLOW, ENFORCE, SHADOW, RuleError, SessionHistory, evaluate, parse_rule
 
 MAX_EVENTS_PER_BATCH = 500
+DRAFT_SESSION_LIMIT = 200
 
 
 class GuardRequest(BaseModel):
@@ -37,6 +40,10 @@ class GuardRequest(BaseModel):
     tool: str
     args: Dict[str, Any] = Field(default_factory=dict)
     session_id: str = ""
+
+
+class DraftRequest(BaseModel):
+    pattern_id: str
 
 
 class GuardEventIn(BaseModel):
@@ -155,9 +162,59 @@ def _record(db: Session, org_id: Optional[str], ev: GuardEventIn, source: str) -
     ))
 
 
-def build_router(resolve_org: Callable[..., Any]) -> APIRouter:
-    """resolve_org: the API-key dependency (no session-limit check)."""
+def _session_tool_calls(db: Session, agent_id: str, session_ids: List[str]) -> List[List[Dict[str, Any]]]:
+    """Tool calls of each session, in step order."""
+    if not session_ids:
+        return []
+    by_session: Dict[str, List[Dict[str, Any]]] = {sid: [] for sid in session_ids}
+    rows = (
+        db.query(AgentLog.session_id, AgentLog.tool_calls)
+        .filter(AgentLog.agent_id == agent_id, AgentLog.session_id.in_(session_ids))
+        .order_by(AgentLog.session_id, AgentLog.step_number)
+        .all()
+    )
+    for sid, raw in rows:
+        try:
+            calls = json.loads(raw) if raw else []
+        except ValueError:
+            calls = []
+        by_session[sid].extend(c for c in calls if isinstance(c, dict))
+    return list(by_session.values())
+
+
+def _draft_for_pattern(db: Session, pattern: LossPattern) -> Dict[str, Any]:
+    base = db.query(EvalResult.session_id).filter(EvalResult.agent_id == pattern.agent_id)
+    if pattern.pattern_type == "workflow_step":
+        failing_q = base.filter(EvalResult.passed.is_(False), EvalResult.failure_step == pattern.pattern_value)
+    else:
+        failing_q = base.filter(EvalResult.passed.is_(False), EvalResult.failure_type == pattern.pattern_value)
+    failing = [r[0] for r in failing_q.distinct().limit(DRAFT_SESSION_LIMIT).all()]
+    passing = [r[0] for r in base.filter(EvalResult.passed.is_(True)).distinct().limit(DRAFT_SESSION_LIMIT).all()]
+    passing = [s for s in passing if s not in set(failing)]
+    return draft_rule(
+        pattern.agent_id, pattern.pattern_type, pattern.pattern_value,
+        _session_tool_calls(db, pattern.agent_id, failing),
+        _session_tool_calls(db, pattern.agent_id, passing),
+        root_cause=pattern.root_cause,
+    )
+
+
+def build_router(resolve_org: Callable[..., Any],
+                 agent_ids_for_org: Optional[Callable[[str, Session], List[str]]] = None) -> APIRouter:
+    """
+    resolve_org: the API-key dependency (no session-limit check).
+    agent_ids_for_org: agents an org may read patterns for (None = no check).
+    """
     router = APIRouter(tags=["guard"])
+
+    @router.post("/rules/draft")
+    async def draft(req: DraftRequest, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        pattern = db.query(LossPattern).filter(LossPattern.id == req.pattern_id).first()
+        allowed = (org is None or agent_ids_for_org is None
+                   or (pattern is not None and pattern.agent_id in agent_ids_for_org(org.id, db)))
+        if pattern is None or not allowed:
+            raise HTTPException(status_code=404, detail="pattern not found")
+        return _draft_for_pattern(db, pattern)
 
     @router.get("/rules")
     async def list_rules(agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:

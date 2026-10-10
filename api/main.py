@@ -317,7 +317,7 @@ app.add_middleware(
 
 app.include_router(billing_router)
 app.include_router(proxy_router)
-app.include_router(build_guard_router(_resolve_org))
+app.include_router(build_guard_router(_resolve_org, get_agent_ids_for_org))
 
 
 # ---------------------------------------------------------------------------

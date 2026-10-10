@@ -72,6 +72,8 @@ A failure pattern that Kalytera detects in production becomes a reviewed rule th
 
 ## Build order
 
+Status (2026-10-10): steps 1–6 built in 0.2.0. Rules are managed in the dashboard (🛡 Rules), the CLI, or over HTTP.
+
 1. Rule schema, in-process evaluator, and unit tests for each operator and for `count_in_window`.
 2. `guard()` in the SDK with shadow logging and fail-open fallback.
 3. `POST /guard` on the API, reusing the same evaluator.

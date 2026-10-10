@@ -309,11 +309,13 @@ div[data-testid="stSidebarCollapsedControl"],
 # ═══════════════════════════════════════════════════════════════════════════════
 import requests as _requests
 
+from kalytera.dashboard_rules import API as _API, request_draft, show_rules  # noqa: E402
+
 
 def _validate_key(key: str) -> Optional[Dict[str, Any]]:
     try:
         r = _requests.get(
-            "https://api.kalytera.dev/billing/usage",
+            f"{_API}/billing/usage",
             headers={"Authorization": f"Bearer {key}"},
             timeout=5,
         )
@@ -416,7 +418,7 @@ with st.sidebar:
     if _stored_key:
         try:
             _ar = _requests.get(
-                "https://api.kalytera.dev/agents",
+                f"{_API}/agents",
                 headers={"Authorization": f"Bearer {_stored_key}"},
                 timeout=5,
             )
@@ -450,7 +452,7 @@ with st.sidebar:
         'text-transform:uppercase;margin-bottom:4px;padding:0 4px">NAVIGATE</p>',
         unsafe_allow_html=True,
     )
-    _NAV_OPTIONS = ["📊  Overview", "🔴  Failure Feed", "🔍  Trace Viewer"]
+    _NAV_OPTIONS = ["📊  Overview", "🔴  Failure Feed", "🔍  Trace Viewer", "🛡  Rules"]
     _nav_idx = (
         _NAV_OPTIONS.index(_pending_nav)
         if _pending_nav in _NAV_OPTIONS
@@ -1180,11 +1182,14 @@ def _render_pattern_full(p: Any, rank: int = 0) -> None:
             unsafe_allow_html=True,
         )
         st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
-        if st.button("See affected sessions →", key=f"pat_{p.id}"):
+        b1, b2, _ = st.columns([1.2, 1.2, 2])
+        if b1.button("See affected sessions →", key=f"pat_{p.id}"):
             st.session_state["pattern_filter"] = {"type": p.pattern_type, "value": p.pattern_value}
             st.session_state["selected_session"] = None
             st.session_state["view"] = "🔍  Trace Viewer"
             st.rerun(scope="app")
+        b2.button("🛡 Draft a rule →", key=f"draft_{p.id}", on_click=request_draft, args=(p.id,),
+                  help="Propose a guard rule from the tool calls in these failing sessions. Nothing is saved yet.")
 
 
 def _render_failure_row(ev: Any, log: Any) -> None:
@@ -1782,3 +1787,5 @@ elif "Failure" in view:
 elif "Trace" in view:
     sid = st.session_state.get("selected_session") or st.session_state.get("manual_sid", "")
     _show_trace(agent_id, str(sid))
+elif "Rules" in view:
+    show_rules(agent_id)

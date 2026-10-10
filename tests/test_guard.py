@@ -62,7 +62,7 @@ def env() -> Generator[SimpleNamespace, None, None]:
 
     guard_mod._reset()
     with patch.object(tracer, "_http", fake_http), patch.object(tracer, "_agent_id", AGENT), \
-         patch.object(guard_mod, "_send", lambda batch: fake_http("POST", "/guard/events", {"events": batch})):
+         patch.object(guard_mod, "_send", lambda batch: fake_http("POST", "/guard/events", {"events": batch})[0] == 202):
         yield state
     guard_mod.flush()
     guard_mod._reset()
@@ -202,8 +202,8 @@ def test_api_unreachable_after_load_uses_cached_rules(env: SimpleNamespace) -> N
     env.client.post("/rules/refund_cap/promote", params={"agent_id": AGENT})
     assert kalytera.guard("refund_api", {"amount": 900}).decision == "DENY"
     env.api_up = False
-    with patch.object(guard_mod, "REFRESH_S", 0.0):
-        guard_mod._refresh("billing-agent")  # the refresh fails…
+    guard_mod._refresh(AGENT)  # the refresh fails…
+    with patch.object(guard_mod, "_refresh_in_background", lambda agent_id: None):
         d = kalytera.guard("refund_api", {"amount": 900})
     assert d.decision == "DENY"  # …but the cached rule still applies
     assert "using 1 cached rule" in d.error
@@ -225,16 +225,19 @@ def test_guard_never_raises_on_bad_input(env: SimpleNamespace) -> None:
 def test_every_call_produces_an_event_including_errors(env: SimpleNamespace) -> None:
     env.api_up = False
     kalytera.guard("refund_api", {"amount": 1}, session_id="s1")
+    guard_mod.flush()  # the send fails; the decision is kept for resending
     env.api_up = True
     _create(env)
     guard_mod._refresh(AGENT)  # the SDK retries a failed fetch after RETRY_S; don't wait for it
-    kalytera.guard("refund_api", {"amount": 900}, session_id="s1")
-    guard_mod.flush()
+    with patch.object(guard_mod, "EVENT_RETRY_S", 0.0):
+        kalytera.guard("refund_api", {"amount": 900}, session_id="s1")
+        guard_mod.flush()
+        time.sleep(0.2)
     from db.models import GuardEvent
     db = env.session()
     events = db.query(GuardEvent).order_by(GuardEvent.timestamp).all()
     db.close()
-    assert len(events) == 2
+    assert len(events) == 2  # the decision made while the API was down was resent
     assert events[0].error and "rules unavailable" in events[0].error
     assert events[1].shadow_hits and "refund_cap" in events[1].shadow_hits
     assert events[1].args_hash and "900" not in events[1].args_hash  # args are hashed, not stored
@@ -250,3 +253,52 @@ def test_cached_guard_p99_under_5ms(env: SimpleNamespace) -> None:
         timings.append(time.perf_counter() - start)
     timings.sort()
     assert timings[int(len(timings) * 0.99)] < 0.005
+
+
+# ---------------------------------------------------------------------------
+# POST /rules/draft
+# ---------------------------------------------------------------------------
+
+def _seed_pattern(env: SimpleNamespace) -> str:
+    import json as _json
+    from datetime import datetime, timezone
+    from db.models import AgentLog, AgentOrg, LossPattern
+
+    db = env.session()
+    db.add(AgentOrg(agent_id=AGENT, org_id="org-1"))
+    now = datetime.now(timezone.utc)
+    for i, (amount, passed) in enumerate([(900, False), (750, False), (100, True), (300, True)]):
+        sid = f"s{i}"
+        db.add(AgentLog(id=f"log{i}", agent_id=AGENT, session_id=sid, step_number=1, step_name="refund",
+                        input="", output="", tool_calls=_json.dumps([
+                            {"name": "refund_api", "input": {"amount": amount}, "success": passed}])))
+        db.add(EvalResult(log_id=f"log{i}", session_id=sid, agent_id=AGENT, accuracy=0.5, goal_alignment=0.5,
+                          decision_quality=0.5, completeness=0.5, overall_score=0.5, passed=passed,
+                          failure_type=None if passed else "tool_failure"))
+    db.add(LossPattern(id="pat-1", agent_id=AGENT, pattern_type="failure_type", pattern_value="tool_failure",
+                       failure_count=2, total_count=4, failure_rate=0.5, pct_of_all_failures=1.0,
+                       root_cause="Refunds above the limit fail", first_seen=now, last_seen=now))
+    db.commit()
+    db.close()
+    return "pat-1"
+
+
+def test_draft_from_pattern_is_valid_and_not_saved(env: SimpleNamespace) -> None:
+    pid = _seed_pattern(env)
+    resp = env.client.post("/rules/draft", json={"pattern_id": pid})
+    assert resp.status_code == 200, resp.text
+    rule = resp.json()["rule"]
+    assert rule["match"] == {"tool": "refund_api", "args": [{"field": "amount", "op": ">", "value": 300}]}
+    assert rule["reason"] == "Refunds above the limit fail"
+    assert env.client.get("/rules", params={"agent_id": AGENT}).json()["rules"] == []  # nothing saved
+    assert env.client.post("/rules", json=rule).status_code == 201  # and it can be created as-is
+
+
+def test_draft_unknown_pattern_404(env: SimpleNamespace) -> None:
+    assert env.client.post("/rules/draft", json={"pattern_id": "nope"}).status_code == 404
+
+
+def test_draft_for_another_orgs_agent_404(env: SimpleNamespace) -> None:
+    pid = _seed_pattern(env)
+    env.org = SimpleNamespace(id="org-2")
+    assert env.client.post("/rules/draft", json={"pattern_id": pid}).status_code == 404

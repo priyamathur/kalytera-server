@@ -141,6 +141,8 @@ if not d.allowed:               # DENY or ESCALATE
 refund_api(amount=900)
 ```
 
+**No code needed to try it:** open **[app.kalytera.dev](https://app.kalytera.dev)** → **🛡 Rules**. Create a rule with a form, test a call against it, watch its would-blocks and promote it — or open **Failure Feed** and click **Draft a rule** on a pattern: Kalytera compares the tool calls of failing and passing sessions and proposes the rule, with the evidence. Nothing is saved until you click Create.
+
 Rules are JSON. Every rule starts in **shadow mode**: it records what it *would* have blocked and never changes `guard()`'s answer. Promote it once the shadow numbers look right.
 
 ```bash
@@ -166,7 +168,15 @@ kalytera guard refund_api --args '{"amount": 900}'   # DENY
 - **Fail-open:** if Kalytera is unreachable, `guard()` uses the last rules it loaded, or returns `ALLOW` if it never loaded any, and says why in `d.error`. Add `"fail_closed": true` to a rule to deny instead when evaluation fails. `guard()` never raises.
 - **Private:** decisions are recorded with a hash of the arguments, never the arguments themselves.
 - **Every change is a new version:** `kalytera rules show refund_cap` lists them. Also: `list`, `demote`, `delete`.
-- **Not using Python?** `POST /guard` with `{"agent_id", "tool", "args", "session_id"}` returns the same decision.
+- **Not using Python?** `POST /guard` with `{"agent_id", "tool", "args", "session_id"}` returns the same decision:
+
+```bash
+curl -s -X POST https://api.kalytera.dev/guard \
+  -H "Authorization: Bearer $KALYTERA_API_KEY" -H "Content-Type: application/json" \
+  -d '{"agent_id": "my-agent", "tool": "refund_api", "args": {"amount": 900}, "session_id": "s1"}'
+```
+
+  Rules can be managed over HTTP too: `GET/POST /rules`, `PUT /rules/{id}`, `POST /rules/{id}/promote|demote`, `DELETE /rules/{id}`, `GET /rules/{id}/stats` — see [api.kalytera.dev/docs](https://api.kalytera.dev/docs).
 
 ---
 
@@ -234,8 +244,8 @@ pytest
 - [x] Shadow mode — rules log what they *would* have blocked, without changing agent behavior
 - [x] Enforce mode — `kalytera.guard()` checks cached rules in-process (no LLM call) before an action runs
 - [x] Versioned rules — every edit, promote and demote is a new version; every decision is recorded
-- [ ] Rules view in the dashboard — shadow counts, promote and demote
-- [ ] Draft rules — turn a detected failure pattern into an editable rule
+- [x] Rules view in the dashboard — create, test a call, shadow counts, promote, demote, delete
+- [x] Draft rules — turn a detected failure pattern into an editable rule, with the evidence
 
 Tracing stays fire-and-forget: `trace()` never blocks. Only `guard()` can block, and only rules you promoted.
 
