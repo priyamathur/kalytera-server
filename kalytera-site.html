@@ -506,22 +506,17 @@ def my_agent_step(input: str) -> str:
   <div class="context-wrap">
     <div class="incidents">
       <div class="inc">
-        <div class="inc-lbl">// Sinch Research · May 2026 · 2,527 senior decision makers across 10 countries</div>
-        <div class="inc-txt">74% have rolled back an AI agent after a governance failure — in front of real customers. The rollback rate climbs to <strong>81% among organizations with the most mature guardrails.</strong> More governance, more monitoring, more investment — and still eight in ten of the most advanced programs had to shut something down.</div>
+        <div class="inc-lbl">// <a href="https://sinch.com/news/sinch-releases-ai-production-paradox/" target="_blank" rel="noopener" style="color:inherit">Sinch, The AI Production Paradox · May 2026</a> · survey of 2,527 senior decision makers across 10 countries</div>
+        <div class="inc-txt">74% of enterprises have rolled back or shut down a live AI customer-communications agent after a governance failure. The rate climbs to <strong>81% among organizations with fully mature guardrails.</strong></div>
       </div>
       <div class="inc">
-        <div class="inc-lbl">// Palantir CEO Alex Karp · CNBC Squawk Box · July 1, 2026</div>
-        <div class="inc-txt">Palantir CEO Alex Karp told CNBC on July 1, 2026: <strong>"Every single enterprise in this country, these people are LIVID. They are paying for tokens that create no value."</strong> Experiment frameworks can measure the overall return. But without a quality layer, nobody knows what failure patterns are dragging that return down — or what to fix to make it better.</div>
-      </div>
-      <div class="inc">
-        <div class="inc-lbl">// Market Research Pipeline · November 2025</div>
-        <div class="inc-txt">Four agents in production. Two entered an infinite loop. <strong>11 days. $47,000 in API costs. Nobody noticed.</strong> The team had monitoring. The loop never appeared in the sample. No loss pattern surfaced. No feedback loop fired. No signal to improve.</div>
+        <div class="inc-lbl">// Palantir CEO Alex Karp · CNBC Squawk Box · July 1, 2026 · <a href="https://siliconangle.com/?p=774570" target="_blank" rel="noopener" style="color:inherit">via SiliconANGLE</a></div>
+        <div class="inc-txt">Palantir CEO Alex Karp told CNBC that enterprise customers are <strong>"paying for tokens that create no value."</strong> Experiment frameworks can measure the overall return. But without a quality layer, nobody knows what failure patterns are dragging that return down — or what to fix to make it better.</div>
       </div>
     </div>
     <div class="vstats">
-      <div class="vstat"><div class="vstat-n">62%</div><div class="vstat-l">Of enterprises already have agents live in production — Sinch 2026</div></div>
-      <div class="vstat"><div class="vstat-n">74%</div><div class="vstat-l">Have rolled back a live agent after a governance failure — in front of real customers</div></div>
-      <div class="vstat"><div class="vstat-n">32%</div><div class="vstat-l">Cite quality as the #1 barrier to production — not cost, not capability</div></div>
+      <div class="vstat"><div class="vstat-n">62%</div><div class="vstat-l">Of enterprises have AI customer-communications agents live in production — <a href="https://sinch.com/news/sinch-releases-ai-production-paradox/" target="_blank" rel="noopener" style="color:inherit">Sinch 2026</a></div></div>
+      <div class="vstat"><div class="vstat-n">74%</div><div class="vstat-l">Have rolled back a live customer-communications agent after a governance failure — <a href="https://sinch.com/news/sinch-releases-ai-production-paradox/" target="_blank" rel="noopener" style="color:inherit">Sinch 2026</a></div></div>
     </div>
   </div>
 </div>
@@ -534,7 +529,7 @@ def my_agent_step(input: str) -> str:
 
     <div class="feat-item">
       <div>
-        <div class="feat-problem">Existing tools sample 1–10% of traffic. Rare, high-cost failures — infinite loops, cascading tool errors — never appear in the sample. You find out from a $47,000 API bill.</div>
+        <div class="feat-problem">Sampling-based tools only look at part of your traffic. Rare, high-cost failures — infinite loops, cascading tool errors — never appear in the sample.</div>
         <div class="feat-tag">trace everything</div>
         <div class="feat-title">100% coverage. Every step of every session.</div>
         <div class="feat-body">One line to add. <code>kalytera.trace()</code> is fire-and-forget — under 5ms, never raises, never blocks. Nothing is sampled. If a failure mode exists in your traffic, you will see it.</div>
@@ -634,7 +629,7 @@ def my_agent_step(input: str) -> str:
   </p>
   <div class="moat-grid">
     <div class="moat-card"><div class="moat-title">Day 1 — failures you didn't know existed</div><div class="moat-body">The first dashboard view typically surfaces 2–4 active loss patterns in agents teams thought were healthy. One-off catastrophic failures that had no monitoring. Silent mid-workflow failures producing plausible-looking outputs.</div></div>
-    <div class="moat-card"><div class="moat-title">Day 7 — patterns you can act on</div><div class="moat-body">By the end of the first week, recurring failure patterns are named and ranked by frequency. Root cause is surfaced in plain English for each one. The team knows which failure type accounts for 80% of quality issues and has a specific fix to ship.</div></div>
+    <div class="moat-card"><div class="moat-title">Day 7 — patterns you can act on</div><div class="moat-body">By the end of the first week, recurring failure patterns are named and ranked by frequency. Root cause is surfaced in plain English for each one. The team knows which failure types account for most quality issues and has a specific fix to ship.</div></div>
     <div class="moat-card"><div class="moat-title">Day 30 — a feedback loop that runs itself</div><div class="moat-body">Every confirmed failure has fed the quality loop. Loss pattern frequency is tracked week over week. Quality scores are improving. The team can show exactly which failure types dropped, by how much, and when.</div></div>
   </div>
 </div>
@@ -769,7 +764,6 @@ def my_agent_step(input: str) -> str:
       <p class="docs-lead">Kalytera evaluates every interaction at every step, in real time — not a sample, not after the fact — and tells you exactly what broke, where, and why.</p>
       <div class="docs-h2">The problem</div>
       <p class="docs-p">Enterprise AI agents run complex multi-step workflows. Unlike traditional software, agents think and act differently in every interaction — standard quality checks aren't built for that. Eval and observability platforms exist, but they use sampled data and after-the-fact analysis. They miss failures mid-workflow, including one-off failures that could be catastrophic.</p>
-      <div class="callout warn"><div class="callout-lbl">Documented incident · November 2025</div><div class="callout-body">Four agents in production. Two entered an infinite loop. 11 days. $47,000 in API costs. Nobody noticed. The team had monitoring — the loop never appeared in the sample.</div></div>
       <div class="docs-h2">What Kalytera does</div>
       <ul class="docs-ul"><li>Evaluates every interaction at every step, the moment it happens</li><li>Gives every interaction a quality score calibrated to your industry</li><li>Surfaces one-off catastrophic failures immediately in the Failure Feed</li><li>Groups repeating failures into named patterns with plain English root cause</li></ul>
       <div class="pager"><div></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('qs')">Quickstart</a></div></div>
