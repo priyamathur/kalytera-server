@@ -105,7 +105,7 @@ kalytera.trace(
 
 **4. Open the dashboard** at **[app.kalytera.dev](https://app.kalytera.dev)** — scores appear within a minute of a session ending.
 
-Requires Python 3.11+.
+Requires Python 3.9+ (the default `python3` on macOS works).
 
 ---
 
