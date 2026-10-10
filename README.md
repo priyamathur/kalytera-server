@@ -182,9 +182,25 @@ pytest
 
 ## Roadmap
 
+**Shipped — monitoring**
+
 - [x] LLM-as-judge scoring (6 built-in dimensions)
 - [x] Custom metrics (helpfulness, tone, compliance, …)
 - [x] Golden set calibration — label sessions, measure judge accuracy
+- [x] Loss pattern detection — failures grouped by tool and workflow step
+
+**Next — from failure pattern to blocking rule**
+
+- [ ] Draft rules — turn a detected failure pattern into an editable rule
+- [ ] Shadow mode — rules log what they *would* have blocked, without changing agent behavior
+- [ ] Enforce mode — `kalytera.guard()` checks cached rules in-process (no LLM call) before an action runs
+- [ ] Audit trail — every block, allow and rule change recorded
+
+Tracing stays fire-and-forget: `trace()` will never block, even after `guard()` ships.
+
+**Later**
+
+- [ ] Real-time alerts when a session scores badly or a loop is detected
 - [ ] Cross-model agreement — flag low-confidence evals by comparing two judges
 - [ ] Auto-calibration — suggest weight adjustments when agreement drops below threshold
 - [ ] Team review queue — route low-confidence evals to a human reviewer
