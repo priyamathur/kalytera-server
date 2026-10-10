@@ -18,7 +18,7 @@ All arg predicates and session conditions must hold for a rule to match.
 """
 import time
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Deque, Dict, List, Optional, Tuple
 
 ALLOW = "ALLOW"
