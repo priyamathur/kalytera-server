@@ -249,6 +249,12 @@ section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked
     background: #f8fafc !important; border-color: #94a3b8 !important;
     color: #0f172a !important; box-shadow: 0 2px 6px rgba(15,23,42,0.08) !important;
 }
+.stButton > button[kind="primary"] {
+    background: #6366f1 !important; border-color: #6366f1 !important; color: white !important;
+}
+.stButton > button[kind="primary"]:hover {
+    background: #4f46e5 !important; border-color: #4f46e5 !important; color: white !important;
+}
 
 /* ── Headings ── */
 h1 { font-size: 22px !important; font-weight: 800 !important; color: #0f172a !important;
@@ -1188,8 +1194,10 @@ def _render_pattern_full(p: Any, rank: int = 0) -> None:
             st.session_state["selected_session"] = None
             st.session_state["view"] = "🔍  Trace Viewer"
             st.rerun(scope="app")
-        b2.button("🛡 Draft a rule →", key=f"draft_{p.id}", on_click=request_draft, args=(p.id,),
-                  help="Propose a guard rule from the tool calls in these failing sessions. Nothing is saved yet.")
+        # The callback switches the view; the full rerun leaves this fragment so the Rules page renders.
+        if b2.button("🛡 Suggest a rule →", key=f"draft_{p.id}", on_click=request_draft, args=(p.id,),
+                     help="Propose a guard rule from the tool calls in these failing sessions. Nothing is saved yet."):
+            st.rerun(scope="app")
 
 
 def _render_failure_row(ev: Any, log: Any) -> None:

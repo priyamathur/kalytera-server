@@ -227,7 +227,15 @@ def build_router(resolve_org: Callable[..., Any],
         if _versions(db, _org_id(org), rule["agent_id"], str(rule.get("id", ""))):
             raise HTTPException(status_code=409, detail=f"rule {rule.get('id')} already exists — use PUT to edit")
         # New rules always start in shadow mode; enforcing needs an explicit promote.
-        return _insert(db, _org_id(org), {**rule, "version": 1, "mode": SHADOW})
+        # A re-created (previously deleted) rule continues its version numbers; history is kept.
+        oid = _org_id(org)
+        last = (
+            db.query(func.max(GuardRule.version))
+            .filter(GuardRule.org_id.is_(None) if oid is None else GuardRule.org_id == oid)
+            .filter(GuardRule.agent_id == rule["agent_id"], GuardRule.rule_id == str(rule.get("id", "")))
+            .scalar()
+        )
+        return _insert(db, oid, {**rule, "version": (last or 0) + 1, "mode": SHADOW})
 
     @router.get("/rules/{rule_id}")
     async def get_rule(rule_id: str, agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:

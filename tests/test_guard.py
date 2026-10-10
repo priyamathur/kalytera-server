@@ -130,6 +130,16 @@ def test_delete_removes_rule(env: SimpleNamespace) -> None:
     assert env.client.get("/rules/refund_cap/stats", params={"agent_id": AGENT}).status_code == 404
 
 
+def test_deleted_rule_can_be_created_again(env: SimpleNamespace) -> None:
+    _create(env)
+    env.client.post("/rules/refund_cap/promote", params={"agent_id": AGENT})
+    env.client.delete("/rules/refund_cap", params={"agent_id": AGENT})
+    again = _create(env)
+    assert again["version"] == 3 and again["mode"] == "shadow"
+    shown = env.client.get("/rules/refund_cap", params={"agent_id": AGENT}).json()
+    assert [v["version"] for v in shown["versions"]] == [3]
+
+
 def test_rules_are_scoped_to_org(env: SimpleNamespace) -> None:
     _create(env)
     env.org = SimpleNamespace(id="org-2")

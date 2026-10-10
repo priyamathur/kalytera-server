@@ -141,7 +141,7 @@ if not d.allowed:               # DENY or ESCALATE
 refund_api(amount=900)
 ```
 
-**No code needed to try it:** open **[app.kalytera.dev](https://app.kalytera.dev)** → **🛡 Rules**. Create a rule with a form, test a call against it, watch its would-blocks and promote it — or open **Failure Feed** and click **Draft a rule** on a pattern: Kalytera compares the tool calls of failing and passing sessions and proposes the rule, with the evidence. Nothing is saved until you click Create.
+**No code needed to try it:** open **[app.kalytera.dev](https://app.kalytera.dev)** → **🛡 Rules** → **＋ New rule**, and write it as a sentence: *when the agent calls* `refund_api` *with* `amount` *is more than* `500`, *block it*. New rules only **watch** (shadow mode) — use **Try it** to see what one would do, then **Start blocking** when its numbers look right. Or open **Failure Feed** and click **Suggest a rule** on a pattern: Kalytera compares the tool calls of failing and passing sessions, proposes the rule, and shows why. Nothing is saved until you click Save.
 
 Rules are JSON. Every rule starts in **shadow mode**: it records what it *would* have blocked and never changes `guard()`'s answer. Promote it once the shadow numbers look right.
 

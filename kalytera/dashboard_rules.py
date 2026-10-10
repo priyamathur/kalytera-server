@@ -1,21 +1,33 @@
 """
 Rules view for the Streamlit dashboard — guard rules without writing Python.
 
-Create a rule (form or JSON, or from a failure pattern's draft), watch its
-shadow would-blocks, promote/demote it, and test a call against it. Everything
-goes through the Kalytera API with the signed-in user's key, so the dashboard
-sees exactly what guard() sees.
+One thing at a time: the page lists rules as plain sentences; creating, trying,
+editing and promoting each happen in a dialog or popover. Everything goes
+through the Kalytera API with the signed-in user's key, so the dashboard sees
+exactly what guard() sees.
 """
 import html
+import inspect
 import json
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 import streamlit as st
 
 API = os.getenv("KALYTERA_API_ENDPOINT", "https://api.kalytera.dev").rstrip("/")
-OPS = ["==", "!=", ">", ">=", "<", "<=", "in"]
+
+# Plain-English operator labels for the form; values are the rule operators.
+OPS = {"is more than": ">", "is at least": ">=", "is less than": "<", "is at most": "<=",
+       "equals": "==", "is not": "!=", "is one of": "in"}
+_OP_WORDS = {v: k for k, v in OPS.items()}
+_ACTIONS = {"Block it": "DENY", "Flag it for review": "ESCALATE"}
+_VERB = {"DENY": "Block", "ESCALATE": "Flag"}
+_PAST = {"DENY": "blocked", "ESCALATE": "flagged"}
+
+# Keyed popovers keep their open/closed state with the rule, not the card position.
+_POPOVER_TAKES_KEY = "key" in inspect.signature(st.popover).parameters
 
 _TEMPLATE = {
     "id": "refund_cap",
@@ -23,6 +35,21 @@ _TEMPLATE = {
     "action": "DENY",
     "reason": "Refunds over 500 need review",
 }
+
+_CSS = """
+<style>
+.kr-sentence{font-size:16px;color:#0f172a;line-height:1.5;margin:2px 0 4px}
+.kr-sentence code{background:#f1f5f9;color:#0f172a;padding:1px 6px;border-radius:5px;font-size:14px}
+.kr-meta{font-size:13px;color:#64748b;margin-bottom:2px}
+.kr-name{font-size:12px;color:#94a3b8}
+.kr-pill{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600;margin-left:8px}
+.kr-watch{background:#eef2ff;color:#4f46e5}
+.kr-block{background:#fef2f2;color:#dc2626}
+.kr-empty{text-align:center;padding:28px 12px 12px;color:#475569;font-size:14px;line-height:1.7}
+.kr-empty-title{font-size:18px;font-weight:700;color:#0f172a;margin-bottom:6px}
+.kr-empty b{color:#0f172a}
+</style>
+"""
 
 
 # ── API ──────────────────────────────────────────────────────────────────────
@@ -54,251 +81,336 @@ def request_draft(pattern_id: str) -> None:
     """
     status, body = _api("POST", "/rules/draft", {"pattern_id": pattern_id})
     if status != 200:
-        st.session_state["rule_flash"] = ("error", f"Couldn't draft a rule: {_detail(body)}")
+        st.session_state["rule_flash"] = ("error", f"Couldn't suggest a rule: {_detail(body)}")
     else:
         st.session_state["rule_draft"] = body
     st.session_state["view"] = "🛡  Rules"
 
 
-# ── Formatting ───────────────────────────────────────────────────────────────
+# ── Wording ──────────────────────────────────────────────────────────────────
 
 def _e(v: Any) -> str:
     return html.escape(str(v))
 
 
-def _summary(rule: Dict[str, Any]) -> str:
-    """'DENY refund_api when amount > 500 and on the 3rd+ call in 10 min'."""
+def _value_text(v: Any) -> str:
+    if isinstance(v, list):
+        return ", ".join(_e(x) for x in v)
+    return _e(v)
+
+
+def _ordinal(n: int) -> str:
+    suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
+    return f"{n}{suffix}"
+
+
+def sentence(rule: Dict[str, Any]) -> str:
+    """'Block <code>refund_api</code> when amount is more than 500'."""
     m = rule.get("match", {})
-    parts = [f"{_e(p['field'])} {_e(p['op'])} {_e(json.dumps(p['value']))}" for p in m.get("args", [])]
+    parts = [f"{_e(p['field'])} {_OP_WORDS.get(p['op'], _e(p['op']))} {_value_text(p['value'])}"
+             for p in m.get("args", [])]
     for c in rule.get("session_conditions", []):
         mins = c["window_seconds"] / 60
-        window = f"{mins:g} min" if mins >= 1 else f"{c['window_seconds']}s"
-        parts.append(f"{_e(c['tool'])} called {_e(c['op'])} {_e(c['value'])}× in {window}")
-    cond = " and ".join(parts) if parts else "every call"
-    return f"<b>{_e(rule.get('action'))}</b> <code>{_e(m.get('tool'))}</code> when {cond}"
+        window = f"{mins:g} minutes" if mins >= 1 else f"{c['window_seconds']} seconds"
+        if c["op"] == ">=":
+            parts.append(f"it's the {_ordinal(int(c['value']))} call or more within {window}")
+        else:
+            parts.append(f"it's called {_e(c['op'])} {_e(c['value'])} times within {window}")
+    verb = _VERB.get(rule.get("action"), _e(rule.get("action")))
+    when = f"when {' and '.join(parts)}" if parts else "on every call"
+    return f"{verb} <code>{_e(m.get('tool'))}</code> {when}"
 
 
-def _mode_badge(mode: str) -> str:
-    if mode == "enforce":
-        return ('<span style="background:#fef2f2;color:#dc2626;padding:2px 9px;border-radius:5px;'
-                'font-size:11px;font-weight:800;letter-spacing:.04em">ENFORCED</span>')
-    return ('<span style="background:#eef2ff;color:#4f46e5;padding:2px 9px;border-radius:5px;'
-            'font-size:11px;font-weight:800;letter-spacing:.04em">SHADOW</span>')
+def _plural(n: int, word: str) -> str:
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
+def _stats_line(stats: Dict[str, Any], rule: Dict[str, Any]) -> str:
+    if rule.get("mode") == "enforce":
+        n = stats.get("denied", 0) + stats.get("escalated", 0)
+        return f"{_PAST.get(rule.get('action'), 'blocked').capitalize()} {_plural(n, 'call')} so far."
+    wb = stats.get("would_block", 0)
+    if not wb:
+        return "No matching calls yet."
+    failed = stats.get("would_block_sessions_that_failed", 0)
+    tail = f" · {failed} of those sessions failed" if failed else ""
+    return (f"Would have {_PAST.get(rule.get('action'), 'blocked')} {_plural(wb, 'call')} "
+            f"in {_plural(stats.get('would_block_sessions', 0), 'session')}{tail}.")
+
+
+def _slug(*parts: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", "_".join(p for p in parts if p).lower()).strip("_")[:48] or "rule"
 
 
 def _parse_value(raw: str, op: str) -> Any:
     """Form input -> JSON value: numbers stay numbers, 'in' takes a comma list."""
     raw = raw.strip()
     if op == "in":
-        items = [x.strip() for x in raw.split(",") if x.strip()]
-        return [_parse_value(x, "==") for x in items]
+        return [_parse_value(x, "==") for x in raw.split(",") if x.strip()]
     try:
         return json.loads(raw)
     except ValueError:
         return raw
 
 
+def _example_args(rule: Dict[str, Any]) -> Dict[str, Any]:
+    """Arguments that would match the rule, to prefill 'Try it'."""
+    out: Dict[str, Any] = {}
+    for p in rule.get("match", {}).get("args", []):
+        v = p["value"]
+        if p["op"] == ">" and isinstance(v, (int, float)):
+            v = v + 1
+        elif p["op"] == "<" and isinstance(v, (int, float)):
+            v = v - 1
+        elif p["op"] == "in" and isinstance(v, list) and v:
+            v = v[0]
+        node = out
+        *path, last = p["field"].split(".")
+        for key in path:
+            node = node.setdefault(key, {})
+        node[last] = v
+    return out
+
+
 # ── Page ─────────────────────────────────────────────────────────────────────
 
 def show_rules(agent_id: str) -> None:
-    st.markdown(
-        '<div style="margin-bottom:20px"><h1>Rules</h1>'
-        '<p style="font-size:13px;color:#64748b;margin-top:4px">'
-        f'Block known failures for <b>{_e(agent_id)}</b> before they happen. New rules start in '
-        '<b>shadow</b>: they count what they would have blocked and never change your agent\'s behavior. '
-        'Promote a rule when its numbers look right.</p></div>',
+    st.markdown(_CSS, unsafe_allow_html=True)
+    head, btn = st.columns([5, 1.2], vertical_alignment="center")
+    head.markdown(
+        '<h1 style="margin-bottom:2px">Rules</h1>'
+        '<p style="font-size:14px;color:#64748b;margin:0">Stop known failures before your agent repeats them.</p>',
         unsafe_allow_html=True,
     )
+    st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
+    if btn.button("＋ New rule", type="primary", use_container_width=True, key="new_rule"):
+        _new_rule_dialog(agent_id)
+
     flash = st.session_state.pop("rule_flash", None)
     if flash:
         getattr(st, flash[0])(flash[1])
 
     status, body = _api("GET", "/rules", params={"agent_id": agent_id})
     if status != 200:
-        st.error(f"Couldn't load rules: {_detail(body)}", icon="🔴")
+        st.error(f"Couldn't load rules: {_detail(body)}")
         return
     rules: List[Dict[str, Any]] = body.get("rules", [])
 
-    _create_section(agent_id, has_rules=bool(rules))
-    st.markdown('<h2 style="margin:24px 0 8px">Your rules</h2>', unsafe_allow_html=True)
-    if not rules:
-        st.info("No rules yet. Create one above, or open the Failure Feed and click "
-                "**Draft a rule** on a pattern.")
+    draft = st.session_state.get("rule_draft")
+    if draft:
+        _suggestion_card(agent_id, draft, rules)
+
+    if not rules and not draft:
+        _empty_state(agent_id)
+        return
     for rule in rules:
         _rule_card(agent_id, rule)
 
-    st.markdown('<h2 style="margin:28px 0 8px">Test a call</h2>', unsafe_allow_html=True)
-    _test_section(agent_id, rules)
+
+def _empty_state(agent_id: str) -> None:
+    with st.container(border=True):
+        st.markdown(
+            '<div class="kr-empty"><div class="kr-empty-title">No rules yet</div>'
+            'A rule checks a tool call before your agent makes it — for example, '
+            '<i>block refunds over 500</i>.<br/>New rules only <b>watch</b> at first, so trying one is safe.</div>',
+            unsafe_allow_html=True,
+        )
+        _, c1, c2, _ = st.columns([1, 1.3, 1.6, 1])
+        if c1.button("＋ Create a rule", type="primary", use_container_width=True, key="empty_new"):
+            _new_rule_dialog(agent_id)
+        c2.button("Suggest one from failures", use_container_width=True, key="empty_suggest",
+                  on_click=lambda: st.session_state.update(view="🔴  Failure Feed"),
+                  help="Opens the Failure Feed — click “Suggest a rule” on a pattern")
 
 
-def _create_section(agent_id: str, has_rules: bool) -> None:
-    draft = st.session_state.get("rule_draft")
-    with st.expander("➕  Create a rule" if not draft else "✏️  Review the drafted rule",
-                     expanded=bool(draft) or not has_rules):
-        if draft:
-            st.markdown("**Drafted from a failure pattern. Nothing is saved until you click Create.**")
+def _same_rule(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
+    keys = ("match", "session_conditions", "action")
+    return a.get("id") == b.get("id") or all((a.get(k) or None) == (b.get(k) or None) for k in keys)
+
+
+def _suggestion_card(agent_id: str, draft: Dict[str, Any], rules: List[Dict[str, Any]]) -> None:
+    rule = draft.get("rule")
+    existing = next((r for r in rules if rule and _same_rule(rule, r)), None)
+    with st.container(border=True):
+        st.markdown('<div class="kr-name">SUGGESTED FROM YOUR FAILURE FEED</div>', unsafe_allow_html=True)
+        if not rule:
+            for w in draft.get("warnings", []):
+                st.markdown(f'<div class="kr-meta">{_e(w)}</div>', unsafe_allow_html=True)
+            if st.button("Dismiss", key="dismiss_draft"):
+                st.session_state.pop("rule_draft", None)
+                st.rerun()
+            return
+        st.markdown(f'<div class="kr-sentence">{sentence(rule)}</div>', unsafe_allow_html=True)
+        with st.expander("Why this rule?"):
             for line in draft.get("evidence", []):
                 st.markdown(f"- {line}")
             for w in draft.get("warnings", []):
                 st.warning(w)
-            if not draft.get("rule"):
-                if st.button("Dismiss draft", key="dismiss_draft"):
-                    st.session_state.pop("rule_draft", None)
-                    st.rerun()
-                return
-
-        tab_form, tab_json = st.tabs(["Form", "JSON"])
-        with tab_form:
-            if draft:
-                st.caption("This draft was generated as JSON — review and edit it in the JSON tab.")
-            else:
-                _create_form(agent_id)
-        with tab_json:
-            start = (draft or {}).get("rule") or {**_TEMPLATE, "agent_id": agent_id}
-            text = st.text_area("Rule JSON", value=json.dumps(start, indent=2), height=260,
-                                key=f"rule_json_{hash(json.dumps(start, sort_keys=True))}")
-            c1, c2 = st.columns([1, 1])
-            if c1.button("Create in shadow mode", key="create_json", type="primary"):
-                try:
-                    rule = json.loads(text)
-                except ValueError as exc:
-                    st.error(f"That isn't valid JSON: {exc}")
-                    return
-                _create(agent_id, rule)
-            if draft and c2.button("Discard draft", key="discard_draft"):
+        if existing:
+            st.markdown(f'<div class="kr-meta">You already have this rule: <b>{_e(existing["id"])}</b>.</div>',
+                        unsafe_allow_html=True)
+            if st.button("Dismiss", key="dismiss_draft"):
                 st.session_state.pop("rule_draft", None)
                 st.rerun()
-
-
-def _create_form(agent_id: str) -> None:
-    with st.form("rule_form", clear_on_submit=False):
-        c1, c2 = st.columns(2)
-        rule_id = c1.text_input("Rule name", placeholder="refund_cap")
-        tool = c2.text_input("Tool", placeholder="refund_api", help="The tool name your agent passes to guard()")
-        st.markdown("**When an argument…** (leave the field empty to match every call to the tool)")
-        a1, a2, a3 = st.columns([2, 1, 2])
-        field = a1.text_input("Argument", placeholder="amount", help="Nested fields: customer.tier")
-        op = a2.selectbox("is", OPS, index=2)
-        value = a3.text_input("Value", placeholder="500", help="For 'in', separate values with commas")
-        st.markdown("**…and/or the tool is called repeatedly** (0 = off)")
-        r1, r2 = st.columns(2)
-        repeat = r1.number_input("Times in one session", min_value=0, value=0, step=1)
-        window = r2.number_input("Within minutes", min_value=1, value=10, step=1)
-        b1, b2 = st.columns([1, 2])
-        action = b1.selectbox("Then", ["DENY", "ESCALATE"])
-        reason = b2.text_input("Reason shown to your code", placeholder="Refunds over 500 need review")
-        submitted = st.form_submit_button("Create in shadow mode", type="primary")
-    if not submitted:
-        return
-    if not rule_id.strip() or not tool.strip():
-        st.error("Rule name and tool are required.")
-        return
-    rule: Dict[str, Any] = {
-        "id": rule_id.strip(), "agent_id": agent_id,
-        "match": {"tool": tool.strip(), "args": []},
-        "action": action, "reason": reason.strip(),
-    }
-    if field.strip():
-        if not value.strip():
-            st.error("Give the argument a value to compare against.")
             return
-        rule["match"]["args"].append({"field": field.strip(), "op": op, "value": _parse_value(value, op)})
-    if repeat:
-        rule["session_conditions"] = [{"type": "count_in_window", "tool": tool.strip(), "op": ">=",
-                                       "value": int(repeat), "window_seconds": int(window) * 60}]
-    _create(agent_id, rule)
+        c1, c2, c3, _ = st.columns([1.5, 0.7, 0.9, 5], gap="small")
+        if c1.button("Save (watch only)", type="primary", key="save_draft",
+                     help="Starts in watch mode: it counts matches but never blocks"):
+            _create(agent_id, rule)
+        if c2.button("Edit", key="edit_draft"):
+            _json_dialog(agent_id, rule, mode="create")
+        if c3.button("Dismiss", key="dismiss_draft"):
+            st.session_state.pop("rule_draft", None)
+            st.rerun()
 
+
+def _rule_card(agent_id: str, rule: Dict[str, Any]) -> None:
+    rid, mode = rule["id"], rule.get("mode", "shadow")
+    _, stats = _api("GET", f"/rules/{rid}/stats", params={"agent_id": agent_id})
+    stats = stats if isinstance(stats, dict) else {}
+    pill = ('<span class="kr-pill kr-block" title="Enforce mode">Blocking</span>' if mode == "enforce"
+            else '<span class="kr-pill kr-watch" title="Shadow mode: counts matches, never blocks">Watching</span>')
+    with st.container(border=True):
+        text, actions = st.columns([4, 2.4], vertical_alignment="center")
+        reason = f' · {_e(rule["reason"])}' if rule.get("reason") else ""
+        text.markdown(
+            f'<div class="kr-name">{_e(rid)}{pill}</div>'
+            f'<div class="kr-sentence">{sentence(rule)}</div>'
+            f'<div class="kr-meta">{_stats_line(stats, rule)}{reason}</div>',
+            unsafe_allow_html=True,
+        )
+        a1, a2, a3 = actions.columns([1.6, 1, 0.55])
+        if mode == "shadow":
+            if a1.button("Start blocking", key=f"promote_{rid}", type="primary", use_container_width=True):
+                _promote_dialog(agent_id, rule, stats)
+        elif a1.button("Stop blocking", key=f"demote_{rid}", use_container_width=True,
+                       help="Back to watching: counts matches, never blocks"):
+            _act("POST", f"/rules/{rid}/demote", agent_id, f"“{rid}” is watching again — it won't block anything.")
+        if a2.button("Try it", key=f"tryopen_{rid}", use_container_width=True):
+            _try_dialog(agent_id, rule)
+        menu_kwargs = {"key": f"menu_{rid}_{rule.get('version')}"} if _POPOVER_TAKES_KEY else {}
+        with a3.popover("⋯", use_container_width=True, **menu_kwargs):
+            if st.button("Edit", key=f"edit_{rid}", use_container_width=True):
+                _json_dialog(agent_id, rule, mode="edit")
+            if st.button("Delete", key=f"delete_{rid}", use_container_width=True):
+                _delete_dialog(agent_id, rid)
+
+
+# ── Dialogs ──────────────────────────────────────────────────────────────────
+
+@st.dialog("New rule")
+def _new_rule_dialog(agent_id: str) -> None:
+    st.caption("New rules only watch: they count matching calls and never block until you say so.")
+    tool = st.text_input("When the agent calls", placeholder="refund_api",
+                         help="The tool name your code passes to guard()")
+    c1, c2, c3 = st.columns([1.3, 1.2, 1])
+    field = c1.text_input("with", placeholder="amount",
+                          help="An argument of the call. Leave empty to match every call. Nested: customer.tier")
+    op_word = c2.selectbox("that", list(OPS), index=0)
+    value = c3.text_input("value", placeholder="500", help="For “is one of”, separate values with commas")
+    action_word = st.radio("then", list(_ACTIONS), horizontal=True)
+
+    with st.expander("More options"):
+        reason = st.text_input("Reason (returned to your code)", placeholder="Refunds over 500 need review")
+        repeat = st.number_input("Only from the Nth call in one session (0 = off)", min_value=0, value=0, step=1,
+                                 help="Catches loops: 3 = the 3rd call or more within the window")
+        window = st.number_input("…within minutes", min_value=1, value=10, step=1)
+        name = st.text_input("Rule name", placeholder=_slug(tool, field) if tool else "refund_cap")
+
+    if st.button("Create rule", type="primary", use_container_width=True, key="dlg_create"):
+        if not tool.strip():
+            st.error("Which tool should this rule check?")
+            return
+        op = OPS[op_word]
+        rule: Dict[str, Any] = {
+            "id": name.strip() or _slug(tool, field),
+            "match": {"tool": tool.strip(), "args": []},
+            "action": _ACTIONS[action_word],
+            "reason": reason.strip(),
+        }
+        if field.strip():
+            if not value.strip():
+                st.error(f"What should {field.strip()} be compared to?")
+                return
+            rule["match"]["args"].append({"field": field.strip(), "op": op, "value": _parse_value(value, op)})
+        if repeat:
+            rule["session_conditions"] = [{"type": "count_in_window", "tool": tool.strip(), "op": ">=",
+                                           "value": int(repeat), "window_seconds": int(window) * 60}]
+        _create(agent_id, rule)
+    with st.expander("Write it as JSON instead"):
+        _json_editor(agent_id, {**_TEMPLATE, "agent_id": agent_id}, mode="create", key="dlg_json")
+
+
+@st.dialog("Edit rule")
+def _json_dialog(agent_id: str, rule: Dict[str, Any], mode: str) -> None:
+    if mode == "edit":
+        st.caption("Saving creates a new version. Watching or blocking stays as it is.")
+    _json_editor(agent_id, rule, mode, key=f"json_{mode}_{rule.get('id')}")
+
+
+def _json_editor(agent_id: str, rule: Dict[str, Any], mode: str, key: str) -> None:
+    editable = {k: v for k, v in rule.items() if k not in ("version", "mode", "agent_id")}
+    text = st.text_area("Rule", value=json.dumps(editable, indent=2), height=240, key=key,
+                        label_visibility="collapsed")
+    if st.button("Save" if mode == "edit" else "Create rule", type="primary", key=f"{key}_save"):
+        try:
+            new = json.loads(text)
+        except ValueError as exc:
+            st.error(f"That isn't valid JSON: {exc}")
+            return
+        if mode != "edit":
+            _create(agent_id, new)
+            return
+        new["agent_id"] = agent_id
+        status, body = _api("PUT", f"/rules/{rule['id']}", new)
+        if status == 200:
+            st.session_state["rule_flash"] = ("success", f"Saved “{rule['id']}” (version {body['version']}).")
+            st.rerun()
+        st.error(_detail(body))
+
+
+@st.dialog("Start blocking?")
+def _promote_dialog(agent_id: str, rule: Dict[str, Any], stats: Dict[str, Any]) -> None:
+    rid = rule["id"]
+    st.markdown(f'<div class="kr-sentence">{sentence(rule)}</div>', unsafe_allow_html=True)
+    wb = stats.get("would_block", 0)
+    if wb:
+        failed = stats.get("would_block_sessions_that_failed", 0)
+        st.write(f"While watching, it matched **{_plural(wb, 'call')}** in "
+                 f"**{_plural(stats.get('would_block_sessions', 0), 'session')}**"
+                 + (f", and **{failed}** of those sessions failed." if failed else "."))
+    else:
+        st.write("It hasn't matched any calls yet, so there's no evidence yet that it targets real failures.")
+    st.write(f"From now on, `guard()` returns **{rule.get('action')}** for matching calls. "
+             "Running agents pick this up within 30 seconds.")
+    c1, c2 = st.columns(2)
+    if c1.button("Start blocking", type="primary", use_container_width=True, key=f"yes_promote_{rid}"):
+        _act("POST", f"/rules/{rid}/promote", agent_id, f"“{rid}” is now blocking.")
+    if c2.button("Cancel", use_container_width=True, key=f"no_promote_{rid}"):
+        st.rerun()
+
+
+@st.dialog("Delete rule?")
+def _delete_dialog(agent_id: str, rid: str) -> None:
+    st.write(f"**{rid}** stops applying right away (within 30 seconds in running agents). Its history is kept.")
+    c1, c2 = st.columns(2)
+    if c1.button("Delete", type="primary", use_container_width=True, key=f"yes_delete_{rid}"):
+        _act("DELETE", f"/rules/{rid}", agent_id, f"Deleted “{rid}”.")
+    if c2.button("Cancel", use_container_width=True, key=f"no_delete_{rid}"):
+        st.rerun()
+
+
+# ── Actions ──────────────────────────────────────────────────────────────────
 
 def _create(agent_id: str, rule: Dict[str, Any]) -> None:
     rule.setdefault("agent_id", agent_id)
     status, body = _api("POST", "/rules", rule)
     if status == 201:
         st.session_state.pop("rule_draft", None)
-        st.session_state["rule_flash"] = ("success", f"Created **{body['id']}** in shadow mode. "
-                                          "Its would-blocks will show up below as your agent runs.")
+        st.session_state["rule_flash"] = ("success", f"Created “{body['id']}”. It's watching — use "
+                                          "**Try it** to see what it would do.")
         st.rerun()
-    else:
-        st.error(_detail(body))
-
-
-def _rule_card(agent_id: str, rule: Dict[str, Any]) -> None:
-    rid = rule["id"]
-    _, stats = _api("GET", f"/rules/{rid}/stats", params={"agent_id": agent_id})
-    stats = stats if isinstance(stats, dict) else {}
-    with st.container(border=True):
-        st.markdown(
-            f'<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:6px">'
-            f'<span style="font-size:15px;font-weight:800;color:#0f172a">{_e(rid)}</span>'
-            f'{_mode_badge(rule.get("mode", "shadow"))}'
-            f'<span style="font-size:12px;color:#94a3b8">v{_e(rule.get("version"))}</span></div>'
-            f'<div style="font-size:14px;color:#1e293b;margin-bottom:4px">{_summary(rule)}</div>'
-            f'<div style="font-size:12px;color:#64748b;margin-bottom:10px">{_e(rule.get("reason", ""))}</div>',
-            unsafe_allow_html=True,
-        )
-        wb, wbs, failed = stats.get("would_block", 0), stats.get("would_block_sessions", 0), \
-            stats.get("would_block_sessions_that_failed", 0)
-        k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Would have blocked", wb, help="Shadow-mode matches. The agent was allowed to proceed.")
-        k2.metric("Sessions", wbs)
-        k3.metric("…that failed anyway", failed,
-                  help="Of those sessions, how many the judge scored as failed. High = the rule targets real failures.")
-        k4.metric("Blocked (enforced)", stats.get("denied", 0) + stats.get("escalated", 0))
-
-        b1, b2, b3, _ = st.columns([1.3, 1, 1, 2])
-        if rule.get("mode") == "shadow":
-            if b1.button("Promote to enforce", key=f"promote_{rid}", type="primary"):
-                st.session_state[f"confirm_promote_{rid}"] = True
-        elif b1.button("Demote to shadow", key=f"demote_{rid}"):
-            _act("POST", f"/rules/{rid}/demote", agent_id, f"**{rid}** is back in shadow mode.")
-        edit_open = b2.button("Edit", key=f"edit_{rid}")
-        if b3.button("Delete", key=f"delete_{rid}"):
-            st.session_state[f"confirm_delete_{rid}"] = True
-
-        if st.session_state.get(f"confirm_promote_{rid}"):
-            st.warning(f"Enforcing **{rid}** means guard() returns {rule.get('action')} for matching calls. "
-                       f"In shadow mode it matched **{wb}** call(s) across **{wbs}** session(s); "
-                       f"**{failed}** of those sessions failed anyway.")
-            c1, c2, _ = st.columns([1, 1, 3])
-            if c1.button("Yes, enforce", key=f"yes_promote_{rid}", type="primary"):
-                st.session_state.pop(f"confirm_promote_{rid}", None)
-                _act("POST", f"/rules/{rid}/promote", agent_id, f"**{rid}** is now enforced.")
-            if c2.button("Cancel", key=f"no_promote_{rid}"):
-                st.session_state.pop(f"confirm_promote_{rid}", None)
-                st.rerun()
-
-        if st.session_state.get(f"confirm_delete_{rid}"):
-            st.error(f"Delete **{rid}**? guard() stops applying it immediately (within 30s in running agents).")
-            c1, c2, _ = st.columns([1, 1, 3])
-            if c1.button("Yes, delete", key=f"yes_delete_{rid}"):
-                st.session_state.pop(f"confirm_delete_{rid}", None)
-                _act("DELETE", f"/rules/{rid}", agent_id, f"Deleted **{rid}**.")
-            if c2.button("Cancel", key=f"no_delete_{rid}"):
-                st.session_state.pop(f"confirm_delete_{rid}", None)
-                st.rerun()
-
-        if edit_open:
-            st.session_state[f"editing_{rid}"] = True
-        if st.session_state.get(f"editing_{rid}"):
-            editable = {k: v for k, v in rule.items() if k not in ("version", "mode", "agent_id")}
-            text = st.text_area("Edit rule (saves a new version; mode stays the same)",
-                                value=json.dumps(editable, indent=2), height=220, key=f"edit_text_{rid}")
-            c1, c2, _ = st.columns([1, 1, 3])
-            if c1.button("Save new version", key=f"save_{rid}", type="primary"):
-                try:
-                    new = json.loads(text)
-                except ValueError as exc:
-                    st.error(f"That isn't valid JSON: {exc}")
-                    return
-                new["agent_id"] = agent_id
-                status, body = _api("PUT", f"/rules/{rid}", new)
-                if status == 200:
-                    st.session_state.pop(f"editing_{rid}", None)
-                    st.session_state["rule_flash"] = ("success", f"Saved **{rid}** v{body['version']}.")
-                    st.rerun()
-                st.error(_detail(body))
-            if c2.button("Cancel", key=f"cancel_edit_{rid}"):
-                st.session_state.pop(f"editing_{rid}", None)
-                st.rerun()
+    st.error(_detail(body))
 
 
 def _act(method: str, path: str, agent_id: str, ok: str) -> None:
@@ -307,18 +419,14 @@ def _act(method: str, path: str, agent_id: str, ok: str) -> None:
     st.rerun()
 
 
-def _test_section(agent_id: str, rules: List[Dict[str, Any]]) -> None:
-    st.caption("Runs the call through POST /guard — the same rules and the same decision your agent gets. "
-               "Shadow results count toward the rule's would-blocks.")
-    default_tool = rules[0]["match"]["tool"] if rules else "refund_api"
-    with st.form("guard_test"):
-        c1, c2 = st.columns([1, 1])
-        tool = c1.text_input("Tool", value=default_tool)
-        session_id = c2.text_input("Session ID", value="dashboard-test",
-                                   help="Use the same ID several times to test repeated-call rules")
-        args_text = st.text_area("Arguments (JSON)", value='{"amount": 900}', height=90)
-        submitted = st.form_submit_button("Check this call", type="primary")
-    if not submitted:
+@st.dialog("Try it")
+def _try_dialog(agent_id: str, rule: Dict[str, Any]) -> None:
+    rid, tool = rule["id"], rule["match"]["tool"]
+    st.markdown(f'<div class="kr-sentence">{sentence(rule)}</div>', unsafe_allow_html=True)
+    st.caption(f"What would happen if your agent called `{tool}` with these arguments?")
+    args_text = st.text_area("Arguments", value=json.dumps(_example_args(rule)), height=80,
+                             key=f"try_args_{rid}", help="JSON — the same arguments your agent would pass")
+    if not st.button("Check", type="primary", key=f"try_{rid}"):
         return
     try:
         args = json.loads(args_text or "{}")
@@ -326,22 +434,21 @@ def _test_section(agent_id: str, rules: List[Dict[str, Any]]) -> None:
     except (ValueError, AssertionError):
         st.error('Arguments must be a JSON object, like {"amount": 900}')
         return
+    # One session per rule, so repeat-call rules count the calls you try here.
     status, body = _api("POST", "/guard", {"agent_id": agent_id, "tool": tool, "args": args,
-                                           "session_id": session_id})
+                                           "session_id": f"dashboard-try-{rid}"})
     if status != 200:
         st.error(_detail(body))
         return
-    decision = body["decision"]
-    if decision == "ALLOW":
-        st.success(f"**ALLOW** — no enforced rule matched `{tool}`.")
-    elif decision == "DENY":
-        st.error(f"**DENY** by `{body['rule_id']}` v{body['rule_version']}: {body['reason']}")
+    hit = next((h for h in body.get("shadow_hits", []) if h["rule_id"] == rid), None)
+    if body["rule_id"] == rid:
+        st.error(f"**{_PAST.get(body['decision'], 'blocked').capitalize()}.** {body['reason']}")
+    elif hit:
+        st.info(f"**Allowed** — but this rule **would have {_PAST.get(hit['action'], 'blocked')}** it. "
+                "It's only watching.")
     else:
-        st.warning(f"**ESCALATE** by `{body['rule_id']}` v{body['rule_version']}: {body['reason']}")
-    for h in body.get("shadow_hits", []):
-        st.info(f"Shadow: `{h['rule_id']}` v{h['rule_version']} would have returned **{h['action']}** "
-                f"(not applied — promote it to enforce).")
-    curl_body = json.dumps({"agent_id": agent_id, "tool": tool, "args": args, "session_id": session_id})
+        st.success("**Allowed** — this rule doesn't match these arguments.")
     with st.expander("Same check with curl"):
-        st.code(f"curl -s -X POST {API}/guard \\\n  -H 'Authorization: Bearer $KALYTERA_API_KEY' \\\n"
-                f"  -H 'Content-Type: application/json' \\\n  -d '{curl_body}'", language="bash")
+        payload = json.dumps({"agent_id": agent_id, "tool": tool, "args": args, "session_id": "s1"})
+        st.code(f"curl -s -X POST {API}/guard \\\n  -H \"Authorization: Bearer $KALYTERA_API_KEY\" \\\n"
+                f"  -H 'Content-Type: application/json' \\\n  -d '{payload}'", language="bash")
