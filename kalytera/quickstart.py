@@ -83,6 +83,11 @@ def _ask(question: str, assume_yes: bool) -> bool:
     if assume_yes or not sys.stdin.isatty():
         _say(f"  {question} [Y/n] y")
         return True
+    try:  # drop keys pressed while waiting, so they can't answer this question
+        import termios
+        termios.tcflush(sys.stdin, termios.TCIFLUSH)
+    except Exception:
+        pass
     answer = input(f"  {question} [Y/n] ").strip().lower()
     return answer in ("", "y", "yes")
 
@@ -181,10 +186,12 @@ def run(api_key: str, endpoint: str = "", assume_yes: bool = False) -> None:
         state.update(s)
         if s["state"] == "error":
             _fail(f"Scoring failed: {s.get('error')}")
-        n, total = s.get("scored", 0), s.get("to_score", 0)
+        # Sessions the background scorer already handled count as scored.
+        total = len(sessions)
+        n = min(total, total - s.get("to_score", 0) + s.get("scored", 0)) if s.get("to_score") else 0
         if s["state"] in ("analyzing", "done"):
             return s["state"] == "done", f"{total}/{total} scored · looking for patterns…"
-        return False, f"{n}/{total or len(sessions)} scored"
+        return False, f"{n}/{total} scored"
 
     _wait("   ", poll, SCORE_TIMEOUT_S)
     if state.get("judge_errors"):
