@@ -249,8 +249,12 @@ def run(api_key: str, endpoint: str = "", assume_yes: bool = False) -> None:
 
     _say(f"\n  Done in {int(time.monotonic() - started)}s. Kalytera found how this agent fails, wrote the rule, "
          "and it now stops the bad refund before it happens.\n")
-    _say("  Next:")
-    _say(f"    • See it: https://app.kalytera.dev → agent “{agent_id}” → Failure Feed and Rules")
-    _say("    • Your agent: kalytera.trace(...) after each step, and before a risky tool call:")
-    _say("        d = kalytera.guard(\"refund_api\", {\"amount\": amount}, session_id=session_id)")
-    _say("        if not d.allowed: ...")
+    _say("  Next — the same for your own agent (two changes):")
+    _say("    @kalytera.tool                                   # checks rules before each call")
+    _say("    def refund_api(order_id, amount): ...")
+    _say("")
+    _say("    with kalytera.session(conversation_id, input=message) as s:")
+    _say("        s.output = run_my_agent(message)             # recorded and scored")
+    _say("")
+    _say(f"  See this run: https://app.kalytera.dev → agent “{agent_id}”")
+    _say("  Guide: https://github.com/priyamathur/kalytera-server#add-kalytera-to-an-agent-in-production")

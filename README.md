@@ -89,35 +89,64 @@ Kalytera check
 
 If something is wrong you get a specific reason — a rejected key, the monthly limit, or an unreachable server — instead of an empty dashboard. The same check is available in Python as `kalytera.check()`.
 
-**Add to your agent:**
+## Add Kalytera to an agent in production
+
+Two changes to your code: wrap each conversation in a `session`, and mark the tools that can do damage with `@kalytera.tool`.
 
 ```python
 import kalytera
 
-kalytera.configure(api_key="kly_live_...", agent_id="my-agent")
+kalytera.configure(api_key="kly_live_...", agent_id="support-bot")   # agent_id: any name unique to you
 
-# Call after every step in your agent workflow
+@kalytera.tool                          # checks your rules before every call, records it
+def refund_api(order_id: str, amount: float) -> str:
+    ...
+
+def handle(message: str, conversation_id: str) -> str:
+    with kalytera.session(conversation_id, input=message) as s:     # one conversation = one session
+        s.output = run_my_agent(message)                            # however your agent works today
+        return s.output
+```
+
+That's all. Every conversation is recorded with the tool calls made in it and scored when the `with` block ends — also when it raises. In the dashboard you get **Failure Feed** (what keeps going wrong, in how many sessions) and **Rules** (rules Kalytera drafted from those failures).
+
+**When a rule blocks a call.** New rules only watch. Once you click **Start blocking**, a matching call never runs: `@kalytera.tool` raises `kalytera.Blocked` (with `.decision.reason`). To let the agent tell the user instead, return a message:
+
+```python
+@kalytera.tool(on_block=lambda d: f"I can't do that automatically: {d.reason}. A person will follow up.")
+def refund_api(order_id: str, amount: float) -> str: ...
+```
+
+**Works with your stack.**
+- Async: `async def` tools and `async with kalytera.session(...)` work the same way.
+- Agent frameworks: put `@kalytera.tool` *under* the framework's decorator, so the framework still sees your function's signature:
+
+  ```python
+  @function_tool        # OpenAI Agents SDK, or LangChain's @tool
+  @kalytera.tool
+  def refund_api(order_id: str, amount: float) -> str: ...
+  ```
+- Many steps? Call `s.step("plan", input=..., output=...)` inside the session; tool calls attach to the step they happened in.
+- Not Python? Send steps to `POST /trace` and check calls with `POST /guard` ([below](#guard-rules--block-a-known-failure-before-it-happens)).
+
+**Safe to put in front of production.** Recording never blocks or raises: it happens on a background thread, and if your key is rejected or Kalytera is unreachable you get one warning on stderr while your agent keeps running. Rule checks run in your process from a cache (no network or LLM call per check), and if Kalytera is unreachable, tools run — guard fails open. Only rules you promoted can stop a call.
+
+<details>
+<summary>Lower level: <code>kalytera.trace()</code> for full control</summary>
+
+```python
 kalytera.trace(
     session_id="session-001",   # same ID groups steps of one conversation
     step_number=1,
     step_name="retrieve_policy",
     input="What is the cancellation policy?",
     output="You can cancel anytime. No refunds for partial months.",
-    tool_calls=[{"name": "policy_api", "success": True, "latency_ms": 210}],
-)
-
-# Mark the last step so the session is scored
-kalytera.trace(
-    session_id="session-001",
-    step_number=2,
-    step_name="respond",
-    input="Draft reply",
-    output="You can cancel anytime from Settings → Billing.",
-    session_ended=True,
+    tool_calls=[{"name": "policy_api", "input": {"topic": "cancel"}, "success": True}],
+    session_ended=True,         # mark the last step so the session is scored
 )
 ```
 
-`trace()` returns in under 5ms and never raises — sending happens on a background thread. If your key is rejected or the server is unreachable, Kalytera prints one clear warning to stderr instead of failing silently; your agent keeps running either way.
+</details>
 
 **Open the dashboard** at **[app.kalytera.dev](https://app.kalytera.dev)** — scores appear within a minute of a session ending.
 
