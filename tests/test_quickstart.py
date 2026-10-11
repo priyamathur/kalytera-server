@@ -151,3 +151,24 @@ def test_sending_retries_a_restarting_server(qs: SimpleNamespace, capsys: pytest
     with patch.object(tracer, "_http", flaky):
         quickstart.run("kly_live_test", assume_yes=True)
     assert "✓ 48 steps recorded" in capsys.readouterr().out
+
+
+def test_sample_agent_is_created_once_per_account(qs: SimpleNamespace) -> None:
+    from db.models import AgentLog, EvalResult
+    first = qs.client.post("/agents/sample")
+    assert first.status_code == 202, first.text
+    agent = first.json()["agent_id"]
+    assert agent == refresh_api.sample_agent_id("org-1")
+    status = qs.client.get(f"/agents/{agent}/refresh").json()
+    assert status["state"] == "done" and status["sessions_scored"] == 24 and status["sessions_failed"] == 10
+    assert qs.client.post("/agents/sample").status_code == 202      # again: no new data
+    db = qs.session()
+    assert db.query(AgentLog).filter(AgentLog.agent_id == agent).count() == 48
+    assert db.query(EvalResult).filter(EvalResult.agent_id == agent).count() == 24
+    db.close()
+    sugg = qs.client.get("/rules/suggestions", params={"agent_id": agent}).json()["suggestions"]
+    assert sugg[0]["rule"]["match"]["args"] == [{"field": "amount", "op": ">", "value": 450}]
+    assert agent in qs.client.get("/agents").json()
+    qs.org = SimpleNamespace(id="org-2", name="Other", tier="free")
+    assert agent not in qs.client.get("/agents").json()                # not visible to other accounts
+    assert qs.client.post("/agents/sample").json()["agent_id"] != agent

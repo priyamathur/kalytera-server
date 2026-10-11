@@ -192,7 +192,8 @@ rules = client.get("/rules", params={"agent_id": AGENT}, headers=H).json()["rule
 check(len(rules) == 1 and rules[0]["mode"] == "shadow", "rule saved in watch (shadow) mode")
 check(rules[0]["match"]["tool"] == "refund_api", "it's the refund rule")
 at = dashboard("🔴  Failure Feed")
-check("✓ Covered</span> by your rule" in texts(at), "after reload the card says it's covered")
+check("<b>Your rule:</b> Block <code>refund_api</code>" in texts(at)
+      and any(b.label == "▶ Test it" for b in at.button), "after reload the card shows the rule, ready to test")
 check(len([b for b in at.button if b.label == "⚡ Make it a rule"]) == 1, "only the loop rule is still offered")
 
 print("7. Rules page")
@@ -231,5 +232,44 @@ check("39% of sessions" in t, "shown as 39% of 38 sessions")
 print("10. An old bookmark to the Trace Viewer tab doesn't break")
 at = dashboard("🔍  Trace Viewer")
 check(at.radio[0].value == "📊  Overview", "falls back to Overview")
+
+print("11. A brand-new account: welcome panel → sample agent → rule → test → blocking")
+import kalytera.judge as _judge  # noqa: E402
+
+
+def _stand_in_judge(steps, weights=None, pass_threshold=0.7):  # no LLM key in tests
+    bad = next((s for s in steps if any(c.get("success") is False for c in (s.tool_calls or []))), None)
+    base = dict(accuracy=0.9, goal_alignment=0.9, decision_quality=0.9, completeness=0.9, helpfulness=0.9,
+                factuality=0.9, custom_scores={}, confidence=0.9, eval_error=False)
+    if bad is None:
+        return {**base, "overall_score": 0.9, "passed": True, "failure_type": None, "failure_step": None,
+                "failure_reason": None}
+    return {**base, "overall_score": 0.3, "passed": False, "failure_type": "hallucination",
+            "failure_step": str(bad.step_number), "failure_reason": "Said the refund went through; refund_api refused."}
+
+
+_judge.score_session = _stand_in_judge
+r = client.post("/signup", json={"email": f"new-{uuid.uuid4().hex[:6]}@example.com", "name": "Newcomer"})
+NEW_KEY = r.json()["api_key"]
+at = AppTest.from_file("kalytera/dashboard.py", default_timeout=120)
+at.session_state["authenticated"] = True
+at.session_state["api_key"] = NEW_KEY
+run(at)
+check("Run the sample agent" in texts(at) or any(b.label == "▶ Run the sample agent" for b in at.button),
+      "new account sees the welcome panel")
+run(button(at, "▶ Run the sample agent").click())  # scores and switches to the sample agent
+run(at)
+t = texts(at)
+check("Kalytera found this on its own" in t, "lands on the sample agent's Failure Feed with a hint")
+check("<b>10 sessions</b> with a hallucination failure" in t and "Rule ready:</b> Block <code>refund_api</code>" in t,
+      "problem found and a rule is ready")
+run(button(at, "⚡ Make it a rule").click())
+run(button(at, "▶ Test it").click())
+check("would have blocked it" in texts(at), "test while watching: allowed, but would have blocked")
+check("amount=900" in texts(at), "the test uses a clearly-too-large refund (900)")
+run(button(at, "Start blocking").click())
+t = texts(at)
+check("Blocked: refund_api(amount=900)" in t and "The tool never ran." in t, "after Start blocking: Blocked")
+check("That's the loop" in t, "and it points to connecting your own agent")
 
 print("\nAll dashboard checks passed.")

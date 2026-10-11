@@ -322,7 +322,10 @@ div[data-testid="stSidebarCollapsedControl"],
 # ═══════════════════════════════════════════════════════════════════════════════
 import requests as _requests
 
-from kalytera.dashboard_rules import API as _API, create_rule, fetch_suggestion_data, sentence, show_rules  # noqa: E402
+from kalytera.dashboard_rules import (  # noqa: E402
+    API as _API, _api as _rules_api, create_rule, fetch_suggestion_data, promote_rule, sentence, show_rules,
+    try_rule,
+)
 
 
 def _validate_key(key: str) -> Optional[Dict[str, Any]]:
@@ -409,6 +412,13 @@ if not st.session_state.get("authenticated"):
     st.stop()
 
 
+# A finished sample run switches agent and page; widgets can only be set before they render.
+_switch = st.session_state.pop("_switch_to", None)
+if _switch:
+    _agents_for_key.clear()
+    st.session_state["agent_id"], st.session_state["view"] = _switch
+    st.session_state.pop("open_session", None)
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -479,6 +489,13 @@ with st.sidebar:
         "nav", _NAV_OPTIONS, key="view", label_visibility="collapsed",
         on_change=lambda: st.session_state.pop("open_session", None),
     )
+
+    if _stored_key and not any(a.startswith("sample-refund-bot-") for a in _all_agents or []) \
+            and any(a != "demo-agent" for a in _all_agents or []):
+        st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
+        st.button("▶ Try the sample agent", key="sidebar_sample", use_container_width=True,
+                  on_click=st.session_state.__setitem__, args=("_want_sample", True),
+                  help="See Kalytera find a failing agent's problem and block it — about 2 minutes")
 
     st.markdown('<hr style="margin:20px 0 12px"/>', unsafe_allow_html=True)
 
@@ -1174,8 +1191,70 @@ def _rule_box(option: Dict[str, Any]) -> str:
 
 
 def _make_rule(agent_id: str, pattern_id: str, rule: Dict[str, Any]) -> None:
-    ok, msg = create_rule(agent_id, rule)
-    st.session_state.setdefault("_feed_made", {})[pattern_id] = (ok, msg)
+    ok, msg, rid = create_rule(agent_id, rule)
+    st.session_state.setdefault("_feed_made", {})[pattern_id] = {
+        "ok": ok, "msg": msg, "rule": {**rule, "id": rid or rule.get("id")}, "test": None, "blocking": False}
+
+
+def _test_rule(agent_id: str, pattern_id: str) -> None:
+    m = st.session_state["_feed_made"][pattern_id]
+    m["test"] = try_rule(agent_id, m["rule"])
+
+
+def _start_blocking(agent_id: str, pattern_id: str) -> None:
+    m = st.session_state["_feed_made"][pattern_id]
+    ok, msg = promote_rule(agent_id, m["rule"]["id"])
+    m["blocking"] = ok
+    m["test"] = try_rule(agent_id, m["rule"]) if ok else ("error", msg)
+
+
+def _rule_in_place(agent_id: str, p: Any, option: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """The rule this card can test and turn on: one just made here, or one that already covers it."""
+    made = st.session_state.setdefault("_feed_made", {})
+    if p.id not in made and option.get("status") == "exists":
+        made[p.id] = {"ok": True, "msg": "", "rule": {**option["rule"], "id": option["rule_id"]},
+                      "test": None, "blocking": False}
+    m = made.get(p.id)
+    return m if m and m["ok"] else None
+
+
+_TEST_STYLE = {"blocked": ("#fef2f2", "#b91c1c", "✋"), "watching": ("#fffbeb", "#b45309", "👀"),
+               "allowed": ("#f0fdf4", "#15803d", "✓"), "error": ("#fef2f2", "#b91c1c", "✗")}
+
+
+def _rule_controls(agent_id: str, p: Any, m: Dict[str, Any]) -> None:
+    """After a rule exists: try the call it should stop, then turn blocking on — right on the card."""
+    if m["msg"]:
+        st.markdown(f'<div class="ff-rule"><span class="ok">✓ {html.escape(m["msg"])}</span></div>',
+                    unsafe_allow_html=True)
+    else:
+        st.markdown(f'<div class="ff-rule">🛡 <b>Your rule:</b> {sentence(m["rule"])}</div>', unsafe_allow_html=True)
+    if m["test"]:
+        kind, text = m["test"]
+        bg, fg, icon = _TEST_STYLE.get(kind, _TEST_STYLE["error"])
+        st.markdown(f'<div style="background:{bg};color:{fg};border-radius:8px;padding:9px 12px;margin-top:8px;'
+                    f'font-size:14px;font-weight:600">{icon} {html.escape(text)}</div>', unsafe_allow_html=True)
+    if m["blocking"] and m["test"] and m["test"][0] == "blocked":
+        st.markdown(
+            '<div style="font-size:14px;color:#334155;margin-top:10px;line-height:1.6">🎉 <b>That\'s the loop.</b> '
+            'Kalytera spotted the failure in the conversations, wrote the rule from the tool calls, and now '
+            'stops the bad call before the tool runs — no code from you.</div>', unsafe_allow_html=True)
+        with st.popover("Do this for my own agent →"):
+            st.markdown("Two changes ([guide](https://github.com/priyamathur/kalytera-server"
+                        "#add-kalytera-to-an-agent-in-production)):")
+            st.code('import kalytera\nkalytera.configure(api_key="kly_live_...", agent_id="support-bot")\n\n'
+                    '@kalytera.tool                    # checks your rules before each call\n'
+                    'def refund_api(order_id, amount): ...\n\n'
+                    'with kalytera.session(conversation_id, input=message) as s:\n'
+                    '    s.output = run_my_agent(message)', language="python")
+    c1, c2, _ = st.columns([1.5, 1.3, 2.6])
+    c1.button("▶ Test it", key=f"test_{p.id}", type="secondary" if m["test"] else "primary",
+              use_container_width=True, on_click=_test_rule, args=(agent_id, p.id),
+              help="Sends the call this rule should catch through guard(), exactly as your agent would")
+    if not m["blocking"]:
+        c2.button("Start blocking", key=f"block_{p.id}", type="primary" if m["test"] else "secondary",
+                  use_container_width=True, on_click=_start_blocking, args=(agent_id, p.id),
+                  help="From now on guard() stops matching calls before the tool runs")
 
 
 @st.fragment(run_every=AUTO_REFRESH_S)
@@ -1232,16 +1311,16 @@ def _failure_feed_fragment(agent_id: str) -> None:
                 f'<div class="ff-meta">{_problem_meta(g, total)}</div>',
                 unsafe_allow_html=True,
             )
+            in_place = _rule_in_place(agent_id, p, option)
             result = made.get(p.id)
-            if result and result[0]:
-                st.markdown(f'<div class="ff-rule"><span class="ok">✓ {html.escape(result[1])}</span></div>',
-                            unsafe_allow_html=True)
+            if in_place:
+                _rule_controls(agent_id, p, in_place)
             else:
                 st.markdown(_rule_box(option), unsafe_allow_html=True)
-                if result:
-                    st.error(result[1])
+                if result and not result["ok"]:
+                    st.error(result["msg"])
             b1, b2, _ = st.columns([1.3, 1.3, 3])
-            if option.get("status") == "suggested" and not (result and result[0]):
+            if option.get("status") == "suggested" and not in_place:
                 b1.button("⚡ Make it a rule", key=f"make_{p.id}", type="primary", use_container_width=True,
                           on_click=_make_rule, args=(agent_id, p.id, option["rule"]),
                           help="Adds this rule in watch mode: it counts matching calls and never blocks "
@@ -1321,6 +1400,8 @@ def _pattern_sessions(agent_id: str, p: Any) -> None:
 
 def _show_failure_feed(agent_id: str) -> None:
     _page_header("Failure Feed", "What keeps going wrong, and the sessions it happened in")
+    if agent_id.startswith(SAMPLE_PREFIX):
+        _sample_hint()
     _failure_feed_fragment(agent_id)
 
 
@@ -1705,12 +1786,101 @@ def _search_bar() -> None:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# SAMPLE AGENT — a new account's first two minutes
+# ═══════════════════════════════════════════════════════════════════════════════
+SAMPLE_PREFIX = "sample-refund-bot-"
+SAMPLE_SESSIONS = 24
+SAMPLE_TIMEOUT_S = 240
+
+
+def _run_sample_agent() -> None:
+    """Create the sample agent's conversations on the server and show scoring live."""
+    import time
+
+    status, body = _rules_api("POST", "/agents/sample")
+    if status not in (200, 202):
+        st.error(f"Couldn't start the sample agent: {body.get('detail') if isinstance(body, dict) else body}")
+        return
+    agent = body["agent_id"]
+    with st.status("Running the sample agent…", expanded=True) as box:
+        st.write(f"✓ {SAMPLE_SESSIONS} customer conversations sent")
+        bar = st.progress(0.0, text="The AI judge is reading each conversation…")
+        deadline = time.monotonic() + SAMPLE_TIMEOUT_S
+        while time.monotonic() < deadline:
+            _, s_ = _rules_api("GET", f"/agents/{agent}/refresh")
+            state = s_.get("state") if isinstance(s_, dict) else "error"
+            if state == "error":
+                box.update(label="Scoring failed", state="error")
+                st.error(s_.get("error") if isinstance(s_, dict) else "Scoring failed")
+                return
+            to_score = s_.get("to_score") or 0
+            done = SAMPLE_SESSIONS - to_score + s_.get("scored", 0) if to_score else 0
+            if state in ("analyzing", "done"):
+                bar.progress(1.0, text="Looking for what the failures have in common…")
+            else:
+                bar.progress(min(done, SAMPLE_SESSIONS) / SAMPLE_SESSIONS,
+                             text=f"The AI judge is reading conversation {min(done + 1, SAMPLE_SESSIONS)} "
+                                  f"of {SAMPLE_SESSIONS}…")
+            if state == "done":
+                box.update(label=f"Done — {s_.get('sessions_failed', 0)} of {s_.get('sessions_scored', 0)} "
+                                 f"conversations failed", state="complete")
+                break
+            time.sleep(2)
+        else:
+            box.update(label="Still scoring — check Failure Feed in a minute", state="running")
+    st.session_state["_switch_to"] = (agent, "🔴  Failure Feed")
+    st.rerun()
+
+
+def _welcome_panel() -> None:
+    with st.container(border=True):
+        st.markdown(
+            '<div style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:6px">'
+            'See Kalytera catch a failing agent — about 2 minutes, no code</div>'
+            '<div style="font-size:14px;color:#475569;line-height:1.65;max-width:760px">'
+            'A sample refund agent handles 24 customer conversations. Its refund tool rejects refunds over '
+            '$500, but the agent tells the customer the refund went through anyway. <b>Kalytera isn\'t told any '
+            'of this</b> — watch it find the problem, write the rule, and stop the next bad refund.</div>',
+            unsafe_allow_html=True,
+        )
+        c1, c2, _ = st.columns([1.4, 1.6, 3])
+        run = c1.button("▶ Run the sample agent", type="primary", use_container_width=True, key="run_sample")
+        with c2.popover("Connect my own agent", use_container_width=True):
+            st.markdown("Two changes in your code ([guide](https://github.com/priyamathur/kalytera-server"
+                        "#add-kalytera-to-an-agent-in-production)):")
+            st.code('import kalytera\nkalytera.configure(api_key="kly_live_...", agent_id="support-bot")\n\n'
+                    '@kalytera.tool                    # checks your rules before each call\n'
+                    'def refund_api(order_id, amount): ...\n\n'
+                    'with kalytera.session(conversation_id, input=message) as s:\n'
+                    '    s.output = run_my_agent(message)', language="python")
+    if run:
+        _run_sample_agent()
+
+
+def _sample_hint() -> None:
+    st.markdown(
+        '<div style="background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:10px;'
+        'padding:10px 14px;font-size:14px;margin-bottom:6px">👇 Kalytera found this on its own from the '
+        'conversations. Click <b>⚡ Make it a rule</b>, then <b>▶ Test it</b> and <b>Start blocking</b>.</div>',
+        unsafe_allow_html=True,
+    )
+
+
+_own_agents = [a for a in (_all_agents or []) if a != "demo-agent"]
+_has_sample = any(a.startswith(SAMPLE_PREFIX) for a in _own_agents)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # ROUTER
 # ═══════════════════════════════════════════════════════════════════════════════
 _search_bar()
 _open_sid = st.session_state.get("open_session")
 if _open_sid:
     _show_trace(agent_id, str(_open_sid))
+elif st.session_state.pop("_want_sample", False):
+    _run_sample_agent()
+elif _stored_key and not _own_agents:
+    _welcome_panel()  # a new account: nothing of its own to show yet
 elif "Overview" in view:
     _show_overview(agent_id)
 elif "Failure" in view:

@@ -74,15 +74,52 @@ def _detail(body: Any) -> str:
     return d if isinstance(d, str) else json.dumps(d) if d else "Unknown error"
 
 
-def create_rule(agent_id: str, rule: Dict[str, Any]) -> Tuple[bool, str]:
-    """Create a rule (always in watch mode). Returns (ok, message for the user)."""
+def create_rule(agent_id: str, rule: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
+    """Create a rule (always in watch mode). Returns (ok, message for the user, rule id)."""
     status, body = _api("POST", "/rules", {**rule, "agent_id": rule.get("agent_id") or agent_id})
     _fetch_suggestions.clear()
     _rule_stats.clear()
     if status == 201:
         return True, (f"Added rule “{body['id']}”. It's watching: it counts matching calls and blocks nothing "
-                      f"until you turn on blocking in Rules.")
-    return False, f"Couldn't add the rule: {_detail(body)}"
+                      f"until you turn on blocking."), body["id"]
+    return False, f"Couldn't add the rule: {_detail(body)}", None
+
+
+def try_rule(agent_id: str, rule: Dict[str, Any]) -> Tuple[str, str]:
+    """
+    Send the call the rule is meant to catch through POST /guard, the way the agent
+    would. Repeat-count rules get as many calls as they need. Returns (kind, message):
+    kind is "blocked", "watching" (would have blocked), "allowed" or "error".
+    """
+    rid, tool = rule["id"], rule["match"]["tool"]
+    args = _example_args(rule)
+    repeat = max([int(c.get("value", 1)) for c in rule.get("session_conditions", [])] or [1])
+    session = f"dashboard-test-{rid}-{os.urandom(3).hex()}"
+    body: Dict[str, Any] = {}
+    for _ in range(repeat):
+        status, body = _api("POST", "/guard", {"agent_id": agent_id, "tool": tool, "args": args,
+                                               "session_id": session})
+        if status != 200:
+            return "error", _detail(body)
+    call = f"{tool}({', '.join(f'{k}={json.dumps(v)}' for k, v in args.items())})"
+    if repeat > 1:
+        call = f"{call} × {repeat}"
+    if body.get("rule_id") == rid:
+        verb = "Flagged for review" if body["decision"] == "ESCALATE" else "Blocked"
+        reason = (body.get("reason") or "").rstrip(". ")
+        return "blocked", f"{verb}: {call} — “{reason}”. The tool never ran."
+    if any(h["rule_id"] == rid for h in body.get("shadow_hits", [])):
+        return "watching", f"Allowed: {call} — but the rule would have blocked it. It's only watching."
+    return "allowed", f"Allowed: {call} — the rule doesn't match it."
+
+
+def promote_rule(agent_id: str, rid: str) -> Tuple[bool, str]:
+    status, body = _api("POST", f"/rules/{rid}/promote", params={"agent_id": agent_id})
+    _fetch_suggestions.clear()
+    _rule_stats.clear()
+    if status in (200, 409):
+        return True, "Blocking is on. Running agents pick it up within 30 seconds."
+    return False, _detail(body)
 
 
 def fetch_suggestion_data(agent_id: str) -> Dict[str, Any]:
@@ -156,13 +193,22 @@ def _parse_value(raw: str, op: str) -> Any:
         return raw
 
 
+def _clearly_above(v: float) -> float:
+    """A round value well over the limit (450 -> 900) so a test call is obviously one to stop."""
+    if v <= 0:
+        return v + 1
+    nice = float(f"{v * 2:.2g}")
+    nice = nice if nice > v else v + 1
+    return int(nice) if float(nice).is_integer() else nice
+
+
 def _example_args(rule: Dict[str, Any]) -> Dict[str, Any]:
     """Arguments that would match the rule, to prefill 'Try it'."""
     out: Dict[str, Any] = {}
     for p in rule.get("match", {}).get("args", []):
         v = p["value"]
         if p["op"] == ">" and isinstance(v, (int, float)):
-            v = v + 1
+            v = _clearly_above(v)
         elif p["op"] == "<" and isinstance(v, (int, float)):
             v = v - 1
         elif p["op"] == "in" and isinstance(v, list) and v:
@@ -455,10 +501,9 @@ def _delete_dialog(agent_id: str, rid: str) -> None:
 # ── Actions ──────────────────────────────────────────────────────────────────
 
 def _create(agent_id: str, rule: Dict[str, Any]) -> None:
-    ok, msg = create_rule(agent_id, rule)
+    ok, msg, _ = create_rule(agent_id, rule)
     if ok:
-        st.session_state["rule_flash"] = ("success", msg.replace("in Rules.", "below. Use **Try it** to "
-                                                                 "see what it would do."))
+        st.session_state["rule_flash"] = ("success", msg + " Use **Try it** to see what it would do.")
         st.rerun()
     st.error(msg)
 
