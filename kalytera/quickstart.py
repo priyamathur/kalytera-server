@@ -211,7 +211,8 @@ def run(api_key: str, endpoint: str = "", assume_yes: bool = False) -> None:
     if state.get("judge_errors"):
         _say(f"     ⚠ The judge couldn't score {_plural(state['judge_errors'], 'conversation')}.")
     failed, scored = state.get("sessions_failed", 0), state.get("sessions_scored", 0)
-    _say(f"     ✓ {failed} of {scored} conversations failed\n")
+    earlier = " (including earlier quickstart runs)" if scored > len(sessions) else ""
+    _say(f"     ✓ {failed} of {scored} conversations failed{earlier}\n")
 
     # ── 3. Pattern + drafted rule ────────────────────────────────────────────
     _say("3/4  Kalytera looked for what the failures have in common")

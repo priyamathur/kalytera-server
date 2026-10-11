@@ -8,8 +8,9 @@ a person edits the draft and creates it, and it starts in shadow mode.
 Heuristics (deliberately simple, every one explained in `evidence`):
   - tool:   the tool with the most failed calls in failing sessions, else the
             tool called most often in them
-  - number: `field > max(passing)` if every failing value is above every
-            passing value (or `<` for the mirror case)
+  - number: `field > T` (or `<`), T a passing value, catching at least 60% of
+            failing calls and at most 10% of passing ones — the odd mislabelled
+            session doesn't stop a clear cut-off
   - text:   `field in [...]` if failing sessions used a few values that
             passing sessions never did, and each value recurs across failing
             sessions (so IDs, which are unique per session, are never proposed)
@@ -24,6 +25,8 @@ from collections import Counter
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 MAX_IN_VALUES = 5
+MIN_FAIL_SHARE = 0.6    # a numeric cut-off must catch at least this share of failing calls
+MAX_PASS_SHARE = 0.1    # …and match at most this share of passing calls
 LOOP_WINDOW_S = 600
 MIN_LOOP_COUNT = 3
 
@@ -85,13 +88,17 @@ def _arg_predicates(fail_calls: List[Tuple[int, Call]],
         if not fv or not pv:
             continue
         if all(_is_number(v) for v in fv + pv):
-            if min(fv) > max(pv):
-                preds.append({"field": field, "op": ">", "value": max(pv)})
-                evidence.append(f"Every failing call had `{field}` above {max(pv)} (failing: {min(fv)}–{max(fv)}); "
-                                f"no passing call did.")
-            elif max(fv) < min(pv):
-                preds.append({"field": field, "op": "<", "value": min(pv)})
-                evidence.append(f"Every failing call had `{field}` below {min(pv)}; no passing call did.")
+            best = _threshold(fv, pv)
+            if best:
+                op, t, fa, pa = best
+                preds.append({"field": field, "op": op, "value": t})
+                side = "above" if op == ">" else "below"
+                if fa == len(fv) and pa == 0:
+                    evidence.append(f"Every failing call had `{field}` {side} {t} (failing: {min(fv)}–{max(fv)}); "
+                                    f"no passing call did.")
+                else:
+                    evidence.append(f"{fa} of {len(fv)} failing calls had `{field}` {side} {t}; "
+                                    f"only {pa} of {len(pv)} passing calls did.")
         elif all(isinstance(v, str) for v in fv + pv):
             only_failing = sorted(set(fv) - set(pv))
             sessions_with_field = {fail_sessions[k] for k, a in enumerate(fail_args) if field in a}
@@ -100,6 +107,33 @@ def _arg_predicates(fail_calls: List[Tuple[int, Call]],
                 preds.append({"field": field, "op": "in", "value": only_failing})
                 evidence.append(f"Failing calls used `{field}` = {', '.join(only_failing)}; passing calls never did.")
     return preds, evidence
+
+
+def _threshold(fv: List[float], pv: List[float]) -> Optional[Tuple[str, float, int, int]]:
+    """
+    (op, value, failing calls matched, passing calls matched) for the cut-off that
+    best separates failing values from passing ones, or None.
+
+    Real traffic is noisy — the judge passes the odd bad session — so the cut-off
+    doesn't need to be perfect: it must catch at least MIN_FAIL_SHARE of failing
+    calls and at most MAX_PASS_SHARE of passing ones. Candidate cut-offs are passing
+    values, so the rule reads "more than <a value that went fine>".
+    """
+    best: Optional[Tuple[int, int, str, float]] = None
+    for t in sorted(set(pv)):
+        for op, fa, pa in ((">", sum(v > t for v in fv), sum(v > t for v in pv)),
+                           ("<", sum(v < t for v in fv), sum(v < t for v in pv))):
+            if fa < MIN_FAIL_SHARE * len(fv) or pa > MAX_PASS_SHARE * len(pv):
+                continue
+            # Most failures caught, then fewest good calls hit, then the most conservative cut-off.
+            key = (fa - pa, -pa, op, t if op == ">" else -t)
+            if best is None or key > best:
+                best = key
+    if best is None:
+        return None
+    _, neg_pa, op, signed_t = best
+    t = signed_t if op == ">" else -signed_t
+    return op, t, sum((v > t) if op == ">" else (v < t) for v in fv), -neg_pa
 
 
 def _repeat_threshold(tool: str, failing: List[List[Call]], passing: List[List[Call]],

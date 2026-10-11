@@ -94,3 +94,27 @@ def test_unique_ids_are_not_proposed_as_value_lists():
     passing = [[_call("refund_api", order_id=f"p{i}")] for i in range(5)]
     d = draft_rule("a", "failure_type", "tool_failure", failing, passing)
     assert d["rule"]["match"]["args"] == []
+
+
+def test_one_mislabelled_session_does_not_block_the_cutoff():
+    # What production did: the judge passed one large refund among 30 that failed.
+    failing = [[_call("refund_api", False, amount=a)] for a in [620, 750, 890, 940, 1200] * 6][:29]
+    passing = [[_call("refund_api", amount=a)] for a in [25, 60, 120, 199, 310, 450] * 7] + \
+              [[_call("refund_api", amount=1350)]]
+    d = draft_rule("a", "workflow_step", "issue_refund", failing, passing)
+    assert d["rule"]["match"]["args"] == [{"field": "amount", "op": ">", "value": 450}]
+    assert d["coverage"]["failing_matched"] == 29 and d["coverage"]["passing_matched"] == 1
+    assert any("29 of 29 failing calls" in e and "only 1 of 43 passing" in e for e in d["evidence"])
+
+
+def test_noise_beyond_the_limits_gives_no_cutoff():
+    failing = [[_call("refund_api", False, amount=a)] for a in (900, 100, 120, 950)]   # only half are large
+    passing = [[_call("refund_api", amount=a)] for a in (110, 130, 90)]
+    assert draft_rule("a", "failure_type", "x", failing, passing)["rule"]["match"]["args"] == []
+
+
+def test_lower_cutoff_mirror_case():
+    failing = [[_call("transfer", False, balance=a)] for a in (5, 10, 2, 8)]
+    passing = [[_call("transfer", balance=a)] for a in (50, 80, 120, 300)]
+    assert draft_rule("a", "failure_type", "x", failing, passing)["rule"]["match"]["args"] == [
+        {"field": "balance", "op": "<", "value": 50}]
