@@ -112,3 +112,20 @@ def test_session_steps_scoped_to_agent(seeded: Session) -> None:
     assert len(get_session_steps("s1", seeded, agent_id="other-bot")) == 1
     steps = get_session_steps("s1", seeded, agent_id=AGENT)
     assert all(ev is not None and ev.agent_id == AGENT for _, ev in steps)
+
+
+def test_usage_counter_creates_then_increments(db: Session) -> None:
+    from db.queries import increment_session_count
+    assert increment_session_count("org-1", "2026-10", db) == 1
+    assert increment_session_count("org-1", "2026-10", db) == 2
+    assert increment_session_count("org-1", "2026-11", db) == 1
+    assert increment_session_count("org-2", "2026-10", db) == 1
+
+
+def test_step_names_label_numbered_steps(seeded: Session) -> None:
+    from db.queries import get_step_names, step_label
+    names = get_step_names(AGENT, seeded)
+    assert names == {"1": "plan", "2": "reply"}
+    assert step_label("2", names) == "reply"
+    assert step_label("reply", names) == "reply"
+    assert step_label(None, names) == ""

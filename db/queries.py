@@ -43,20 +43,32 @@ def insert_agent_log(payload: Dict[str, Any], db: Session) -> AgentLog:
     return row
 
 
-def upsert_agent_org(agent_id: str, org_id: str, db: Session) -> None:
-    """Record that this org owns this agent_id. Safe to call on every trace."""
+def upsert_agent_org(agent_id: str, org_id: str, db: Session) -> bool:
+    """
+    Claim agent_id for this org, or confirm the org already owns it. Safe to call
+    on every trace. Returns False if another org owns it (or it's a shared demo
+    agent): the first org to use an agent_id keeps it, so no one can take over
+    another account's agent — and its data — by sending a trace with its name.
+    """
     from sqlalchemy import text
+    if agent_id in DEMO_AGENT_IDS:
+        return False
     now = datetime.now(timezone.utc)
     db.execute(
         text("""
             INSERT INTO agent_orgs (agent_id, org_id, first_seen, last_seen)
             VALUES (:agent_id, :org_id, :now, :now)
-            ON CONFLICT (agent_id) DO UPDATE
-            SET org_id = :org_id, last_seen = :now
+            ON CONFLICT (agent_id) DO NOTHING
         """),
         {"agent_id": agent_id, "org_id": org_id, "now": now},
     )
+    owned = (
+        db.query(AgentOrg)
+        .filter(AgentOrg.agent_id == agent_id, AgentOrg.org_id == org_id)
+        .update({AgentOrg.last_seen: now}, synchronize_session=False)
+    )
     db.commit()
+    return bool(owned)
 
 
 def get_agent_ids_for_org(org_id: str, db: Session) -> List[str]:
@@ -525,7 +537,7 @@ def search_eval_failures(
 
 def get_session_failure_counts(agent_id: str, db: Session) -> Dict[str, Any]:
     """
-    Distinct sessions, all time: {"total": sessions evaluated,
+    Distinct sessions, all time: {"total": sessions evaluated, "failed": failed sessions,
     "workflow_step": {step: failed sessions}, "failure_type": {type: failed sessions}}.
     Lets the Failure Feed say "12 sessions (8%)" instead of counting scored steps.
     """
@@ -537,9 +549,31 @@ def get_session_failure_counts(agent_id: str, db: Session) -> Dict[str, Any]:
     by_type = failing.with_entities(EvalResult.failure_type, sessions).group_by(EvalResult.failure_type).all()
     return {
         "total": int(base.with_entities(sessions).scalar() or 0),
+        "failed": int(failing.with_entities(sessions).scalar() or 0),
         "workflow_step": {str(k): int(n) for k, n in by_step if k is not None},
         "failure_type": {str(k): int(n) for k, n in by_type if k is not None},
     }
+
+
+def get_step_names(agent_id: str, db: Session) -> Dict[str, str]:
+    """{"2": "issue_refund"} — the judge reports failing steps by number; show their names."""
+    rows = (
+        db.query(AgentLog.step_number, AgentLog.step_name, func.count(AgentLog.id))
+        .filter(AgentLog.agent_id == agent_id)
+        .group_by(AgentLog.step_number, AgentLog.step_name)
+        .order_by(func.count(AgentLog.id).desc())
+        .all()
+    )
+    names: Dict[str, str] = {}
+    for number, name, _ in rows:  # most common name per step number wins
+        if name:
+            names.setdefault(str(number), name)
+    return names
+
+
+def step_label(value: Optional[str], names: Dict[str, str]) -> str:
+    """'2' -> 'issue_refund' when known; names pass through."""
+    return names.get(str(value), str(value)) if value is not None else ""
 
 
 def get_pattern_sessions(
@@ -708,21 +742,38 @@ def get_current_usage(org_id: str, period: str, db: Session) -> Optional[UsageRe
 
 
 def increment_session_count(org_id: str, period: str, db: Session) -> int:
-    """Increment session_count by 1 for the given org+period. Returns new count."""
-    record = (
-        db.query(UsageRecord)
-        .filter(UsageRecord.org_id == org_id, UsageRecord.period == period)
-        .first()
-    )
-    if record is None:
-        record = UsageRecord(org_id=org_id, period=period, session_count=1)
-        db.add(record)
+    """
+    Increment session_count by 1 for the given org+period. Returns new count.
+    Safe under concurrent requests: the increment happens in SQL, and two
+    requests creating the month's row at once fall back to the increment.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    def bump() -> int:
+        updated = (
+            db.query(UsageRecord)
+            .filter(UsageRecord.org_id == org_id, UsageRecord.period == period)
+            .update({UsageRecord.session_count: UsageRecord.session_count + 1,
+                     UsageRecord.updated_at: datetime.now(timezone.utc)}, synchronize_session=False)
+        )
+        db.commit()
+        return updated
+
+    if bump():
+        return _usage_count(org_id, period, db)
+    try:
+        db.add(UsageRecord(org_id=org_id, period=period, session_count=1))
         db.commit()
         return 1
-    record.session_count += 1
-    record.updated_at = datetime.now(timezone.utc)
-    db.commit()
-    return record.session_count
+    except IntegrityError:
+        db.rollback()  # another request created it first
+        bump()
+        return _usage_count(org_id, period, db)
+
+
+def _usage_count(org_id: str, period: str, db: Session) -> int:
+    record = db.query(UsageRecord).filter(UsageRecord.org_id == org_id, UsageRecord.period == period).first()
+    return int(record.session_count) if record else 0
 
 
 def update_org_stripe(org_id: str, stripe_customer_id: str, subscription_id: str, tier: str, db: Session) -> None:

@@ -166,6 +166,8 @@ from db.queries import (  # noqa: E402
     get_recent_eval_failures,
     get_pattern_sessions,
     get_session_failure_counts,
+    get_step_names,
+    step_label,
     get_score_buckets,
     get_session_and_latency_stats,
     get_session_steps,
@@ -1195,6 +1197,13 @@ def _failure_feed_fragment(agent_id: str) -> None:
         return
 
     problems = _problems(patterns, counts)
+    db = _db()
+    try:
+        names = get_step_names(agent_id, db)
+    finally:
+        db.close()
+    for g in problems:
+        g["steps"] = [step_label(v, names) for v in g["steps"]]
     by_pattern = fetch_suggestion_data(agent_id).get("by_pattern", {}) if problems else {}
     total = counts.get("total", 0)
     recent_sessions = len({log.session_id for _, log in recent})
@@ -1202,7 +1211,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
     st.markdown(
         f'<div class="ff-meta" style="margin:-8px 0 4px">{n_recent} recent failed '
         f'session{"s" if recent_sessions != 1 else ""}'
-        + (f" · {len(problems)} problem{'s' if len(problems) != 1 else ''} that keep happening" if problems else "")
+        + (f" · {len(problems)} problem{'s keep' if len(problems) != 1 else ' keeps'} happening" if problems else "")
         + "</div>",
         unsafe_allow_html=True,
     )
@@ -1289,6 +1298,7 @@ def _pattern_sessions(agent_id: str, p: Any) -> None:
     db = _db()
     try:
         sessions = get_pattern_sessions(agent_id, p.pattern_type, p.pattern_value, PATTERN_SESSIONS_SHOWN, db)
+        names = get_step_names(agent_id, db)
     finally:
         db.close()
     if not sessions:
@@ -1299,7 +1309,7 @@ def _pattern_sessions(agent_id: str, p: Any) -> None:
         text.markdown(
             f'<div class="ff-row"><code>{html.escape(s["session_id"])}</code></div>'
             f'<div class="ff-sub">{_ago(s["failed_at"])} · score {int(s["overall_score"] * 100)}'
-            f'{" · at " + html.escape(str(s["failure_step"])) if s["failure_step"] else ""}</div>',
+            f'{" · at " + html.escape(step_label(s["failure_step"], names)) if s["failure_step"] else ""}</div>',
             unsafe_allow_html=True,
         )
         if btn.button("Open", key=f"ps_{p.id}_{s['session_id']}", use_container_width=True):

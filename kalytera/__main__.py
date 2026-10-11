@@ -2,6 +2,7 @@
 kalytera CLI — invoked as:
     kalytera demo                  # no API key needed
     kalytera check                 # verify your key end-to-end
+    kalytera quickstart            # sample agent → failure pattern → rule → guard() blocks
     kalytera rules ...             # create, promote and inspect guard rules
     kalytera proxy ...
     python -m kalytera <command> ...
@@ -36,9 +37,12 @@ def _cmd_proxy(args: argparse.Namespace) -> None:
 
 def _cmd_check(args: argparse.Namespace) -> None:
     import kalytera
+    from kalytera.quickstart import agent_name
+
+    api_key = args.api_key or os.getenv("KALYTERA_API_KEY", "")
     kalytera.configure(
-        api_key=args.api_key or os.getenv("KALYTERA_API_KEY", ""),
-        agent_id=args.agent_id or os.getenv("KALYTERA_AGENT_ID", "kalytera-check"),
+        api_key=api_key,
+        agent_id=args.agent_id or os.getenv("KALYTERA_AGENT_ID", "") or agent_name("kalytera-check", api_key),
         api_endpoint=args.endpoint,
         verify=False,
     )
@@ -164,6 +168,12 @@ def main() -> None:
     check_p.add_argument("--endpoint", default="", metavar="URL", help="Kalytera API endpoint (default: https://api.kalytera.dev)")
     check_p.add_argument("--no-wait", action="store_true", help="Don't wait for the server to score the test step")
 
+    qs_p = sub.add_parser("quickstart", help="See the whole loop in ~2 minutes: a sample agent fails, Kalytera "
+                                             "finds the pattern, drafts a rule, and guard() blocks the next bad call")
+    qs_p.add_argument("--api-key", default="", metavar="KEY", help="Kalytera API key (or KALYTERA_API_KEY env var)")
+    qs_p.add_argument("--endpoint", default="", metavar="URL", help="Kalytera API endpoint (default: https://api.kalytera.dev)")
+    qs_p.add_argument("--yes", "-y", action="store_true", help="Answer yes to both questions")
+
     proxy_p = sub.add_parser("proxy", help="Start a transparent LLM proxy for zero-code monitoring")
     proxy_p.add_argument("--port", type=int, default=8787, help="Local port to listen on (default: 8787)")
     proxy_p.add_argument("--api-key", default="", metavar="KEY", help="Kalytera API key (or KALYTERA_API_KEY env var)")
@@ -197,6 +207,9 @@ def main() -> None:
     if args.command == "demo":
         from kalytera.demo import run
         run()
+    elif args.command == "quickstart":
+        from kalytera.quickstart import run as run_quickstart
+        run_quickstart(args.api_key or os.getenv("KALYTERA_API_KEY", ""), args.endpoint, assume_yes=args.yes)
     elif args.command == "check":
         _cmd_check(args)
     elif args.command == "proxy":

@@ -33,19 +33,35 @@ That's it. Kalytera scores every step with an LLM judge and surfaces failure pat
 
 ## Get started
 
-**0. See it work first — no account needed:**
+**See the whole loop in about two minutes** (free key, no credit card, at **[kalytera.dev](https://kalytera.dev)** → *Get API key*):
 
 ```bash
 pip install kalytera
-kalytera demo
+export KALYTERA_API_KEY=kly_live_...
+kalytera quickstart
 ```
 
-This runs a bundled billing-agent session through Kalytera's checks on your machine and shows the step where it broke.
+A sample refund agent sends 24 conversations to your account. Its refund tool rejects refunds over $500, but the agent tells the customer the refund went through. Kalytera hasn't been told any of that:
 
-**1. Get a free API key** (no credit card) at **[kalytera.dev](https://kalytera.dev)** → *Get API key*. Your key looks like `kly_live_...`.
+```
+2/4  The AI judge reads each conversation and scores it
+     ✓ 10 of 24 conversations failed
+3/4  Kalytera looked for what the failures have in common
+     It compared their tool calls with the ones that went fine, and drafted a rule:
+       🛡  Block refund_api when amount is more than 450
+          Would have caught 10 of 10 failed conversations · 0 of 14 good ones
+4/4  Your agent is about to call refund_api(amount=900)
+       guard() → ALLOW   (watching: the rule would have blocked it)
+       guard() → DENY    (after you turn on blocking)
+       guard() for a $120 refund → ALLOW
+```
+
+Everything goes to a separate agent, `quickstart-refund-bot`, so your own agents' data is untouched. Open **[app.kalytera.dev](https://app.kalytera.dev)** to see it in **Failure Feed** and **Rules**.
+
+No key yet? `kalytera demo` runs a bundled session through Kalytera's checks locally.
 
 <details>
-<summary>Prefer the terminal?</summary>
+<summary>Get a key from the terminal</summary>
 
 ```bash
 curl -s -X POST https://api.kalytera.dev/signup \
@@ -55,7 +71,7 @@ curl -s -X POST https://api.kalytera.dev/signup \
 
 </details>
 
-**2. Confirm your key works end-to-end:**
+**Then, with your own agent — confirm your key works end-to-end:**
 
 ```bash
 KALYTERA_API_KEY=kly_live_... kalytera check
@@ -66,14 +82,14 @@ KALYTERA_API_KEY=kly_live_... kalytera check
 ```
 Kalytera check
   ✓ API key accepted
-  ✓ Test step recorded  (agent_id='kalytera-check', session_id='kalytera-check-…')
+  ✓ Test step recorded  (agent_id='kalytera-check-3f9a1c', session_id='kalytera-check-…')
   … waiting for the server to score it (up to 90s)
   ✓ Scored by the LLM judge: overall 0.88  (passed)
 ```
 
 If something is wrong you get a specific reason — a rejected key, the monthly limit, or an unreachable server — instead of an empty dashboard. The same check is available in Python as `kalytera.check()`.
 
-**3. Add to your agent:**
+**Add to your agent:**
 
 ```python
 import kalytera
@@ -103,7 +119,7 @@ kalytera.trace(
 
 `trace()` returns in under 5ms and never raises — sending happens on a background thread. If your key is rejected or the server is unreachable, Kalytera prints one clear warning to stderr instead of failing silently; your agent keeps running either way.
 
-**4. Open the dashboard** at **[app.kalytera.dev](https://app.kalytera.dev)** — scores appear within a minute of a session ending.
+**Open the dashboard** at **[app.kalytera.dev](https://app.kalytera.dev)** — scores appear within a minute of a session ending.
 
 Requires Python 3.9+ (the default `python3` on macOS works).
 

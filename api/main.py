@@ -3,6 +3,7 @@ Kalytera API — core endpoints + billing.
   POST /trace                        — receive AgentLog from tracer
   GET  /trace/{log_id}/eval          — scoring status for one step (kalytera.check())
   GET  /agents/{agent_id}/patterns   — return LossPattern rows
+  POST /agents/{agent_id}/refresh    — score new sessions + find patterns now (api/refresh_api.py)
   /rules, /guard                     — guard rules (api/guard_api.py)
   /billing/*                         — usage, checkout, webhook
   /admin/tenants                     — tenant management
@@ -38,6 +39,7 @@ from db.queries import (
 from api.billing import router as billing_router, TIERS, hash_key
 from api.proxy_router import router as proxy_router
 from api.guard_api import build_router as build_guard_router
+from api.refresh_api import build_router as build_refresh_router, score_session_once
 
 logger = logging.getLogger(__name__)
 
@@ -187,8 +189,6 @@ def _eval_batch() -> None:
 
 def _eval_sessions(agent_ids: List[str], db: Any) -> None:
     """Session-level eval: one Haiku call per complete session (free tier)."""
-    from kalytera.judge import evaluate_session
-
     for agent_id in agent_ids:
         try:
             session_ids = get_unevaluated_sessions(agent_id, batch_size=20, db=db)
@@ -198,10 +198,9 @@ def _eval_sessions(agent_ids: List[str], db: Any) -> None:
             continue
         for session_id in session_ids:
             try:
-                evaluate_session(session_id, db)
+                score_session_once(session_id)  # skips sessions a refresh is already scoring
             except Exception as exc:
                 logger.error("[eval] session=%s error: %s", session_id, exc)
-                db.rollback()
 
 
 def _eval_steps(agent_ids: List[str], db: Any) -> None:
@@ -318,6 +317,7 @@ app.add_middleware(
 app.include_router(billing_router)
 app.include_router(proxy_router)
 app.include_router(build_guard_router(_resolve_org, get_agent_ids_for_org))
+app.include_router(build_refresh_router(_resolve_org, get_agent_ids_for_org))
 
 
 # ---------------------------------------------------------------------------
@@ -397,11 +397,16 @@ async def post_trace(
     Receive one agent step from kalytera.trace().
     Writes an AgentLog row, increments monthly usage for customer keys.
     """
+    if org is not None and not upsert_agent_org(payload.agent_id, org.id, db):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"agent_id '{payload.agent_id}' is already used by another Kalytera account. "
+                   f"Pick a different agent_id in kalytera.configure(agent_id=...).",
+        )
     insert_agent_log(payload.model_dump(), db)
     if org is not None:
         period = datetime.now(timezone.utc).strftime("%Y-%m")
         increment_session_count(org.id, period, db)
-        upsert_agent_org(payload.agent_id, org.id, db)
     return TraceResponse(id=payload.id, status="accepted")
 
 

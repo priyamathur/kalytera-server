@@ -257,7 +257,13 @@ async def _send(payload: Dict[str, Any]) -> None:
     timeout = aiohttp.ClientTimeout(total=_cfg.REQUEST_TIMEOUT)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         async with session.post(f"{endpoint}/trace", json=payload, headers=headers) as resp:
-            if resp.status >= 400:
+            if resp.status == 409:
+                try:
+                    detail = _detail(await resp.json(content_type=None))
+                except Exception:
+                    detail = None
+                _notify("conflict", f"✗ Kalytera: {detail or 'trace refused (HTTP 409)'} — traces are being dropped.")
+            elif resp.status >= 400:
                 problem = _connection_problem(resp.status, None)
                 if problem:
                     _notify(*problem)

@@ -129,6 +129,9 @@ def _write_trace(
 ) -> None:
     db = SessionLocal()
     try:
+        if not upsert_agent_org(agent_id, org_id, db):
+            print(f"[hosted_proxy] agent_id {agent_id!r} belongs to another org — trace not stored")
+            return
         insert_agent_log({
             "id": str(uuid.uuid4()),
             "agent_id": agent_id,
@@ -143,7 +146,6 @@ def _write_trace(
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "metadata": {"source": "hosted_proxy"},
         }, db)
-        upsert_agent_org(agent_id, org_id, db)
         increment_session_count(org_id, datetime.now(timezone.utc).strftime("%Y-%m"), db)
     except Exception as exc:
         print(f"[hosted_proxy] trace write error (non-fatal): {exc}")

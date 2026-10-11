@@ -30,6 +30,7 @@ from sqlalchemy.orm import Session
 
 from api.database import get_db
 from db.models import AgentLog, EvalResult, GuardEvent, GuardRule, LossPattern
+from db.queries import get_step_names, step_label
 from kalytera.drafts import draft_rule
 from kalytera.rules import ALLOW, ENFORCE, SHADOW, RuleError, SessionHistory, evaluate, parse_rule
 
@@ -195,8 +196,11 @@ def _draft_for_pattern(db: Session, pattern: LossPattern) -> Dict[str, Any]:
     failing = [r[0] for r in failing_q.distinct().limit(DRAFT_SESSION_LIMIT).all()]
     passing = [r[0] for r in base.filter(EvalResult.passed.is_(True)).distinct().limit(DRAFT_SESSION_LIMIT).all()]
     passing = [s for s in passing if s not in set(failing)]
+    label = pattern.pattern_value
+    if pattern.pattern_type == "workflow_step":
+        label = step_label(label, get_step_names(pattern.agent_id, db))
     return draft_rule(
-        pattern.agent_id, pattern.pattern_type, pattern.pattern_value,
+        pattern.agent_id, pattern.pattern_type, label,
         _session_tool_calls(db, pattern.agent_id, failing),
         _session_tool_calls(db, pattern.agent_id, passing),
         root_cause=pattern.root_cause,
