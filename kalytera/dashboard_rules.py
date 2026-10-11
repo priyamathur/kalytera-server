@@ -74,17 +74,20 @@ def _detail(body: Any) -> str:
     return d if isinstance(d, str) else json.dumps(d) if d else "Unknown error"
 
 
-def request_draft(pattern_id: str) -> None:
-    """on_click callback for a pattern card's button: fetch a draft and open the Rules view.
+def create_rule(agent_id: str, rule: Dict[str, Any]) -> Tuple[bool, str]:
+    """Create a rule (always in watch mode). Returns (ok, message for the user)."""
+    status, body = _api("POST", "/rules", {**rule, "agent_id": rule.get("agent_id") or agent_id})
+    _fetch_suggestions.clear()
+    _rule_stats.clear()
+    if status == 201:
+        return True, (f"Added rule “{body['id']}”. It's watching: it counts matching calls and blocks nothing "
+                      f"until you turn on blocking in Rules.")
+    return False, f"Couldn't add the rule: {_detail(body)}"
 
-    Runs before the page reruns, so it may set the navigation widget's state.
-    """
-    status, body = _api("POST", "/rules/draft", {"pattern_id": pattern_id})
-    if status != 200:
-        st.session_state["rule_flash"] = ("error", f"Couldn't suggest a rule: {_detail(body)}")
-    else:
-        st.session_state["rule_draft"] = body
-    st.session_state["view"] = "🛡  Rules"
+
+def fetch_suggestion_data(agent_id: str) -> Dict[str, Any]:
+    """{"suggestions": [...], "by_pattern": {pattern_id: {...}}} — cached for two minutes."""
+    return _fetch_suggestions(st.session_state.get("api_key", ""), agent_id)
 
 
 # ── Wording ──────────────────────────────────────────────────────────────────
@@ -196,12 +199,7 @@ def show_rules(agent_id: str) -> None:
         return
     rules: List[Dict[str, Any]] = body.get("rules", [])
 
-    # Suggestions: the one requested from the Failure Feed first, then the rest.
-    suggestions = _suggestions(agent_id)
-    draft = st.session_state.get("rule_draft")
-    if draft:
-        suggestions = [draft] + [x for x in suggestions if not (draft.get("rule") and x.get("rule")
-                                                                and _same_rule(draft["rule"], x["rule"]))]
+    suggestions = fetch_suggestion_data(agent_id).get("suggestions", [])
     hidden = st.session_state.setdefault("hidden_suggestions", set())
     suggestions = [x for x in suggestions if not x.get("rule") or (
         _rule_sig(x["rule"]) not in hidden and not any(_same_rule(x["rule"], r) for r in rules))]
@@ -226,17 +224,25 @@ def _section(title: str, sub: str = "") -> None:
 
 
 @st.cache_data(ttl=120, show_spinner="Looking for rules that would have prevented recent failures…")
-def _fetch_suggestions(api_key: str, agent_id: str) -> List[Dict[str, Any]]:
+def _fetch_suggestions(api_key: str, agent_id: str) -> Dict[str, Any]:
     try:
         r = requests.get(f"{API}/rules/suggestions", params={"agent_id": agent_id}, timeout=30,
                          headers={"Authorization": f"Bearer {api_key}"} if api_key else {})
-        return r.json().get("suggestions", []) if r.status_code == 200 else []
+        body = r.json() if r.status_code == 200 else {}
     except Exception:
-        return []
+        body = {}
+    return {"suggestions": body.get("suggestions", []), "by_pattern": body.get("by_pattern", {})}
 
 
-def _suggestions(agent_id: str) -> List[Dict[str, Any]]:
-    return _fetch_suggestions(st.session_state.get("api_key", ""), agent_id)
+@st.cache_data(ttl=30, show_spinner=False)
+def _rule_stats(api_key: str, agent_id: str, rule_id: str, version: Any) -> Dict[str, Any]:
+    """Cached so moving between pages doesn't make one API call per rule each time."""
+    try:
+        r = requests.get(f"{API}/rules/{rule_id}/stats", params={"agent_id": agent_id}, timeout=15,
+                         headers={"Authorization": f"Bearer {api_key}"} if api_key else {})
+        return r.json() if r.status_code == 200 else {}
+    except Exception:
+        return {}
 
 
 def _rule_sig(rule: Dict[str, Any]) -> str:
@@ -285,9 +291,6 @@ def _suggestion_card(agent_id: str, sug: Dict[str, Any], i: int) -> None:
             st.markdown('<div class="kr-name">NO RULE SUGGESTED</div>', unsafe_allow_html=True)
             for w in sug.get("warnings", []):
                 st.markdown(f'<div class="kr-meta">{w}</div>', unsafe_allow_html=True)
-            if st.button("OK", key=f"dismiss_sug_{i}"):
-                st.session_state.pop("rule_draft", None)
-                st.rerun()
             return
         text, actions = st.columns([4, 2.4], vertical_alignment="center")
         causes = [p.get("root_cause") for p in sug.get("patterns", []) if p.get("root_cause")]
@@ -303,7 +306,6 @@ def _suggestion_card(agent_id: str, sug: Dict[str, Any], i: int) -> None:
             _create(agent_id, rule)
         if a2.button("Not now", key=f"hide_sug_{i}", use_container_width=True):
             st.session_state.setdefault("hidden_suggestions", set()).add(_rule_sig(rule))
-            st.session_state.pop("rule_draft", None)
             st.rerun()
         with a3.popover("⋯", use_container_width=True):
             if st.button("Edit before adding", key=f"edit_sug_{i}", use_container_width=True):
@@ -317,8 +319,7 @@ def _suggestion_card(agent_id: str, sug: Dict[str, Any], i: int) -> None:
 
 def _rule_card(agent_id: str, rule: Dict[str, Any]) -> None:
     rid, mode = rule["id"], rule.get("mode", "shadow")
-    _, stats = _api("GET", f"/rules/{rid}/stats", params={"agent_id": agent_id})
-    stats = stats if isinstance(stats, dict) else {}
+    stats = _rule_stats(st.session_state.get("api_key", ""), agent_id, rid, rule.get("version"))
     pill = ('<span class="kr-pill kr-block" title="Enforce mode">Blocking</span>' if mode == "enforce"
             else '<span class="kr-pill kr-watch" title="Shadow mode: counts matches, never blocks">Watching</span>')
     with st.container(border=True):
@@ -454,21 +455,18 @@ def _delete_dialog(agent_id: str, rid: str) -> None:
 # ── Actions ──────────────────────────────────────────────────────────────────
 
 def _create(agent_id: str, rule: Dict[str, Any]) -> None:
-    rule = {**rule}
-    rule.setdefault("agent_id", agent_id)
-    status, body = _api("POST", "/rules", rule)
-    if status == 201:
-        st.session_state.pop("rule_draft", None)
-        _fetch_suggestions.clear()
-        st.session_state["rule_flash"] = ("success", f"Created “{body['id']}”. It's watching — use "
-                                          "**Try it** to see what it would do.")
+    ok, msg = create_rule(agent_id, rule)
+    if ok:
+        st.session_state["rule_flash"] = ("success", msg.replace("in Rules.", "below. Use **Try it** to "
+                                                                 "see what it would do."))
         st.rerun()
-    st.error(_detail(body))
+    st.error(msg)
 
 
 def _act(method: str, path: str, agent_id: str, ok: str) -> None:
     status, body = _api(method, path, params={"agent_id": agent_id})
     _fetch_suggestions.clear()
+    _rule_stats.clear()
     st.session_state["rule_flash"] = ("success", ok) if status == 200 else ("error", _detail(body))
     st.rerun()
 

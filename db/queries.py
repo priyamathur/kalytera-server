@@ -171,18 +171,20 @@ def get_quality_trend(
 
 
 def get_todays_stats(agent_id: str, db: Session, hours: int = 24) -> Dict[str, Any]:
-    """Pass rate, total evals, and distinct active failure types for the given window."""
+    """
+    Sessions evaluated in the window, how many passed (no failing step), and the
+    number of distinct failure types seen. Counts sessions, not scored steps.
+    """
     today_start = datetime.now(timezone.utc) - timedelta(hours=hours)
-    base = (
-        db.query(EvalResult)
-        .filter(
-            EvalResult.agent_id == agent_id,
-            EvalResult.evaluated_at >= today_start,
-            EvalResult.eval_error == False,  # noqa: E712
-        )
+    base = db.query(EvalResult).filter(
+        EvalResult.agent_id == agent_id,
+        EvalResult.evaluated_at >= today_start,
+        EvalResult.eval_error == False,  # noqa: E712
     )
-    total = base.count()
-    passed = base.filter(EvalResult.passed == True).count()  # noqa: E712
+    total = base.with_entities(func.count(distinct(EvalResult.session_id))).scalar() or 0
+    failed = (base.filter(EvalResult.passed == False)  # noqa: E712
+              .with_entities(func.count(distinct(EvalResult.session_id))).scalar() or 0)
+    passed = total - failed
     active_failure_types = (
         db.query(func.count(func.distinct(EvalResult.failure_type)))
         .filter(
@@ -195,8 +197,8 @@ def get_todays_stats(agent_id: str, db: Session, hours: int = 24) -> Dict[str, A
         or 0
     )
     return {
-        "total": total,
-        "passed": passed,
+        "total": int(total),
+        "passed": int(passed),
         "pass_rate": round(passed / total, 3) if total else 0.0,
         "active_failure_types": int(active_failure_types),
     }
@@ -206,26 +208,25 @@ def get_top_failure_types(
     agent_id: str, hours: int, db: Session
 ) -> List[Tuple[str, int, float]]:
     """
-    Top failure types in the last N hours by frequency.
-    Returns list of (failure_type, count, pct_of_all_failures) tuples.
+    Failure types in the last N hours, by the number of sessions they hit.
+    Returns (failure_type, sessions, share of failed sessions) tuples.
     """
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    failing = db.query(EvalResult).filter(
+        EvalResult.agent_id == agent_id,
+        EvalResult.evaluated_at >= since,
+        EvalResult.passed == False,  # noqa: E712
+        EvalResult.eval_error == False,  # noqa: E712
+    )
+    sessions = func.count(distinct(EvalResult.session_id))
     rows = (
-        db.query(
-            EvalResult.failure_type,
-            func.count(EvalResult.id).label("cnt"),
-        )
-        .filter(
-            EvalResult.agent_id == agent_id,
-            EvalResult.evaluated_at >= since,
-            EvalResult.passed == False,  # noqa: E712
-            EvalResult.failure_type.isnot(None),
-        )
+        failing.filter(EvalResult.failure_type.isnot(None))
+        .with_entities(EvalResult.failure_type, sessions.label("cnt"))
         .group_by(EvalResult.failure_type)
-        .order_by(func.count(EvalResult.id).desc())
+        .order_by(sessions.desc())
         .all()
     )
-    total = sum(r.cnt for r in rows)
+    total = failing.with_entities(sessions).scalar() or 0
     return [
         (r.failure_type, int(r.cnt), round(r.cnt / total, 3) if total else 0.0)
         for r in rows
@@ -263,24 +264,23 @@ def get_recent_eval_failures(
 # ---------------------------------------------------------------------------
 
 def get_session_steps(
-    session_id: str, db: Session
+    session_id: str, db: Session, agent_id: Optional[str] = None
 ) -> List[Tuple[AgentLog, Optional[EvalResult]]]:
     """
     All steps for one session with their eval results, ordered by step_number.
+    Pass agent_id so another agent's session with the same ID never shows.
     Returns list of (AgentLog, EvalResult | None).
     """
-    logs = (
-        db.query(AgentLog)
-        .filter(AgentLog.session_id == session_id)
-        .order_by(AgentLog.step_number)
-        .all()
-    )
+    q = db.query(AgentLog).filter(AgentLog.session_id == session_id)
+    if agent_id is not None:
+        q = q.filter(AgentLog.agent_id == agent_id)
+    logs = q.order_by(AgentLog.step_number).all()
     evals: Dict[str, EvalResult] = {
         ev.log_id: ev
         for ev in db.query(EvalResult)
-        .filter(EvalResult.session_id == session_id)
+        .filter(EvalResult.log_id.in_([log.id for log in logs]))
         .all()
-    }
+    } if logs else {}
     return [(log, evals.get(log.id)) for log in logs]
 
 
@@ -292,16 +292,14 @@ def get_failures_by_step(
     agent_id: str, hours: int, db: Session
 ) -> List[Tuple[int, str, int, float]]:
     """
-    Failure count and rate per (step_number, step_name) for the last N hours.
-    Returns list of (step_number, step_name, failure_count, failure_rate), highest failure_count first.
+    Sessions that failed at each (step_number, step_name) in the last N hours,
+    and that as a share of the sessions that reached the step.
+    Returns (step_number, step_name, failed_sessions, failure_rate), most first.
     """
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    sessions = func.count(distinct(EvalResult.session_id))
     fail_rows = (
-        db.query(
-            AgentLog.step_number,
-            AgentLog.step_name,
-            func.count(EvalResult.id).label("fail_count"),
-        )
+        db.query(AgentLog.step_number, AgentLog.step_name, sessions.label("fail_count"))
         .join(EvalResult, EvalResult.log_id == AgentLog.id)
         .filter(
             EvalResult.agent_id == agent_id,
@@ -310,20 +308,12 @@ def get_failures_by_step(
             EvalResult.eval_error == False,  # noqa: E712
         )
         .group_by(AgentLog.step_number, AgentLog.step_name)
-        .order_by(func.count(EvalResult.id).desc())
+        .order_by(sessions.desc())
         .all()
     )
     total_rows = (
-        db.query(
-            AgentLog.step_number,
-            func.count(EvalResult.id).label("total"),
-        )
-        .join(EvalResult, EvalResult.log_id == AgentLog.id)
-        .filter(
-            EvalResult.agent_id == agent_id,
-            EvalResult.evaluated_at >= since,
-            EvalResult.eval_error == False,  # noqa: E712
-        )
+        db.query(AgentLog.step_number, func.count(distinct(AgentLog.session_id)).label("total"))
+        .filter(AgentLog.agent_id == agent_id, AgentLog.timestamp >= since)
         .group_by(AgentLog.step_number)
         .all()
     )
@@ -333,7 +323,7 @@ def get_failures_by_step(
             int(r.step_number),
             str(r.step_name),
             int(r.fail_count),
-            round(r.fail_count / max(total_map.get(r.step_number, r.fail_count), 1), 3),
+            round(r.fail_count / max(total_map.get(r.step_number, r.fail_count), r.fail_count, 1), 3),
         )
         for r in fail_rows
     ]
@@ -531,6 +521,119 @@ def search_eval_failures(
         .all()
     )
     return [(ev, log) for ev, log in rows]
+
+
+def get_session_failure_counts(agent_id: str, db: Session) -> Dict[str, Any]:
+    """
+    Distinct sessions, all time: {"total": sessions evaluated,
+    "workflow_step": {step: failed sessions}, "failure_type": {type: failed sessions}}.
+    Lets the Failure Feed say "12 sessions (8%)" instead of counting scored steps.
+    """
+    sessions = func.count(distinct(EvalResult.session_id))
+    base = db.query(EvalResult).filter(EvalResult.agent_id == agent_id,
+                                       EvalResult.eval_error == False)  # noqa: E712
+    failing = base.filter(EvalResult.passed == False)  # noqa: E712
+    by_step = failing.with_entities(EvalResult.failure_step, sessions).group_by(EvalResult.failure_step).all()
+    by_type = failing.with_entities(EvalResult.failure_type, sessions).group_by(EvalResult.failure_type).all()
+    return {
+        "total": int(base.with_entities(sessions).scalar() or 0),
+        "workflow_step": {str(k): int(n) for k, n in by_step if k is not None},
+        "failure_type": {str(k): int(n) for k, n in by_type if k is not None},
+    }
+
+
+def get_pattern_sessions(
+    agent_id: str, pattern_type: str, pattern_value: str, limit: int, db: Session
+) -> List[Dict[str, Any]]:
+    """
+    Failed sessions in one loss pattern, newest first, one entry per session:
+    {session_id, failed_at, failure_type, failure_step, overall_score, failure_reason}.
+    """
+    column = EvalResult.failure_step if pattern_type == "workflow_step" else EvalResult.failure_type
+    rows = (
+        db.query(EvalResult)
+        .filter(
+            EvalResult.agent_id == agent_id,
+            EvalResult.passed == False,  # noqa: E712
+            EvalResult.eval_error == False,  # noqa: E712
+            column == pattern_value,
+        )
+        .order_by(EvalResult.evaluated_at.desc())
+        .limit(limit * 6)
+        .all()
+    )
+    out: List[Dict[str, Any]] = []
+    seen: set = set()
+    for ev in rows:
+        if ev.session_id in seen:
+            continue
+        seen.add(ev.session_id)
+        out.append({
+            "session_id": ev.session_id,
+            "failed_at": ev.evaluated_at,
+            "failure_type": ev.failure_type,
+            "failure_step": ev.failure_step,
+            "overall_score": round(float(ev.overall_score or 0), 3),
+            "failure_reason": ev.failure_reason,
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def search_sessions(agent_ids: List[str], text: str, limit: int, db: Session) -> List[Dict[str, Any]]:
+    """
+    Sessions of these agents whose ID contains `text`, or that failed with a
+    reason containing it. Newest first:
+    {session_id, agent_id, last_seen, failed, failure_reason}.
+    """
+    text = text.strip()
+    if not text or not agent_ids:
+        return []
+    like = f"%{text}%"
+    by_id = (
+        db.query(AgentLog.session_id, AgentLog.agent_id, func.max(AgentLog.timestamp).label("last_seen"))
+        .filter(AgentLog.agent_id.in_(agent_ids), AgentLog.session_id.ilike(like))
+        .group_by(AgentLog.session_id, AgentLog.agent_id)
+        .order_by(func.max(AgentLog.timestamp).desc())
+        .limit(limit)
+        .all()
+    )
+    by_reason = (
+        db.query(EvalResult.session_id, EvalResult.agent_id, func.max(EvalResult.evaluated_at).label("last_seen"))
+        .filter(EvalResult.agent_id.in_(agent_ids), EvalResult.passed == False,  # noqa: E712
+                EvalResult.failure_reason.ilike(like))
+        .group_by(EvalResult.session_id, EvalResult.agent_id)
+        .order_by(func.max(EvalResult.evaluated_at).desc())
+        .limit(limit)
+        .all()
+    )
+    found: Dict[str, Dict[str, Any]] = {}
+    for sid, aid, ts in list(by_id) + list(by_reason):
+        found.setdefault(sid, {"session_id": sid, "agent_id": aid, "last_seen": ts})
+    if not found:
+        return []
+    fails = (
+        db.query(EvalResult.session_id, EvalResult.failure_reason)
+        .filter(EvalResult.session_id.in_(list(found)), EvalResult.passed == False)  # noqa: E712
+        .all()
+    )
+    for item in found.values():
+        item["failed"] = False
+        item["failure_reason"] = None
+    for sid, reason in fails:
+        found[sid]["failed"] = True
+        found[sid]["failure_reason"] = found[sid]["failure_reason"] or reason
+    exact = [x for x in found.values() if x["session_id"] == text]
+    rest = sorted((x for x in found.values() if x["session_id"] != text),
+                  key=lambda x: _aware(x["last_seen"]), reverse=True)
+    return (exact + rest)[:limit]
+
+
+def _aware(ts: Optional[datetime]) -> datetime:
+    if ts is None:
+        return datetime.min.replace(tzinfo=timezone.utc)
+    return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
 
 
 # ---------------------------------------------------------------------------

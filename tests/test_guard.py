@@ -335,8 +335,39 @@ def test_suggestions_are_merged_cited_and_skip_existing_rules(env: SimpleNamespa
     assert s0["coverage"] == {"failing_matched": 2, "failing_total": 2, "passing_matched": 0, "passing_total": 2}
     assert len(s0["patterns"]) == 1 or {p["pattern_id"] for p in s0["patterns"]} == {"pat-1", "pat-2"}
 
+    by_pattern = resp.json()["by_pattern"]
+    assert by_pattern["pat-1"]["status"] == "suggested"
+    assert by_pattern["pat-1"]["coverage"]["failing_matched"] == 2
+
     assert env.client.post("/rules", json=s0["rule"]).status_code == 201
-    assert env.client.get("/rules/suggestions", params={"agent_id": AGENT}).json()["suggestions"] == []
+    after = env.client.get("/rules/suggestions", params={"agent_id": AGENT}).json()
+    assert after["suggestions"] == []
+    assert after["by_pattern"]["pat-1"]["status"] == "exists"
+    assert after["by_pattern"]["pat-1"]["rule_id"] == s0["rule"]["id"]
+
+
+def test_suggestions_explain_patterns_without_a_rule(env: SimpleNamespace) -> None:
+    from datetime import datetime, timezone
+    from db.models import AgentLog, LossPattern
+    _seed_pattern(env)
+    db = env.session()
+    now = datetime.now(timezone.utc)
+    # failures with no tool calls at all -> nothing to draft from
+    for i in range(2):
+        db.add(AgentLog(id=f"nt{i}", agent_id=AGENT, session_id=f"nt{i}", step_number=1, step_name="chat",
+                        input="", output=""))
+        db.add(EvalResult(log_id=f"nt{i}", session_id=f"nt{i}", agent_id=AGENT, accuracy=0.5, goal_alignment=0.5,
+                          decision_quality=0.5, completeness=0.5, overall_score=0.5, passed=False,
+                          failure_type="goal_drift", failure_step="chat"))
+    db.add(LossPattern(id="pat-drift", agent_id=AGENT, pattern_type="failure_type", pattern_value="goal_drift",
+                       failure_count=2, total_count=6, failure_rate=0.33, pct_of_all_failures=0.5,
+                       root_cause="Wandered off topic", first_seen=now, last_seen=now))
+    db.commit()
+    db.close()
+    by_pattern = env.client.get("/rules/suggestions", params={"agent_id": AGENT}).json()["by_pattern"]
+    assert by_pattern["pat-drift"]["status"] == "none"
+    assert "tool_calls" in by_pattern["pat-drift"]["reason"]
+    assert by_pattern["pat-1"]["status"] == "suggested"
 
 
 def test_suggestions_for_another_orgs_agent_404(env: SimpleNamespace) -> None:

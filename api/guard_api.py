@@ -10,7 +10,8 @@ Guard rules API — storage and server-side evaluation for kalytera.guard().
   DELETE /rules/{rule_id}?agent_id=X    — deactivate every version
   GET    /rules/{rule_id}/stats?agent_id=X — would-block / deny counts
   POST   /rules/draft                   — draft a rule from a LossPattern (not saved)
-  GET    /rules/suggestions?agent_id=X  — drafts for every detected pattern, deduped, cited
+  GET    /rules/suggestions?agent_id=X  — drafts for every detected pattern, deduped, cited;
+                                          by_pattern says what each pattern can get
   POST   /guard                         — evaluate one call server-side (non-Python callers)
   POST   /guard/events                  — decisions reported by the SDK
 
@@ -206,27 +207,45 @@ def _rule_key(rule: Dict[str, Any]) -> str:
     return json.dumps({k: rule.get(k) or None for k in ("match", "session_conditions", "action")}, sort_keys=True)
 
 
-def _suggestions(db: Session, org_id: Optional[str], agent_id: str) -> List[Dict[str, Any]]:
+def _suggestions(db: Session, org_id: Optional[str], agent_id: str) -> Dict[str, Any]:
     """
-    One suggestion per distinct drafted rule, most failures first. Patterns that
-    draft the same rule are merged; rules the agent already has are skipped.
+    {"suggestions": [...], "by_pattern": {pattern_id: {...}}}
+
+    suggestions: one per distinct drafted rule, most failures first. Patterns
+    that draft the same rule are merged; rules the agent already has are skipped.
+    by_pattern: for every pattern, what can be done about it — status
+    "suggested" (with the rule and its coverage), "exists" (an existing rule
+    already does this) or "none" (with the reason, in plain English).
     """
-    existing = {_rule_key(_body(r)) for r in _current_rows(db, org_id, agent_id)}
+    existing = {_rule_key(_body(r)): r.rule_id for r in _current_rows(db, org_id, agent_id)}
     patterns = (db.query(LossPattern).filter(LossPattern.agent_id == agent_id)
                 .order_by(LossPattern.failure_count.desc()).all())
     merged: Dict[str, Dict[str, Any]] = {}
+    by_pattern: Dict[str, Dict[str, Any]] = {}
     for p in patterns:
         draft = _draft_for_pattern(db, p)
         rule = draft.get("rule")
         cov = draft.get("coverage") or {}
-        if not rule or not cov.get("failing_matched"):
+        if not rule:
+            by_pattern[p.id] = {"status": "none", "reason": " ".join(draft.get("warnings", [])[:1])
+                                or "No rule could be drafted from these sessions."}
+            continue
+        if not cov.get("failing_matched"):
+            by_pattern[p.id] = {"status": "none",
+                                "reason": "No tool call or argument separates these sessions from successful ones."}
             continue
         # Only suggest rules that would rarely touch sessions that went fine.
         if cov.get("passing_total") and cov["passing_matched"] / cov["passing_total"] > MAX_PASSING_SHARE:
+            by_pattern[p.id] = {"status": "none",
+                                "reason": f"The closest rule would also hit {cov['passing_matched']} of "
+                                          f"{cov['passing_total']} successful sessions, so it isn't suggested."}
             continue
         key = _rule_key(rule)
         if key in existing:
+            by_pattern[p.id] = {"status": "exists", "rule_id": existing[key], "rule": rule, "coverage": cov}
             continue
+        by_pattern[p.id] = {"status": "suggested", "rule": rule, "coverage": cov,
+                            "evidence": draft.get("evidence", []), "warnings": draft.get("warnings", [])}
         cite = {"pattern_id": p.id, "pattern_type": p.pattern_type, "pattern_value": p.pattern_value,
                 "failure_count": p.failure_count, "root_cause": p.root_cause}
         if key in merged:
@@ -235,7 +254,7 @@ def _suggestions(db: Session, org_id: Optional[str], agent_id: str) -> List[Dict
         merged[key] = {**draft, "patterns": [cite]}
     ranked = sorted(merged.values(), key=lambda d: (-(d["coverage"] or {}).get("failing_matched", 0),
                                                     (d["coverage"] or {}).get("passing_matched", 0)))
-    return ranked[:MAX_SUGGESTIONS]
+    return {"suggestions": ranked[:MAX_SUGGESTIONS], "by_pattern": by_pattern}
 
 
 def build_router(resolve_org: Callable[..., Any],
@@ -250,7 +269,7 @@ def build_router(resolve_org: Callable[..., Any],
     async def suggestions(agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
         if org is not None and agent_ids_for_org is not None and agent_id not in agent_ids_for_org(org.id, db):
             raise HTTPException(status_code=404, detail="agent not found")
-        return {"agent_id": agent_id, "suggestions": _suggestions(db, _org_id(org), agent_id)}
+        return {"agent_id": agent_id, **_suggestions(db, _org_id(org), agent_id)}
 
     @router.post("/rules/draft")
     async def draft(req: DraftRequest, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:

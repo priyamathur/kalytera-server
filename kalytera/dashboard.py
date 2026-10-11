@@ -5,6 +5,7 @@ Run: streamlit run agentiq/dashboard.py --server.port 8501
 import html
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
@@ -74,6 +75,9 @@ ALL_FT = [
 AUTO_REFRESH_S = 30
 TREND_DAYS = 7
 SESSION_LIMIT = 100
+PATTERN_SESSIONS_SHOWN = 10
+SEARCH_LIMIT = 20
+OVERVIEW_CACHE_S = 30
 
 # ── Utilities ─────────────────────────────────────────────────────────────────
 def _ft_color(ft: str) -> Tuple[str, str]:
@@ -116,7 +120,9 @@ def _fix_step(ft: Optional[str], step: str) -> str:
 
 
 def _fix_trace(ft: Optional[str], step: str) -> str:
-    return _FIX_TRACE.get(ft or "", "Review agent logic at **{s}**.").format(s=step)
+    """HTML: the trace view renders this inside HTML, where **bold** would show literally."""
+    text = _FIX_TRACE.get(ft or "", "Review agent logic at **{s}**.").format(s=html.escape(step))
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
 
 
 def _short_reason(reason: Optional[str], ft: Optional[str], step_name: str) -> str:
@@ -158,19 +164,17 @@ from db.queries import (  # noqa: E402
     get_quality_config,
     get_quality_trend,
     get_recent_eval_failures,
-    get_recent_failing_sessions,
+    get_pattern_sessions,
+    get_session_failure_counts,
     get_score_buckets,
     get_session_and_latency_stats,
     get_session_steps,
     get_todays_stats,
     get_top_failure_types,
-    search_eval_failures,
+    search_sessions,
     upsert_golden_label,
     upsert_quality_config,
 )
-
-# ── Nav redirect (pop before sidebar renders, set index from it) ──────────────
-_pending_nav: Optional[str] = st.session_state.pop("_nav_to", None)
 
 # ── Global CSS ────────────────────────────────────────────────────────────────
 st.markdown("""
@@ -316,7 +320,7 @@ div[data-testid="stSidebarCollapsedControl"],
 # ═══════════════════════════════════════════════════════════════════════════════
 import requests as _requests
 
-from kalytera.dashboard_rules import API as _API, request_draft, show_rules  # noqa: E402
+from kalytera.dashboard_rules import API as _API, create_rule, fetch_suggestion_data, sentence, show_rules  # noqa: E402
 
 
 def _validate_key(key: str) -> Optional[Dict[str, Any]]:
@@ -329,6 +333,16 @@ def _validate_key(key: str) -> Optional[Dict[str, Any]]:
         return r.json() if r.status_code == 200 else None
     except Exception:
         return None
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _agents_for_key(key: str) -> List[str]:
+    """Agents the key can see. Cached: this ran on every click and is one network round trip."""
+    try:
+        r = _requests.get(f"{_API}/agents", headers={"Authorization": f"Bearer {key}"}, timeout=5)
+        return r.json() if r.status_code == 200 else []
+    except Exception:
+        return []
 
 
 if not st.session_state.get("authenticated"):
@@ -423,15 +437,7 @@ with st.sidebar:
     )
     _stored_key = st.session_state.get("api_key", "")
     if _stored_key:
-        try:
-            _ar = _requests.get(
-                f"{_API}/agents",
-                headers={"Authorization": f"Bearer {_stored_key}"},
-                timeout=5,
-            )
-            _all_agents = _ar.json() if _ar.status_code == 200 else []
-        except Exception:
-            _all_agents = []
+        _all_agents = _agents_for_key(_stored_key)
     else:
         _db_s = _db()
         try:
@@ -442,9 +448,14 @@ with st.sidebar:
             _db_s.close()
 
     if _all_agents:
-        _def = _all_agents.index("demo-agent") if "demo-agent" in _all_agents else 0
+        # The API lists your own agents first; the shared demo agent only when you have none.
+        _own = [a for a in _all_agents if a != "demo-agent"]
+        _def = _all_agents.index(_own[0]) if _own else 0
+        if st.session_state.get("agent_id") not in _all_agents:
+            st.session_state["agent_id"] = _all_agents[_def]
         agent_id: str = st.selectbox(
-            "agent", _all_agents, index=_def, key="agent_id", label_visibility="collapsed",
+            "agent", _all_agents, key="agent_id", label_visibility="collapsed",
+            on_change=lambda: st.session_state.pop("open_session", None),
         )
     else:
         agent_id = st.text_input(
@@ -459,26 +470,13 @@ with st.sidebar:
         'text-transform:uppercase;margin-bottom:4px;padding:0 4px">NAVIGATE</p>',
         unsafe_allow_html=True,
     )
-    _NAV_OPTIONS = ["📊  Overview", "🔴  Failure Feed", "🔍  Trace Viewer", "🛡  Rules"]
-    _nav_idx = (
-        _NAV_OPTIONS.index(_pending_nav)
-        if _pending_nav in _NAV_OPTIONS
-        else (
-            _NAV_OPTIONS.index(st.session_state.get("view", _NAV_OPTIONS[0]))
-            if st.session_state.get("view") in _NAV_OPTIONS
-            else 0
-        )
-    )
+    _NAV_OPTIONS = ["📊  Overview", "🔴  Failure Feed", "🛡  Rules"]
+    if st.session_state.get("view") not in _NAV_OPTIONS:
+        st.session_state.pop("view", None)  # e.g. the old Trace Viewer entry
     view: str = st.radio(
-        "nav", _NAV_OPTIONS, index=_nav_idx, key="view", label_visibility="collapsed",
+        "nav", _NAV_OPTIONS, key="view", label_visibility="collapsed",
+        on_change=lambda: st.session_state.pop("open_session", None),
     )
-
-    if "Trace" in view:
-        st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
-        st.text_input(
-            "jump", value="", key="manual_sid", placeholder="Paste session ID…",
-            label_visibility="collapsed",
-        )
 
     st.markdown('<hr style="margin:20px 0 12px"/>', unsafe_allow_html=True)
 
@@ -580,6 +578,31 @@ def _kpi_card(label: str, value: str, subtitle: str, color: str = "#0f172a") -> 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 1 — Overview
 # ═══════════════════════════════════════════════════════════════════════════════
+@st.cache_data(ttl=OVERVIEW_CACHE_S, show_spinner=False)
+def _overview_data(agent_id: str, hours: int) -> Tuple[Any, ...]:
+    """Every Overview query in one cached call, so switching pages back here is instant."""
+    calib_default = {"total_labeled": 0, "agreement_count": 0, "agreement_rate": None, "status": "unlabeled"}
+    db = _db()
+    try:
+        try:
+            calib = get_calibration_stats(agent_id, db)
+        except Exception:
+            calib = calib_default
+        return (
+            get_todays_stats(agent_id, db, hours=hours),
+            get_session_and_latency_stats(agent_id, hours, db),
+            get_quality_trend(agent_id, TREND_DAYS, db),
+            get_top_failure_types(agent_id, hours, db),
+            get_failures_by_step(agent_id, hours, db),
+            get_latency_values(agent_id, hours, db),
+            get_score_buckets(agent_id, hours, db),
+            get_avg_score_by_step(agent_id, hours, db),
+            calib,
+        )
+    finally:
+        db.close()
+
+
 def _show_overview(agent_id: str) -> None:
     _hours_map = {"24h": 24, "7 days": 168, "30 days": 720}
     hdr_col, filter_col = st.columns([5, 1])
@@ -593,23 +616,8 @@ def _show_overview(agent_id: str) -> None:
         )
     sel_hours = _hours_map[sel_label]
 
-    _calib_default = {"total_labeled": 0, "agreement_count": 0, "agreement_rate": None, "status": "unlabeled"}
-    db = _db()
-    try:
-        stats = get_todays_stats(agent_id, db, hours=sel_hours)
-        extra = get_session_and_latency_stats(agent_id, sel_hours, db)
-        trend = get_quality_trend(agent_id, TREND_DAYS, db)
-        top_types = get_top_failure_types(agent_id, sel_hours, db)
-        step_hot = get_failures_by_step(agent_id, sel_hours, db)
-        latencies = get_latency_values(agent_id, sel_hours, db)
-        score_buckets = get_score_buckets(agent_id, sel_hours, db)
-        step_scores   = get_avg_score_by_step(agent_id, sel_hours, db)
-        try:
-            calib = get_calibration_stats(agent_id, db)
-        except Exception:
-            calib = _calib_default
-    finally:
-        db.close()
+    (stats, extra, trend, top_types, step_hot, latencies,
+     score_buckets, step_scores, calib) = _overview_data(agent_id, sel_hours)
 
     failures_n = stats["total"] - stats["passed"]
     pass_pct = stats["pass_rate"] * 100
@@ -617,7 +625,7 @@ def _show_overview(agent_id: str) -> None:
     p_vals = [int(np.percentile(arr, p)) for p in [50, 75, 90, 95, 99]]
 
     if failures_n == 0 and stats["total"] > 0:
-        st.success(f"No failures in the {sel_label} — your agent is healthy.", icon="✅")
+        st.success(f"No failed sessions in the {sel_label} — your agent is healthy.", icon="✅")
 
     # ── KPI row ─────────────────────────────────────────────────────────────
     pass_color = "#16a34a" if pass_pct >= 70 else "#dc2626"
@@ -626,13 +634,13 @@ def _show_overview(agent_id: str) -> None:
     k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), f"distinct sessions, {sel_label}"), unsafe_allow_html=True)
     k2.markdown(_kpi_card("Pass Rate", f"{pass_pct:.0f}%", "score ≥ 70", color=pass_color), unsafe_allow_html=True)
     k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "weighted 4 dims"), unsafe_allow_html=True)
-    k4.markdown(_kpi_card("Failures", str(failures_n), f"sessions failed, {sel_label}", color=fail_color), unsafe_allow_html=True)
+    k4.markdown(_kpi_card("Failed sessions", str(failures_n), f"{_pct(failures_n, stats['total'])} of sessions, {sel_label}", color=fail_color), unsafe_allow_html=True)
     k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
     _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#6366f1"}
     _CALIB_LABEL = {"excellent": "Calibrated ✓", "good": "Good", "needs_calibration": "Review weights", "unlabeled": "Not yet labeled"}
     calib_status = calib["status"]
     calib_val = f"{calib['agreement_rate']*100:.0f}%" if calib["agreement_rate"] is not None else "—"
-    calib_sub = f"{calib['total_labeled']} sessions labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "Go to Trace Viewer → label sessions 👍👎"
+    calib_sub = f"{calib['total_labeled']} sessions labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "Open a session (search ↗) → label 👍👎"
     k6.markdown(_kpi_card("Judge Accuracy", calib_val, calib_sub, color=_CALIB_COLOR[calib_status]), unsafe_allow_html=True)
 
     # ── Quality trend + session volume ───────────────────────────────────────
@@ -756,20 +764,20 @@ def _show_overview(agent_id: str) -> None:
         )
         if step_hot:
             rows_s = [
-                {"Step": name, "Failures": cnt, "Fail Rate": f"{rate * 100:.0f}%"}
+                {"Step": name, "Sessions failed": cnt, "% of sessions": f"{rate * 100:.0f}%"}
                 for n, name, cnt, rate in step_hot
             ]
             st.dataframe(
                 pd.DataFrame(rows_s),
                 column_config={
                     "Step": st.column_config.TextColumn("Step"),
-                    "Failures": st.column_config.NumberColumn("Failures", width="small"),
-                    "Fail Rate": st.column_config.TextColumn("Fail Rate", width="small"),
+                    "Sessions failed": st.column_config.NumberColumn("Sessions failed", width="small"),
+                    "% of sessions": st.column_config.TextColumn("% of sessions", width="small"),
                 },
                 hide_index=True, use_container_width=True,
             )
         else:
-            st.caption(f"No failures in the {sel_label}.")
+            st.caption(f"No failed sessions in the {sel_label}.")
 
     with col_r:
         st.markdown(
@@ -793,18 +801,18 @@ def _show_overview(agent_id: str) -> None:
                 text=[f"{v}  ({p * 100:.0f}%)" for v, p in zip(x_vals, pct_vals)],
                 textposition="outside",
                 textfont=dict(size=11, color="#475569"),
-                hovertemplate="<b>%{y}</b><br>%{x} failures<extra></extra>",
+                hovertemplate="<b>%{y}</b><br>%{x} sessions<extra></extra>",
             ))
             chart_h = max(160, len(top_types) * 44)
             _plotly_defaults(fig_ft, chart_h).update_layout(
-                xaxis=dict(title="Number of failures", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                xaxis=dict(title="Sessions with this failure", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
                 yaxis=dict(tickfont=dict(size=12), linecolor="#e2e8f0", automargin=True),
                 showlegend=False,
                 margin=dict(l=10, r=90, t=8, b=40),
             )
             st.plotly_chart(fig_ft, use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption(f"No failures in the {sel_label}.")
+            st.caption(f"No failed sessions in the {sel_label}.")
 
     # ── Scoring Configuration ─────────────────────────────────────────────────
     st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
@@ -1043,23 +1051,18 @@ def _show_overview(agent_id: str) -> None:
             finally:
                 db3.close()
             st.session_state["custom_metrics_state"] = custom_list
+            _overview_data.clear()
             st.success("Saved. New weights apply to the next evaluation cycle.")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 2 — Failure Feed
 # ═══════════════════════════════════════════════════════════════════════════════
-def _open_trace(session_id: str) -> None:
-    """on_click: open one session in the Trace Viewer."""
-    st.session_state["selected_session"] = session_id
-    st.session_state["view"] = "🔍  Trace Viewer"
-
-
-def _open_pattern_sessions(ptype: str, pvalue: str) -> None:
-    """on_click: open the Trace Viewer filtered to one pattern's sessions."""
-    st.session_state["pattern_filter"] = {"type": ptype, "value": pvalue}
-    st.session_state["selected_session"] = None
-    st.session_state["view"] = "🔍  Trace Viewer"
+def _open_trace(session_id: str, agent: Optional[str] = None) -> None:
+    """Show one session's trace in place of the current page (← Back returns)."""
+    st.session_state["open_session"] = session_id
+    if agent and agent != st.session_state.get("agent_id"):
+        st.session_state["agent_id"] = agent
 
 
 def _ago(ts: Optional[datetime]) -> str:
@@ -1074,30 +1077,59 @@ def _ago(ts: Optional[datetime]) -> str:
     return "just now"
 
 
-def _problems(patterns: List[Any]) -> List[Dict[str, Any]]:
+def _n_sessions(n: int) -> str:
+    return f"{n} session{'' if n == 1 else 's'}"
+
+
+def _pct(n: int, total: int) -> str:
+    if not total:
+        return ""
+    p = n / total * 100
+    return f"{p:.0f}%" if p >= 1 or p == 0 else "<1%"
+
+
+def _problems(patterns: List[Any], counts: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     One entry per distinct problem. The analyzer files the same failures under a
     workflow step *and* a failure type; group them by root cause so each problem
-    shows once.
+    shows once. Sizes are distinct sessions (from `counts`), not scored steps.
     """
     groups: Dict[str, Dict[str, Any]] = {}
     for p in patterns:
         key = (p.root_cause or p.pattern_value).strip().lower()
-        g = groups.setdefault(key, {"title": p.root_cause or p.pattern_value, "count": 0, "rate": 0.0,
-                                    "steps": [], "types": [], "worsening": False, "first": p})
-        g["count"] = max(g["count"], p.failure_count)
-        g["rate"] = max(g["rate"], p.failure_rate)
+        g = groups.setdefault(key, {"title": p.root_cause or p.pattern_value, "sessions": 0,
+                                    "steps": [], "types": [], "worsening": False, "patterns": [], "main": p})
+        n = counts.get(p.pattern_type, {}).get(p.pattern_value, p.failure_count)
+        if n > g["sessions"]:
+            g["sessions"], g["main"] = n, p
         g["worsening"] = g["worsening"] or p.is_worsening
+        g["patterns"].append(p)
         (g["steps"] if p.pattern_type == "workflow_step" else g["types"]).append(p.pattern_value)
-    return sorted(groups.values(), key=lambda g: -g["count"])
+    return sorted(groups.values(), key=lambda g: -g["sessions"])
+
+
+def _rule_option(g: Dict[str, Any], by_pattern: Dict[str, Any]) -> Dict[str, Any]:
+    """The best thing to offer for a problem: a ready rule, an existing one, or why there's none."""
+    options = [by_pattern[p.id] for p in g["patterns"] if p.id in by_pattern]
+    for status in ("suggested", "exists", "none"):
+        for o in options:
+            if o.get("status") == status:
+                return o
+    return {"status": "none", "reason": "Rule suggestions are still loading or unavailable."}
 
 
 _FEED_CSS = """
 <style>
 .ff-title{font-size:16px;font-weight:600;color:#0f172a;line-height:1.45;margin-bottom:3px}
 .ff-meta{font-size:13px;color:#64748b}
-.ff-meta code{background:#f1f5f9;color:#334155;padding:0 5px;border-radius:4px;font-size:12px}
+.ff-meta b{color:#0f172a}
+.ff-meta code,.ff-rule code{background:#f1f5f9;color:#334155;padding:0 5px;border-radius:4px;font-size:12px}
 .ff-worse{color:#dc2626;font-weight:600}
+.ff-rule{font-size:13px;color:#334155;background:#f8fafc;border:1px solid #eef2f7;border-radius:8px;
+         padding:8px 12px;margin-top:10px;line-height:1.55}
+.ff-rule .ok{color:#16a34a;font-weight:600}
+.ff-rule .warn{color:#b45309;font-weight:600}
+.ff-rule .muted{color:#94a3b8}
 .ff-row{font-size:14px;color:#1e293b;line-height:1.4}
 .ff-sub{font-size:12px;color:#94a3b8}
 .ff-h{font-size:15px;font-weight:700;color:#0f172a;margin:22px 0 8px}
@@ -1105,12 +1137,52 @@ _FEED_CSS = """
 """
 
 
+def _problem_meta(g: Dict[str, Any], total: int) -> str:
+    """'12 sessions with a tool failure · 8% of sessions · at `issue_refund` · ▲ getting worse'."""
+    n = g["sessions"]
+    kind = g["types"][0].replace("_", " ") if g["types"] else ""
+    if kind:
+        label = kind if kind.endswith("failure") else f"{kind} failure"
+        kind = f"{'an' if label[0] in 'aeiou' else 'a'} {html.escape(label)}"
+    head = f"<b>{_n_sessions(n)}</b> with {kind or 'this failure'}"
+    parts = [head]
+    if total:
+        parts.append(f"{_pct(n, total)} of all sessions")
+    if g["steps"]:
+        parts.append(f"at <code>{html.escape(g['steps'][0])}</code>")
+    if g["worsening"]:
+        parts.append('<span class="ff-worse">▲ getting worse</span>')
+    return " · ".join(parts)
+
+
+def _rule_box(option: Dict[str, Any]) -> str:
+    status = option.get("status")
+    if status == "suggested":
+        cov = option.get("coverage") or {}
+        fm, ft = cov.get("failing_matched", 0), cov.get("failing_total", 0)
+        pm, pt = cov.get("passing_matched", 0), cov.get("passing_total", 0)
+        good = f' · <span class="{"ok" if pm == 0 else "warn"}">{pm} of {pt} successful ones</span>' if pt else ""
+        return (f'<div class="ff-rule">🛡 <b>Rule ready:</b> {sentence(option["rule"])}<br/>'
+                f'<span class="muted">Would have caught</span> <b>{fm} of {_n_sessions(ft)}</b> '
+                f'<span class="muted">that failed this way</span>{good}</div>')
+    if status == "exists":
+        return (f'<div class="ff-rule"><span class="ok">✓ Covered</span> by your rule '
+                f'<code>{html.escape(option.get("rule_id", ""))}</code> — manage it in Rules.</div>')
+    return f'<div class="ff-rule"><span class="muted">No rule to suggest: {html.escape(option.get("reason", ""))}</span></div>'
+
+
+def _make_rule(agent_id: str, pattern_id: str, rule: Dict[str, Any]) -> None:
+    ok, msg = create_rule(agent_id, rule)
+    st.session_state.setdefault("_feed_made", {})[pattern_id] = (ok, msg)
+
+
 @st.fragment(run_every=AUTO_REFRESH_S)
-def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
+def _failure_feed_fragment(agent_id: str) -> None:
     db = _db()
     try:
         patterns = get_patterns_for_agent(agent_id, db)
         recent = get_recent_eval_failures(agent_id, 50, db)
+        counts = get_session_failure_counts(agent_id, db)
     except Exception as _exc:
         st.error(f"Could not load failures: {_exc}", icon="🔴")
         return
@@ -1119,14 +1191,18 @@ def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
 
     st.markdown(_FEED_CSS, unsafe_allow_html=True)
     if not patterns and not recent:
-        st.success("No failures found for this agent.", icon="✅")
+        st.success("No failed sessions for this agent.", icon="✅")
         return
 
-    problems = _problems(patterns)
-    n_recent = f"{len(recent)}+" if len(recent) >= 50 else str(len(recent))
+    problems = _problems(patterns, counts)
+    by_pattern = fetch_suggestion_data(agent_id).get("by_pattern", {}) if problems else {}
+    total = counts.get("total", 0)
+    recent_sessions = len({log.session_id for _, log in recent})
+    n_recent = f"{recent_sessions}+" if len(recent) >= 50 else str(recent_sessions)
     st.markdown(
-        f'<div class="ff-meta" style="margin:-8px 0 4px">{n_recent} recent failure{"s" if len(recent) != 1 else ""}'
-        + (f" · {len(problems)} keep{'s' if len(problems) == 1 else ''} happening" if problems else "")
+        f'<div class="ff-meta" style="margin:-8px 0 4px">{n_recent} recent failed '
+        f'session{"s" if recent_sessions != 1 else ""}'
+        + (f" · {len(problems)} problem{'s' if len(problems) != 1 else ''} that keep happening" if problems else "")
         + "</div>",
         unsafe_allow_html=True,
     )
@@ -1136,55 +1212,67 @@ def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
     if not problems:
         st.markdown('<div class="ff-meta">Nothing yet — a problem shows here once the same failure repeats '
                     '(patterns update hourly).</div>', unsafe_allow_html=True)
-    for i, g in enumerate(problems):
-        where = " · ".join(
-            [f"at <code>{html.escape(s)}</code>" for s in g["steps"][:1]]
-            + [html.escape(t.replace("_", " ")) for t in g["types"][:1]]
-        )
-        worse = ' · <span class="ff-worse">▲ getting worse</span>' if g["worsening"] else ""
+    opened: set = st.session_state.setdefault("_feed_open", set())
+    made: Dict[str, Any] = st.session_state.setdefault("_feed_made", {})
+    for g in problems:
+        p = g["main"]
+        option = _rule_option(g, by_pattern)
         with st.container(border=True):
-            text, actions = st.columns([4, 2.3], vertical_alignment="center")
-            text.markdown(
+            st.markdown(
                 f'<div class="ff-title">{html.escape(g["title"])}</div>'
-                f'<div class="ff-meta"><b>{g["count"]} failure{"s" if g["count"] != 1 else ""}</b>'
-                f'{" · " + where if where else ""}{worse}</div>',
+                f'<div class="ff-meta">{_problem_meta(g, total)}</div>',
                 unsafe_allow_html=True,
             )
-            a1, a2 = actions.columns(2)
-            p = g["first"]
-            if a1.button("See sessions", key=f"pat_{p.id}", use_container_width=True,
-                         on_click=_open_pattern_sessions, args=(p.pattern_type, p.pattern_value)):
-                st.rerun(scope="app")
-            if a2.button("Prevent it", key=f"draft_{p.id}", use_container_width=True,
-                         on_click=request_draft, args=(p.id,),
-                         help="Suggest a rule that blocks this before it happens. Nothing is saved yet."):
-                st.rerun(scope="app")
+            result = made.get(p.id)
+            if result and result[0]:
+                st.markdown(f'<div class="ff-rule"><span class="ok">✓ {html.escape(result[1])}</span></div>',
+                            unsafe_allow_html=True)
+            else:
+                st.markdown(_rule_box(option), unsafe_allow_html=True)
+                if result:
+                    st.error(result[1])
+            b1, b2, _ = st.columns([1.3, 1.3, 3])
+            if option.get("status") == "suggested" and not (result and result[0]):
+                b1.button("⚡ Make it a rule", key=f"make_{p.id}", type="primary", use_container_width=True,
+                          on_click=_make_rule, args=(agent_id, p.id, option["rule"]),
+                          help="Adds this rule in watch mode: it counts matching calls and never blocks "
+                               "until you turn blocking on in Rules.")
+                see_col = b2
+            else:
+                see_col = b1
+            is_open = p.id in opened
+            see_col.button("Hide sessions" if is_open else f"See {_n_sessions(g['sessions'])}",
+                           key=f"see_{p.id}", use_container_width=True,
+                           on_click=opened.symmetric_difference_update, args=({p.id},))
+            if is_open:
+                _pattern_sessions(agent_id, p)
 
-    # ── Latest failures (identical ones grouped, newest first) ────────────────
-    st.markdown('<div class="ff-h">Latest failures</div>', unsafe_allow_html=True)
-    grouped: Dict[Tuple[str, str], List[Tuple[Any, Any]]] = {}
+    # ── Latest failures (same failure grouped, newest first) ──────────────────
+    st.markdown('<div class="ff-h">Latest failed sessions</div>', unsafe_allow_html=True)
+    grouped: Dict[Tuple[str, str], Dict[str, Tuple[Any, Any]]] = {}
     for ev, log in recent:  # already newest first
         reason = _short_reason(ev.failure_reason, ev.failure_type, log.step_name)
-        grouped.setdefault((reason, log.step_name), []).append((ev, log))
+        grouped.setdefault((reason, log.step_name), {}).setdefault(log.session_id, (ev, log))
     rows = list(grouped.items())
     shown = st.session_state.get("_feed_shown", 8)
-    for (reason, step), items in rows[:shown]:
-        ev, log = items[0]
-        times = f"{len(items)} times · " if len(items) > 1 else ""
+    for (reason, step), by_session in rows[:shown]:
+        ev, log = next(iter(by_session.values()))
+        n = len(by_session)
+        count = f"{_n_sessions(n)} · " if n > 1 else ""
         text, btn = st.columns([6, 1], vertical_alignment="center")
         text.markdown(
             f'<div class="ff-row">{html.escape(reason)}</div>'
-            f'<div class="ff-sub">{times}{html.escape(step)} · '
-            f'{"last " if len(items) > 1 else ""}{_ago(ev.evaluated_at)}</div>',
+            f'<div class="ff-sub">{count}at {html.escape(step)} · '
+            f'{"latest " if n > 1 else ""}{_ago(ev.evaluated_at)}</div>',
             unsafe_allow_html=True,
         )
-        if btn.button("Open" if len(items) == 1 else "Open latest", key=f"row_{ev.id}", use_container_width=True,
-                      on_click=_open_trace, args=(log.session_id,)):
+        if btn.button("Open" if n == 1 else "Open latest", key=f"row_{ev.id}", use_container_width=True):
+            _open_trace(log.session_id)
             st.rerun(scope="app")
     more, csv, _ = st.columns([1, 1, 3])
-    if len(rows) > shown and more.button(f"Show more ({len(rows) - shown})", key="_feed_more"):
-        st.session_state["_feed_shown"] = shown + 10
-        st.rerun(scope="fragment")
+    if len(rows) > shown:
+        more.button(f"Show more ({len(rows) - shown})", key="_feed_more",
+                    on_click=st.session_state.__setitem__, args=("_feed_shown", shown + 10))
     (csv if len(rows) > shown else more).download_button(
         "Download CSV",
         data=pd.DataFrame([{
@@ -1196,17 +1284,42 @@ def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
     )
 
 
+def _pattern_sessions(agent_id: str, p: Any) -> None:
+    """The sessions behind one problem, inline under its card."""
+    db = _db()
+    try:
+        sessions = get_pattern_sessions(agent_id, p.pattern_type, p.pattern_value, PATTERN_SESSIONS_SHOWN, db)
+    finally:
+        db.close()
+    if not sessions:
+        st.caption("These sessions are no longer in the database.")
+        return
+    for s in sessions:
+        text, btn = st.columns([6, 1], vertical_alignment="center")
+        text.markdown(
+            f'<div class="ff-row"><code>{html.escape(s["session_id"])}</code></div>'
+            f'<div class="ff-sub">{_ago(s["failed_at"])} · score {int(s["overall_score"] * 100)}'
+            f'{" · at " + html.escape(str(s["failure_step"])) if s["failure_step"] else ""}</div>',
+            unsafe_allow_html=True,
+        )
+        if btn.button("Open", key=f"ps_{p.id}_{s['session_id']}", use_container_width=True):
+            _open_trace(s["session_id"])
+            st.rerun(scope="app")
+    if len(sessions) >= PATTERN_SESSIONS_SHOWN:
+        st.caption(f"Showing the latest {PATTERN_SESSIONS_SHOWN}. Search a session ID at the top right to find any other.")
+
+
 def _show_failure_feed(agent_id: str) -> None:
-    _page_header("Failure Feed", "What keeps going wrong, and the latest failures")
-    _failure_feed_fragment(agent_id, "")
+    _page_header("Failure Feed", "What keeps going wrong, and the sessions it happened in")
+    _failure_feed_fragment(agent_id)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 3 — Trace Viewer
 # ═══════════════════════════════════════════════════════════════════════════════
 def _build_step_duration_chart(steps: List[Tuple[Any, Optional[Any]]]) -> Optional[go.Figure]:
-    """Bar chart: one bar per step, height = latency, color = pass/fail."""
-    if not steps:
+    """Bar chart: one bar per step, height = latency, color = pass/fail. None if no latency was recorded."""
+    if not steps or not any(log.latency_ms for log, _ in steps):
         return None
 
     labels, durations, colors, hover = [], [], [], []
@@ -1288,19 +1401,13 @@ def _score_bar(label: str, value: float, color: str) -> str:
 
 
 def _show_trace(agent_id: str, session_id: str) -> None:
-    _page_header("Trace Viewer", "Step-by-step conversation trace with scores and diagnosis")
-
-    if not session_id:
-        _show_session_browser(agent_id)
-        return
-
-    if st.button("← Back to session list"):
-        st.session_state["selected_session"] = ""
-        st.rerun()
+    st.button(f"← Back to {view.split('  ', 1)[-1]}", key="trace_back",
+              on_click=lambda: st.session_state.pop("open_session", None))
+    _page_header("Session trace", "Every step, its score, and where it went wrong")
 
     db = _db()
     try:
-        steps = get_session_steps(session_id, db)
+        steps = get_session_steps(session_id, db, agent_id=agent_id)
     finally:
         db.close()
 
@@ -1369,6 +1476,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
             db_lbl2 = _db()
             try:
                 upsert_golden_label(agent_id, session_id, not existing_label.human_passed, "", db_lbl2)
+                _overview_data.clear()
             finally:
                 db_lbl2.close()
             st.rerun()
@@ -1377,6 +1485,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
             db_lbl2 = _db()
             try:
                 upsert_golden_label(agent_id, session_id, True, "", db_lbl2)
+                _overview_data.clear()
             finally:
                 db_lbl2.close()
             st.rerun()
@@ -1384,6 +1493,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
             db_lbl2 = _db()
             try:
                 upsert_golden_label(agent_id, session_id, False, "", db_lbl2)
+                _overview_data.clear()
             finally:
                 db_lbl2.close()
             st.rerun()
@@ -1422,9 +1532,9 @@ def _show_trace(agent_id: str, session_id: str) -> None:
         )
 
     # ── Step duration chart ───────────────────────────────────────────────────
-    _section_head("Step Duration", "latency per step — green = passed, red = failed")
     duration_chart = _build_step_duration_chart(steps)
     if duration_chart:
+        _section_head("Step Duration", "latency per step — green = passed, red = failed")
         st.plotly_chart(duration_chart, use_container_width=True, config={"displayModeBar": False})
 
     # ── Conversation trace ────────────────────────────────────────────────────
@@ -1524,145 +1634,76 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                     pass
 
 
-def _show_session_browser(agent_id: str) -> None:
-    preset: Optional[Dict[str, str]] = st.session_state.pop("pattern_filter", None)
-    preset_steps: List[int] = []
-    preset_types: List[str] = []
-
-    if preset:
-        ptype = preset.get("type", "")
-        pval = preset.get("value", "")
-        if ptype == "workflow_step":
-            try:
-                preset_steps = [int(pval.split("_")[1])]
-            except (ValueError, IndexError):
-                pass
-        elif ptype == "failure_type" and pval in ALL_FT:
-            preset_types = [pval]
-
-    # Filter row
-    fc1, fc2, fc3, fc4 = st.columns(4)
-    sort_lbl = fc1.selectbox(
-        "Sort by", ["Newest first", "Lowest score first", "Failure type"], key="session_sort",
-    )
-    ft_sel: List[str] = fc2.multiselect(
-        "Failure type", ALL_FT, default=preset_types, key="session_ft",
-    )
-    step_sel: List[int] = fc3.multiselect(
-        "Step", [], default=[], key="session_step",
-        placeholder="All steps",
-    )
-    time_lbl = fc4.selectbox(
-        "Time range", ["Last 24h", "Last 7 days", "All time"], index=1, key="session_time",
-    )
-
-    sort_map = {
-        "Newest first": "newest",
-        "Lowest score first": "score_asc",
-        "Failure type": "failure_type",
-    }
-    hours_map: Dict[str, Optional[int]] = {
-        "Last 24h": 24, "Last 7 days": 168, "All time": None,
-    }
-
+# ═══════════════════════════════════════════════════════════════════════════════
+# SESSION SEARCH (top right, every page)
+# ═══════════════════════════════════════════════════════════════════════════════
+def _run_search() -> None:
+    """on_change: open an exact match straight away, otherwise list what matched."""
+    q = st.session_state.get("session_search", "").strip()
+    st.session_state.pop("search_results", None)
+    if not q:
+        return
     db = _db()
     try:
-        sessions = get_recent_failing_sessions(
-            agent_id,
-            limit=SESSION_LIMIT,
-            db=db,
-            failure_types=ft_sel or None,
-            step_numbers=step_sel or None,
-            since_hours=hours_map[time_lbl],
-            sort_by=sort_map[sort_lbl],
-        )
+        found = search_sessions(_all_agents or [agent_id], q, SEARCH_LIMIT, db)
     finally:
         db.close()
-
-    if not sessions:
-        st.info("No failing sessions match the current filters. Try expanding the time range.")
+    if found and found[0]["session_id"] == q:
+        _open_trace(q, found[0]["agent_id"])
+        st.session_state["session_search"] = ""
         return
+    st.session_state["search_results"] = (q, found)
 
-    st.markdown(
-        f'<p style="font-size:12px;color:#94a3b8;margin:12px 0 8px">'
-        f'{len(sessions)} session{"s" if len(sessions) != 1 else ""} · click a row to open its trace</p>',
-        unsafe_allow_html=True,
-    )
 
-    # Build a proper dataframe table
-    df_rows = [
-        {
-            "When": _fmt_ts(s["failed_at"]),
-            "Failure type": s["failure_type"] or "unknown",
-            "Step": s["failure_step"] or "—",
-            "Score": int(s["overall_score"] * 100),
-            "Root cause": _short_reason(s["failure_reason"], s["failure_type"], s.get("failure_step") or ""),
-            "_session_id": s["session_id"],
-        }
-        for s in sessions
-    ]
-    df = pd.DataFrame(df_rows)
-    display_df = df.drop(columns=["_session_id"])
+def _clear_search() -> None:
+    st.session_state.pop("search_results", None)
+    st.session_state["session_search"] = ""
 
-    # Show table, then per-row open buttons below
-    st.dataframe(
-        display_df,
-        hide_index=True,
-        use_container_width=True,
-        column_config={
-            "Score": st.column_config.ProgressColumn(
-                "Score", format="%d/100", min_value=0, max_value=100,
-            ),
-            "When": st.column_config.TextColumn("When", width="small"),
-            "Failure type": st.column_config.TextColumn("Type", width="medium"),
-            "Step": st.column_config.NumberColumn("Step", width="small"),
-            "Root cause": st.column_config.TextColumn("Root Cause", width="large"),
-        },
-    )
 
-    # Quick-open buttons under the table
-    st.markdown(
-        '<p style="font-size:11px;color:#94a3b8;margin:8px 0 4px">Open a session:</p>',
-        unsafe_allow_html=True,
-    )
-    btn_cols = st.columns(min(len(sessions), 6))
-    for i, s in enumerate(sessions[:6]):
-        ft = s["failure_type"] or "?"
-        fg, _ = _ft_color(ft)
-        with btn_cols[i]:
-            if st.button(
-                f"{ft[:12]}\n{int(s['overall_score']*100)}/100",
-                key=f"open_{s['session_id']}",
-                use_container_width=True,
-            ):
-                st.session_state["selected_session"] = s["session_id"]
-                st.rerun()
+def _open_result(session_id: str, agent: str) -> None:
+    _open_trace(session_id, agent)
+    _clear_search()
 
-    # If more than 6, show a selectbox
-    if len(sessions) > 6:
-        st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
-        chosen = st.selectbox(
-            "Or pick any session:",
-            options=[s["session_id"] for s in sessions],
-            format_func=lambda sid: f"{sid[:28]}… — {next((s['failure_type'] or '?' for s in sessions if s['session_id']==sid), '?')}",
-            key="session_picker",
-            index=None,
-            placeholder="Select session ID…",
-        )
-        if chosen:
-            st.session_state["selected_session"] = chosen
-            st.rerun()
+
+def _search_bar() -> None:
+    _, box = st.columns([3, 1.25])
+    box.text_input("Search sessions", key="session_search", on_change=_run_search,
+                   placeholder="🔍  Search sessions — ID or error text", label_visibility="collapsed")
+    results = st.session_state.get("search_results")
+    if not results:
+        return
+    q, found = results
+    with st.container(border=True):
+        head, close = st.columns([6, 1], vertical_alignment="center")
+        head.markdown(f"**{len(found)}{'+' if len(found) >= SEARCH_LIMIT else ''} session"
+                      f"{'' if len(found) == 1 else 's'}** matching “{html.escape(q)}”" if found
+                      else f"No sessions match “{html.escape(q)}”. Session IDs and error text are searched, "
+                           f"across all your agents.")
+        close.button("Close", key="search_close", on_click=_clear_search, use_container_width=True)
+        for r in found:
+            text, btn = st.columns([6, 1], vertical_alignment="center")
+            status = ('<span style="color:#dc2626;font-weight:600">failed</span>' if r["failed"]
+                      else '<span style="color:#16a34a;font-weight:600">passed</span>')
+            reason = (f' · {html.escape(_short_reason(r["failure_reason"], None, ""))}'
+                      if r.get("failure_reason") else "")
+            agent_note = f" · {html.escape(r['agent_id'])}" if r["agent_id"] != agent_id else ""
+            text.markdown(f'<div style="font-size:14px"><code>{html.escape(r["session_id"])}</code></div>'
+                          f'<div style="font-size:12px;color:#94a3b8">{status} · {_ago(r["last_seen"])}'
+                          f'{agent_note}{reason}</div>', unsafe_allow_html=True)
+            btn.button("Open", key=f"sr_{r['session_id']}", use_container_width=True,
+                       on_click=_open_result, args=(r["session_id"], r["agent_id"]))
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ROUTER
 # ═══════════════════════════════════════════════════════════════════════════════
-if "Overview" in view:
+_search_bar()
+_open_sid = st.session_state.get("open_session")
+if _open_sid:
+    _show_trace(agent_id, str(_open_sid))
+elif "Overview" in view:
     _show_overview(agent_id)
 elif "Failure" in view:
     _show_failure_feed(agent_id)
-elif "Trace" in view:
-    sid = st.session_state.get("selected_session") or st.session_state.get("manual_sid", "")
-    _show_trace(agent_id, str(sid))
 elif "Rules" in view:
     show_rules(agent_id)
