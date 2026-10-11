@@ -27,7 +27,9 @@ REFUND_LIMIT = 500
 FAILING_AMOUNTS = [620, 750, 890, 940, 1200, 1350, 980, 1500, 700, 1100]
 PASSING_AMOUNTS = [25, 40, 60, 75, 89, 120, 150, 199, 240, 310, 380, 450, 95, 275]
 SCORE_TIMEOUT_S = 240
-SEND_THREADS = 8
+SEND_THREADS = 4
+SEND_ATTEMPTS = 5
+RETRY_STATUSES = (None, 429, 500, 502, 503, 504)
 WAKE_TIMEOUT_S = 90
 
 
@@ -145,7 +147,13 @@ def run(api_key: str, endpoint: str = "", assume_yes: bool = False) -> None:
 
     _say("Kalytera quickstart — find how an agent fails, and stop it\n")
     _say("  Connecting… (a server that has been idle can take up to a minute to wake up)")
-    status, usage = _call("GET", "/billing/usage", timeout=WAKE_TIMEOUT_S)
+    for attempt in range(SEND_ATTEMPTS):  # a restarting server answers 502 for a few seconds
+        status, usage, _err = tracer._http("GET", "/billing/usage", timeout=WAKE_TIMEOUT_S)
+        if status not in RETRY_STATUSES:
+            break
+        time.sleep(3 * (attempt + 1))
+    if status is None or status >= 500:
+        _fail("Can't reach Kalytera right now. Try again in a minute.")
     if status != 200:
         _fail(f"API key rejected (HTTP {status}).")
     org = (usage or {}).get("org_name") or "your account"
@@ -163,7 +171,13 @@ def run(api_key: str, endpoint: str = "", assume_yes: bool = False) -> None:
         payload = tracer._build_payload(step["session_id"], step["step_number"], step["step_name"],
                                         step["input"], step["output"], step["tool_calls"], {},
                                         agent_id, step.get("session_ended", False))
-        return tracer._http("POST", "/trace", payload, timeout=30)[0]
+        status = None
+        for attempt in range(SEND_ATTEMPTS):  # ride out a server restart or a busy moment
+            status = tracer._http("POST", "/trace", payload, timeout=30)[0]
+            if status not in RETRY_STATUSES:
+                break
+            time.sleep(2 * (attempt + 1))
+        return status
 
     with ThreadPoolExecutor(SEND_THREADS) as pool:
         codes = list(pool.map(send, steps))

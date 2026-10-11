@@ -135,3 +135,19 @@ def test_demo_agent_cannot_be_claimed(qs: SimpleNamespace) -> None:
                                           "step_name": "a", "input": "", "output": "",
                                           "timestamp": "2026-01-01T00:00:00+00:00"})
     assert resp.status_code == 409
+
+
+def test_sending_retries_a_restarting_server(qs: SimpleNamespace, capsys: pytest.CaptureFixture) -> None:
+    routed = tracer._http
+    failures = {"left": 3}
+
+    def flaky(method: str, path: str, body: Optional[Dict[str, Any]] = None,
+              timeout: Optional[float] = None) -> Tuple[Optional[int], Any, Optional[str]]:
+        if path == "/trace" and failures["left"]:
+            failures["left"] -= 1
+            return 502, None, None
+        return routed(method, path, body, timeout)
+
+    with patch.object(tracer, "_http", flaky):
+        quickstart.run("kly_live_test", assume_yes=True)
+    assert "✓ 48 steps recorded" in capsys.readouterr().out
