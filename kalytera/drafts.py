@@ -11,9 +11,12 @@ Heuristics (deliberately simple, every one explained in `evidence`):
   - number: `field > max(passing)` if every failing value is above every
             passing value (or `<` for the mirror case)
   - text:   `field in [...]` if failing sessions used a few values that
-            passing sessions never did
-  - loop:   for loop patterns, `count_in_window >= N` where N is the smallest
-            per-session call count seen in failing sessions (at least 3)
+            passing sessions never did, and each value recurs across failing
+            sessions (so IDs, which are unique per session, are never proposed)
+  - repeat: if failing sessions call the tool more often than any passing
+            session does, `count_in_window >= N` with N one above the most
+            calls a passing session made (for loop patterns with nothing to
+            compare against: the fewest calls in a failing session, at least 3)
 """
 import json
 import re
@@ -50,8 +53,9 @@ def _is_number(v: Any) -> bool:
     return isinstance(v, (int, float)) and not isinstance(v, bool)
 
 
-def _calls_named(sessions: Iterable[List[Call]], tool: str) -> List[Call]:
-    return [c for calls in sessions for c in calls if c.get("name") == tool]
+def _calls_named(sessions: Iterable[List[Call]], tool: str) -> List[Tuple[int, Call]]:
+    """(session index, call) for every call to `tool`."""
+    return [(i, c) for i, calls in enumerate(sessions) for c in calls if c.get("name") == tool]
 
 
 def _pick_tool(failing: List[List[Call]]) -> Tuple[Optional[str], str]:
@@ -67,9 +71,11 @@ def _pick_tool(failing: List[List[Call]]) -> Tuple[Optional[str], str]:
     return None, "No tool calls were recorded in these sessions."
 
 
-def _arg_predicates(fail_calls: List[Call], pass_calls: List[Call]) -> Tuple[List[Dict[str, Any]], List[str]]:
-    fail_args = [_flatten(c.get("input")) for c in fail_calls]
-    pass_args = [_flatten(c.get("input")) for c in pass_calls]
+def _arg_predicates(fail_calls: List[Tuple[int, Call]],
+                    pass_calls: List[Tuple[int, Call]]) -> Tuple[List[Dict[str, Any]], List[str]]:
+    fail_args = [_flatten(c.get("input")) for _, c in fail_calls]
+    pass_args = [_flatten(c.get("input")) for _, c in pass_calls]
+    fail_sessions = [i for i, _ in fail_calls]
     fields = sorted({f for a in fail_args for f in a})
     preds: List[Dict[str, Any]] = []
     evidence: List[str] = []
@@ -88,10 +94,33 @@ def _arg_predicates(fail_calls: List[Call], pass_calls: List[Call]) -> Tuple[Lis
                 evidence.append(f"Every failing call had `{field}` below {min(pv)}; no passing call did.")
         elif all(isinstance(v, str) for v in fv + pv):
             only_failing = sorted(set(fv) - set(pv))
-            if only_failing and set(fv) <= set(only_failing) and len(only_failing) <= MAX_IN_VALUES:
+            sessions_with_field = {fail_sessions[k] for k, a in enumerate(fail_args) if field in a}
+            recurs = len(only_failing) * 2 <= len(sessions_with_field)
+            if only_failing and set(fv) <= set(only_failing) and len(only_failing) <= MAX_IN_VALUES and recurs:
                 preds.append({"field": field, "op": "in", "value": only_failing})
                 evidence.append(f"Failing calls used `{field}` = {', '.join(only_failing)}; passing calls never did.")
     return preds, evidence
+
+
+def _repeat_threshold(tool: str, failing: List[List[Call]], passing: List[List[Call]],
+                      is_loop: bool) -> Optional[Tuple[int, str]]:
+    """(N, explanation) for a count_in_window condition, or None if call counts don't separate."""
+    fail_counts = [n for n in (sum(1 for c in calls if c.get("name") == tool) for calls in failing) if n > 0]
+    pass_counts = [sum(1 for c in calls if c.get("name") == tool) for calls in passing]
+    pass_counts = [n for n in pass_counts if n > 0]
+    if not fail_counts:
+        return None
+    if pass_counts:
+        if min(fail_counts) <= max(pass_counts):
+            return None
+        n = max(pass_counts) + 1
+        return n, (f"Failing sessions called `{tool}` {min(fail_counts)}+ times; successful ones at most "
+                   f"{max(pass_counts)}. The draft flags the {n}th call within {LOOP_WINDOW_S // 60} minutes.")
+    if not is_loop:
+        return None
+    n = max(MIN_LOOP_COUNT, min(fail_counts))
+    return n, (f"Loop pattern: failing sessions called `{tool}` at least {n} times, "
+               f"so the draft flags the {n}th call within {LOOP_WINDOW_S // 60} minutes.")
 
 
 def _slug(text: str) -> str:
@@ -107,7 +136,10 @@ def draft_rule(
     root_cause: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Returns {"rule": {...} or None, "evidence": [str], "warnings": [str]}.
+    Returns {"rule": {...} or None, "evidence": [str], "warnings": [str], "coverage": {...}}.
+
+    coverage: how many failing / passing sessions the drafted rule would have
+    matched, replayed call by call — the citation shown next to a suggestion.
 
     failing_sessions / passing_sessions: the tool calls of each session, in order.
     """
@@ -120,7 +152,7 @@ def draft_rule(
     if tool is None:
         warnings.append("Can't draft a rule without tool calls. Pass tool_calls=[...] to trace() so "
                         "Kalytera can see what the agent did.")
-        return {"rule": None, "evidence": evidence, "warnings": warnings}
+        return {"rule": None, "evidence": evidence, "warnings": warnings, "coverage": None}
 
     fail_calls = _calls_named(failing_sessions, tool)
     pass_calls = _calls_named(passing_sessions, tool)
@@ -135,18 +167,52 @@ def draft_rule(
         "reason": root_cause or f"Matches failure pattern {pattern_type} = {pattern_value}",
     }
 
-    if pattern_value == "loop" or pattern_type == "loop":
-        counts = [sum(1 for c in calls if c.get("name") == tool) for calls in failing_sessions]
-        counts = [n for n in counts if n > 0]
-        n = max(MIN_LOOP_COUNT, min(counts)) if counts else MIN_LOOP_COUNT
+    repeat = _repeat_threshold(tool, failing_sessions, passing_sessions,
+                               is_loop=pattern_value == "loop" or pattern_type == "loop")
+    if repeat and (not preds or pattern_value == "loop"):
+        n, why = repeat
         rule["session_conditions"] = [{"type": "count_in_window", "tool": tool, "op": ">=",
                                        "value": n, "window_seconds": LOOP_WINDOW_S}]
         rule["action"] = "ESCALATE"
-        evidence.append(f"Loop pattern: failing sessions called `{tool}` at least {n} times, "
-                        f"so the draft escalates the {n}th call within {LOOP_WINDOW_S // 60} minutes.")
+        evidence.append(why)
     elif not preds:
         if not pass_calls:
             warnings.append(f"No passing session called `{tool}`, so there is nothing to compare against.")
         warnings.append(f"No argument separates failing calls from passing ones. As drafted, the rule matches "
                         f"every call to `{tool}` — narrow it before promoting.")
-    return {"rule": rule, "evidence": evidence, "warnings": warnings}
+    return {"rule": rule, "evidence": evidence, "warnings": warnings,
+            "coverage": coverage(rule, failing_sessions, passing_sessions)}
+
+
+def _session_matches(rule: Any, calls: List[Call]) -> bool:
+    """Replay a session's calls through the rule (enforced) and report whether any call matches."""
+    from .rules import ALLOW, SessionHistory, evaluate
+
+    history = SessionHistory()
+    for call in calls:
+        name = call.get("name")
+        if not name:
+            continue
+        args = call.get("input")
+        if isinstance(args, str):
+            try:
+                args = json.loads(args)
+            except ValueError:
+                args = {}
+        if evaluate([rule], name, args if isinstance(args, dict) else {}, "s", history).decision != ALLOW:
+            return True
+        history.record("s", name)
+    return False
+
+
+def coverage(raw_rule: Dict[str, Any], failing: List[List[Call]], passing: List[List[Call]]) -> Dict[str, int]:
+    """{"failing_matched", "failing_total", "passing_matched", "passing_total"}."""
+    from .rules import parse_rule
+
+    rule = parse_rule({**raw_rule, "mode": "enforce"})
+    return {
+        "failing_matched": sum(_session_matches(rule, calls) for calls in failing),
+        "failing_total": len(failing),
+        "passing_matched": sum(_session_matches(rule, calls) for calls in passing),
+        "passing_total": len(passing),
+    }

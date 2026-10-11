@@ -312,3 +312,34 @@ def test_draft_for_another_orgs_agent_404(env: SimpleNamespace) -> None:
     pid = _seed_pattern(env)
     env.org = SimpleNamespace(id="org-2")
     assert env.client.post("/rules/draft", json={"pattern_id": pid}).status_code == 404
+
+
+def test_suggestions_are_merged_cited_and_skip_existing_rules(env: SimpleNamespace) -> None:
+    from datetime import datetime, timezone
+    from db.models import LossPattern
+    _seed_pattern(env)
+    db = env.session()
+    now = datetime.now(timezone.utc)
+    # a second pattern over the same failing sessions drafts the same rule -> merged
+    db.add(LossPattern(id="pat-2", agent_id=AGENT, pattern_type="workflow_step", pattern_value="refund",
+                       failure_count=2, total_count=4, failure_rate=0.5, pct_of_all_failures=1.0,
+                       root_cause="Refunds above the limit fail", first_seen=now, last_seen=now))
+    db.commit()
+    db.close()
+    resp = env.client.get("/rules/suggestions", params={"agent_id": AGENT})
+    assert resp.status_code == 200, resp.text
+    sugg = resp.json()["suggestions"]
+    assert len(sugg) == 1
+    s0 = sugg[0]
+    assert s0["rule"]["match"]["args"] == [{"field": "amount", "op": ">", "value": 300}]
+    assert s0["coverage"] == {"failing_matched": 2, "failing_total": 2, "passing_matched": 0, "passing_total": 2}
+    assert len(s0["patterns"]) == 1 or {p["pattern_id"] for p in s0["patterns"]} == {"pat-1", "pat-2"}
+
+    assert env.client.post("/rules", json=s0["rule"]).status_code == 201
+    assert env.client.get("/rules/suggestions", params={"agent_id": AGENT}).json()["suggestions"] == []
+
+
+def test_suggestions_for_another_orgs_agent_404(env: SimpleNamespace) -> None:
+    _seed_pattern(env)
+    env.org = SimpleNamespace(id="org-2")
+    assert env.client.get("/rules/suggestions", params={"agent_id": AGENT}).status_code == 404

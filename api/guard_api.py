@@ -10,6 +10,7 @@ Guard rules API — storage and server-side evaluation for kalytera.guard().
   DELETE /rules/{rule_id}?agent_id=X    — deactivate every version
   GET    /rules/{rule_id}/stats?agent_id=X — would-block / deny counts
   POST   /rules/draft                   — draft a rule from a LossPattern (not saved)
+  GET    /rules/suggestions?agent_id=X  — drafts for every detected pattern, deduped, cited
   POST   /guard                         — evaluate one call server-side (non-Python callers)
   POST   /guard/events                  — decisions reported by the SDK
 
@@ -32,6 +33,8 @@ from kalytera.drafts import draft_rule
 from kalytera.rules import ALLOW, ENFORCE, SHADOW, RuleError, SessionHistory, evaluate, parse_rule
 
 MAX_EVENTS_PER_BATCH = 500
+MAX_SUGGESTIONS = 5
+MAX_PASSING_SHARE = 0.1   # skip suggestions that would match more than 10% of successful sessions
 DRAFT_SESSION_LIMIT = 200
 
 
@@ -199,6 +202,42 @@ def _draft_for_pattern(db: Session, pattern: LossPattern) -> Dict[str, Any]:
     )
 
 
+def _rule_key(rule: Dict[str, Any]) -> str:
+    return json.dumps({k: rule.get(k) or None for k in ("match", "session_conditions", "action")}, sort_keys=True)
+
+
+def _suggestions(db: Session, org_id: Optional[str], agent_id: str) -> List[Dict[str, Any]]:
+    """
+    One suggestion per distinct drafted rule, most failures first. Patterns that
+    draft the same rule are merged; rules the agent already has are skipped.
+    """
+    existing = {_rule_key(_body(r)) for r in _current_rows(db, org_id, agent_id)}
+    patterns = (db.query(LossPattern).filter(LossPattern.agent_id == agent_id)
+                .order_by(LossPattern.failure_count.desc()).all())
+    merged: Dict[str, Dict[str, Any]] = {}
+    for p in patterns:
+        draft = _draft_for_pattern(db, p)
+        rule = draft.get("rule")
+        cov = draft.get("coverage") or {}
+        if not rule or not cov.get("failing_matched"):
+            continue
+        # Only suggest rules that would rarely touch sessions that went fine.
+        if cov.get("passing_total") and cov["passing_matched"] / cov["passing_total"] > MAX_PASSING_SHARE:
+            continue
+        key = _rule_key(rule)
+        if key in existing:
+            continue
+        cite = {"pattern_id": p.id, "pattern_type": p.pattern_type, "pattern_value": p.pattern_value,
+                "failure_count": p.failure_count, "root_cause": p.root_cause}
+        if key in merged:
+            merged[key]["patterns"].append(cite)
+            continue
+        merged[key] = {**draft, "patterns": [cite]}
+    ranked = sorted(merged.values(), key=lambda d: (-(d["coverage"] or {}).get("failing_matched", 0),
+                                                    (d["coverage"] or {}).get("passing_matched", 0)))
+    return ranked[:MAX_SUGGESTIONS]
+
+
 def build_router(resolve_org: Callable[..., Any],
                  agent_ids_for_org: Optional[Callable[[str, Session], List[str]]] = None) -> APIRouter:
     """
@@ -206,6 +245,12 @@ def build_router(resolve_org: Callable[..., Any],
     agent_ids_for_org: agents an org may read patterns for (None = no check).
     """
     router = APIRouter(tags=["guard"])
+
+    @router.get("/rules/suggestions")
+    async def suggestions(agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        if org is not None and agent_ids_for_org is not None and agent_id not in agent_ids_for_org(org.id, db):
+            raise HTTPException(status_code=404, detail="agent not found")
+        return {"agent_id": agent_id, "suggestions": _suggestions(db, _org_id(org), agent_id)}
 
     @router.post("/rules/draft")
     async def draft(req: DraftRequest, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:

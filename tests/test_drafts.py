@@ -21,14 +21,14 @@ def test_numeric_threshold_separates_failing_from_passing():
 
 
 def test_string_values_only_seen_in_failures_become_in():
-    failing = [[_call("ship", False, country="BR")], [_call("ship", False, country="IN")]]
+    failing = [[_call("ship", False, country=c)] for c in ("BR", "IN", "BR", "IN")]
     passing = [[_call("ship", country="US")], [_call("ship", country="CA")]]
     rule = draft_rule("a", "workflow_step", "shipping", failing, passing)["rule"]
     assert rule["match"]["args"] == [{"field": "country", "op": "in", "value": ["BR", "IN"]}]
 
 
 def test_nested_and_json_string_args():
-    failing = [[{"name": "t", "success": False, "input": '{"customer": {"tier": "trial"}}'}]]
+    failing = [[{"name": "t", "success": False, "input": '{"customer": {"tier": "trial"}}'}]] * 2
     passing = [[{"name": "t", "input": {"customer": {"tier": "gold"}}}]]
     rule = draft_rule("a", "failure_type", "wrong_answer", failing, passing)["rule"]
     assert rule["match"]["args"] == [{"field": "customer.tier", "op": "in", "value": ["trial"]}]
@@ -61,3 +61,36 @@ def test_no_tool_calls_gives_no_rule():
     d = draft_rule("a", "failure_type", "goal_drift", [[], []], [])
     assert d["rule"] is None
     assert any("tool_calls" in w for w in d["warnings"])
+
+
+def test_coverage_replays_sessions():
+    failing = [[_call("refund_api", False, amount=900)], [_call("refund_api", False, amount=650)],
+               [_call("lookup")]]
+    passing = [[_call("refund_api", amount=120)], [_call("refund_api", amount=480)]]
+    d = draft_rule("a", "failure_type", "tool_failure", failing, passing)
+    assert d["coverage"] == {"failing_matched": 2, "failing_total": 3, "passing_matched": 0, "passing_total": 2}
+
+
+def test_coverage_counts_loops_in_order():
+    failing = [[_call("search")] * 5, [_call("search")] * 2]
+    d = draft_rule("a", "failure_type", "loop", failing, [[_call("search")]])
+    # a successful session called search once, so the draft flags the 2nd call: both failing sessions match
+    assert d["rule"]["session_conditions"][0]["value"] == 2
+    assert d["coverage"]["failing_matched"] == 2 and d["coverage"]["passing_matched"] == 0
+
+
+def test_repeat_count_separates_when_args_do_not():
+    failing = [[_call("lookup_order", order_id="a")] * 6, [_call("lookup_order", order_id="b")] * 5]
+    passing = [[_call("lookup_order", order_id="c")] * 2, [_call("lookup_order", order_id="d")]]
+    d = draft_rule("a", "workflow_step", "find_order", failing, passing)
+    cond = d["rule"]["session_conditions"][0]
+    assert cond["value"] == 3 and cond["tool"] == "lookup_order"
+    assert d["coverage"]["failing_matched"] == 2 and d["coverage"]["passing_matched"] == 0
+    assert d["warnings"] == []
+
+
+def test_unique_ids_are_not_proposed_as_value_lists():
+    failing = [[_call("refund_api", False, order_id=f"o{i}")] for i in range(5)]
+    passing = [[_call("refund_api", order_id=f"p{i}")] for i in range(5)]
+    d = draft_rule("a", "failure_type", "tool_failure", failing, passing)
+    assert d["rule"]["match"]["args"] == []

@@ -196,31 +196,69 @@ def show_rules(agent_id: str) -> None:
         return
     rules: List[Dict[str, Any]] = body.get("rules", [])
 
+    # Suggestions: the one requested from the Failure Feed first, then the rest.
+    suggestions = _suggestions(agent_id)
     draft = st.session_state.get("rule_draft")
     if draft:
-        _suggestion_card(agent_id, draft, rules)
+        suggestions = [draft] + [x for x in suggestions if not (draft.get("rule") and x.get("rule")
+                                                                and _same_rule(draft["rule"], x["rule"]))]
+    hidden = st.session_state.setdefault("hidden_suggestions", set())
+    suggestions = [x for x in suggestions if not x.get("rule") or (
+        _rule_sig(x["rule"]) not in hidden and not any(_same_rule(x["rule"], r) for r in rules))]
 
-    if not rules and not draft:
-        _empty_state(agent_id)
-        return
-    for rule in rules:
-        _rule_card(agent_id, rule)
+    if suggestions:
+        _section("Suggested for you", "Based on failures Kalytera already detected for this agent.")
+        for i, sug in enumerate(suggestions):
+            _suggestion_card(agent_id, sug, i)
+
+    if rules:
+        _section("Your rules")
+        for rule in rules:
+            _rule_card(agent_id, rule)
+    else:
+        _empty_state(agent_id, has_suggestions=bool(suggestions))
 
 
-def _empty_state(agent_id: str) -> None:
+def _section(title: str, sub: str = "") -> None:
+    sub_html = f'<div class="kr-meta" style="margin-top:2px">{_e(sub)}</div>' if sub else ""
+    st.markdown(f'<div style="margin:18px 0 8px"><div style="font-size:15px;font-weight:700;color:#0f172a">'
+                f'{_e(title)}</div>{sub_html}</div>', unsafe_allow_html=True)
+
+
+@st.cache_data(ttl=120, show_spinner="Looking for rules that would have prevented recent failures…")
+def _fetch_suggestions(api_key: str, agent_id: str) -> List[Dict[str, Any]]:
+    try:
+        r = requests.get(f"{API}/rules/suggestions", params={"agent_id": agent_id}, timeout=30,
+                         headers={"Authorization": f"Bearer {api_key}"} if api_key else {})
+        return r.json().get("suggestions", []) if r.status_code == 200 else []
+    except Exception:
+        return []
+
+
+def _suggestions(agent_id: str) -> List[Dict[str, Any]]:
+    return _fetch_suggestions(st.session_state.get("api_key", ""), agent_id)
+
+
+def _rule_sig(rule: Dict[str, Any]) -> str:
+    return json.dumps({k: rule.get(k) or None for k in ("match", "session_conditions", "action")}, sort_keys=True)
+
+
+def _empty_state(agent_id: str, has_suggestions: bool) -> None:
     with st.container(border=True):
+        hint = ("Add a suggestion above, or write your own." if has_suggestions else
+                "Suggestions appear here once Kalytera sees the same failure repeat in traces that "
+                "include <code>tool_calls</code>.")
         st.markdown(
             '<div class="kr-empty"><div class="kr-empty-title">No rules yet</div>'
             'A rule checks a tool call before your agent makes it — for example, '
-            '<i>block refunds over 500</i>.<br/>New rules only <b>watch</b> at first, so trying one is safe.</div>',
+            f'<i>block refunds over 500</i>. New rules only <b>watch</b> at first, so trying one is safe.<br/>'
+            f'<span style="color:#94a3b8">{hint}</span></div>',
             unsafe_allow_html=True,
         )
-        _, c1, c2, _ = st.columns([1, 1.3, 1.6, 1])
-        if c1.button("＋ Create a rule", type="primary", use_container_width=True, key="empty_new"):
+        _, c1, _ = st.columns([2, 1.2, 2])
+        if c1.button("＋ Create a rule", use_container_width=True, key="empty_new",
+                     type="secondary" if has_suggestions else "primary"):
             _new_rule_dialog(agent_id)
-        c2.button("Suggest one from failures", use_container_width=True, key="empty_suggest",
-                  on_click=lambda: st.session_state.update(view="🔴  Failure Feed"),
-                  help="Opens the Failure Feed — click “Suggest a rule” on a pattern")
 
 
 def _same_rule(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
@@ -228,40 +266,53 @@ def _same_rule(a: Dict[str, Any], b: Dict[str, Any]) -> bool:
     return a.get("id") == b.get("id") or all((a.get(k) or None) == (b.get(k) or None) for k in keys)
 
 
-def _suggestion_card(agent_id: str, draft: Dict[str, Any], rules: List[Dict[str, Any]]) -> None:
-    rule = draft.get("rule")
-    existing = next((r for r in rules if rule and _same_rule(rule, r)), None)
+def _citation(sug: Dict[str, Any]) -> str:
+    """'Would have caught 10 of 10 failed sessions · 0 of 20 successful ones'."""
+    cov = sug.get("coverage") or {}
+    if not cov.get("failing_total"):
+        return ""
+    fm, ft = cov["failing_matched"], cov["failing_total"]
+    pm, pt = cov.get("passing_matched", 0), cov.get("passing_total", 0)
+    good = '<span style="color:#16a34a;font-weight:600">' if pm == 0 else '<span style="color:#b45309;font-weight:600">'
+    passing = f" · {good}{pm} of {pt} successful ones</span>" if pt else ""
+    return (f'Would have caught <b>{fm} of {_plural(ft, "failed session")}</b>{passing}')
+
+
+def _suggestion_card(agent_id: str, sug: Dict[str, Any], i: int) -> None:
+    rule = sug.get("rule")
     with st.container(border=True):
-        st.markdown('<div class="kr-name">SUGGESTED FROM YOUR FAILURE FEED</div>', unsafe_allow_html=True)
         if not rule:
-            for w in draft.get("warnings", []):
-                st.markdown(f'<div class="kr-meta">{_e(w)}</div>', unsafe_allow_html=True)
-            if st.button("Dismiss", key="dismiss_draft"):
+            st.markdown('<div class="kr-name">NO RULE SUGGESTED</div>', unsafe_allow_html=True)
+            for w in sug.get("warnings", []):
+                st.markdown(f'<div class="kr-meta">{w}</div>', unsafe_allow_html=True)
+            if st.button("OK", key=f"dismiss_sug_{i}"):
                 st.session_state.pop("rule_draft", None)
                 st.rerun()
             return
-        st.markdown(f'<div class="kr-sentence">{sentence(rule)}</div>', unsafe_allow_html=True)
-        with st.expander("Why this rule?"):
-            for line in draft.get("evidence", []):
-                st.markdown(f"- {line}")
-            for w in draft.get("warnings", []):
-                st.warning(w)
-        if existing:
-            st.markdown(f'<div class="kr-meta">You already have this rule: <b>{_e(existing["id"])}</b>.</div>',
-                        unsafe_allow_html=True)
-            if st.button("Dismiss", key="dismiss_draft"):
-                st.session_state.pop("rule_draft", None)
-                st.rerun()
-            return
-        c1, c2, c3, _ = st.columns([1.5, 0.7, 0.9, 5], gap="small")
-        if c1.button("Save (watch only)", type="primary", key="save_draft",
-                     help="Starts in watch mode: it counts matches but never blocks"):
+        text, actions = st.columns([4, 2.4], vertical_alignment="center")
+        causes = [p.get("root_cause") for p in sug.get("patterns", []) if p.get("root_cause")]
+        cause = f'<div class="kr-meta">Failure seen: {_e(causes[0])}</div>' if causes else ""
+        text.markdown(
+            f'<div class="kr-sentence">{sentence(rule)}</div>'
+            f'<div class="kr-meta">{_citation(sug)}</div>{cause}',
+            unsafe_allow_html=True,
+        )
+        a1, a2, a3 = actions.columns([1.6, 1, 0.55])
+        if a1.button("Add rule", type="primary", key=f"add_sug_{i}", use_container_width=True,
+                     help="Adds it in watch mode: it counts matches but never blocks"):
             _create(agent_id, rule)
-        if c2.button("Edit", key="edit_draft"):
-            _json_dialog(agent_id, rule, mode="create")
-        if c3.button("Dismiss", key="dismiss_draft"):
+        if a2.button("Not now", key=f"hide_sug_{i}", use_container_width=True):
+            st.session_state.setdefault("hidden_suggestions", set()).add(_rule_sig(rule))
             st.session_state.pop("rule_draft", None)
             st.rerun()
+        with a3.popover("⋯", use_container_width=True):
+            if st.button("Edit before adding", key=f"edit_sug_{i}", use_container_width=True):
+                _json_dialog(agent_id, rule, mode="create")
+            st.markdown("**Why this rule?**")
+            for line in sug.get("evidence", []):
+                st.markdown(f"- {line}")
+            for w in sug.get("warnings", []):
+                st.caption(w)
 
 
 def _rule_card(agent_id: str, rule: Dict[str, Any]) -> None:
@@ -403,10 +454,12 @@ def _delete_dialog(agent_id: str, rid: str) -> None:
 # ── Actions ──────────────────────────────────────────────────────────────────
 
 def _create(agent_id: str, rule: Dict[str, Any]) -> None:
+    rule = {**rule}
     rule.setdefault("agent_id", agent_id)
     status, body = _api("POST", "/rules", rule)
     if status == 201:
         st.session_state.pop("rule_draft", None)
+        _fetch_suggestions.clear()
         st.session_state["rule_flash"] = ("success", f"Created “{body['id']}”. It's watching — use "
                                           "**Try it** to see what it would do.")
         st.rerun()
@@ -415,6 +468,7 @@ def _create(agent_id: str, rule: Dict[str, Any]) -> None:
 
 def _act(method: str, path: str, agent_id: str, ok: str) -> None:
     status, body = _api(method, path, params={"agent_id": agent_id})
+    _fetch_suggestions.clear()
     st.session_state["rule_flash"] = ("success", ok) if status == 200 else ("error", _detail(body))
     st.rerun()
 

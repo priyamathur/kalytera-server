@@ -2,6 +2,7 @@
 agentiq/dashboard.py — three views
 Run: streamlit run agentiq/dashboard.py --server.port 8501
 """
+import html
 import json
 import os
 import sys
@@ -1048,6 +1049,62 @@ def _show_overview(agent_id: str) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 2 — Failure Feed
 # ═══════════════════════════════════════════════════════════════════════════════
+def _open_trace(session_id: str) -> None:
+    """on_click: open one session in the Trace Viewer."""
+    st.session_state["selected_session"] = session_id
+    st.session_state["view"] = "🔍  Trace Viewer"
+
+
+def _open_pattern_sessions(ptype: str, pvalue: str) -> None:
+    """on_click: open the Trace Viewer filtered to one pattern's sessions."""
+    st.session_state["pattern_filter"] = {"type": ptype, "value": pvalue}
+    st.session_state["selected_session"] = None
+    st.session_state["view"] = "🔍  Trace Viewer"
+
+
+def _ago(ts: Optional[datetime]) -> str:
+    if not ts:
+        return ""
+    if ts.tzinfo is None:
+        ts = ts.replace(tzinfo=timezone.utc)
+    secs = (datetime.now(timezone.utc) - ts).total_seconds()
+    for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
+        if secs >= size:
+            return f"{int(secs // size)}{unit} ago"
+    return "just now"
+
+
+def _problems(patterns: List[Any]) -> List[Dict[str, Any]]:
+    """
+    One entry per distinct problem. The analyzer files the same failures under a
+    workflow step *and* a failure type; group them by root cause so each problem
+    shows once.
+    """
+    groups: Dict[str, Dict[str, Any]] = {}
+    for p in patterns:
+        key = (p.root_cause or p.pattern_value).strip().lower()
+        g = groups.setdefault(key, {"title": p.root_cause or p.pattern_value, "count": 0, "rate": 0.0,
+                                    "steps": [], "types": [], "worsening": False, "first": p})
+        g["count"] = max(g["count"], p.failure_count)
+        g["rate"] = max(g["rate"], p.failure_rate)
+        g["worsening"] = g["worsening"] or p.is_worsening
+        (g["steps"] if p.pattern_type == "workflow_step" else g["types"]).append(p.pattern_value)
+    return sorted(groups.values(), key=lambda g: -g["count"])
+
+
+_FEED_CSS = """
+<style>
+.ff-title{font-size:16px;font-weight:600;color:#0f172a;line-height:1.45;margin-bottom:3px}
+.ff-meta{font-size:13px;color:#64748b}
+.ff-meta code{background:#f1f5f9;color:#334155;padding:0 5px;border-radius:4px;font-size:12px}
+.ff-worse{color:#dc2626;font-weight:600}
+.ff-row{font-size:14px;color:#1e293b;line-height:1.4}
+.ff-sub{font-size:12px;color:#94a3b8}
+.ff-h{font-size:15px;font-weight:700;color:#0f172a;margin:22px 0 8px}
+</style>
+"""
+
+
 @st.fragment(run_every=AUTO_REFRESH_S)
 def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
     db = _db()
@@ -1055,280 +1112,92 @@ def _failure_feed_fragment(agent_id: str, _unused: str) -> None:
         patterns = get_patterns_for_agent(agent_id, db)
         recent = get_recent_eval_failures(agent_id, 50, db)
     except Exception as _exc:
-        db.close()
-        st.error(f"Could not load failure feed: {_exc}", icon="🔴")
+        st.error(f"Could not load failures: {_exc}", icon="🔴")
         return
     finally:
         db.close()
 
+    st.markdown(_FEED_CSS, unsafe_allow_html=True)
     if not patterns and not recent:
         st.success("No failures found for this agent.", icon="✅")
         return
 
-    # ── Tabs: one thing at a time ─────────────────────────────────────────────
-    tab_patterns, tab_recent = st.tabs([
-        f"⚠  Patterns  ({len(patterns)})",
-        f"🔴  Recent failures  ({len(recent)})",
-    ])
-
-    with tab_patterns:
-        if not patterns:
-            st.info("No recurring patterns yet — patterns form once 5+ failures share a root cause.")
-        else:
-            st.markdown(
-                '<p style="font-size:13px;color:#64748b;margin:8px 0 16px">'
-                'These are repeated failures with the same root cause. Fix the top one first — '
-                'it has the biggest impact.</p>',
-                unsafe_allow_html=True,
-            )
-            for i, p in enumerate(patterns):
-                _render_pattern_full(p, rank=i + 1)
-
-    with tab_recent:
-        if not recent:
-            st.info("No recent failures.")
-            return
-
-        # Search + export row
-        sc1, sc2 = st.columns([4, 1])
-        search = sc1.text_input(
-            "search", placeholder="Search failure reasons…", key="_feed_search",
-            label_visibility="collapsed",
-        )
-        rows_csv = [
-            {
-                "session_id": log.session_id,
-                "step": log.step_name,
-                "failure_type": ev.failure_type or "",
-                "failure_reason": ev.failure_reason or "",
-                "score": round(ev.overall_score * 100),
-                "evaluated_at": ev.evaluated_at.isoformat() if ev.evaluated_at else "",
-            }
-            for ev, log in recent
-        ]
-        sc2.download_button(
-            "⬇ CSV", data=pd.DataFrame(rows_csv).to_csv(index=False),
-            file_name=f"agentiq-failures-{agent_id}.csv", mime="text/csv",
-            use_container_width=True,
-        )
-
-        # Filter by search
-        filtered = recent
-        if search.strip():
-            q = search.strip().lower()
-            filtered = [
-                (ev, log) for ev, log in recent
-                if q in (ev.failure_reason or "").lower()
-                or q in (ev.failure_type or "").lower()
-                or q in log.step_name.lower()
-            ]
-
-        _plural = "s" if len(filtered) != 1 else ""
-        _match = f' matching "{search}"' if search.strip() else ""
-        st.markdown(
-            f'<p style="font-size:12px;color:#94a3b8;margin:8px 0 12px">'
-            f'{len(filtered)} failure{_plural}{_match}'
-            f' · auto-refreshes every {AUTO_REFRESH_S}s</p>',
-            unsafe_allow_html=True,
-        )
-
-        if not filtered:
-            st.caption(f'No failures matching "{search}".')
-            return
-
-        for ev, log in filtered[:25]:
-            _render_failure_row(ev, log)
-
-
-def _render_pattern_full(p: Any, rank: int = 0) -> None:
-    """Full readable pattern card for the Patterns tab."""
-    ft = p.pattern_value
-    fg, bg = _ft_color(ft)
-    fix = _FIXES.get(ft, "Review agent logic.")
-    worsening = (
-        '<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:4px;'
-        'font-size:11px;font-weight:700">▲ Getting worse</span>'
-        if p.is_worsening else ""
+    problems = _problems(patterns)
+    n_recent = f"{len(recent)}+" if len(recent) >= 50 else str(len(recent))
+    st.markdown(
+        f'<div class="ff-meta" style="margin:-8px 0 4px">{n_recent} recent failure{"s" if len(recent) != 1 else ""}'
+        + (f" · {len(problems)} keep{'s' if len(problems) == 1 else ''} happening" if problems else "")
+        + "</div>",
+        unsafe_allow_html=True,
     )
 
-    with st.container(border=True):
-        # Top row: rank + badge + share + worsening
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap">'
-            f'<span style="font-size:13px;font-weight:800;color:#94a3b8">#{rank}</span>'
-            f'{_badge(ft)}'
-            f'<span style="font-size:14px;font-weight:800;color:{fg}">'
-            f'{p.pct_of_all_failures * 100:.0f}% of all failures</span>'
-            f'{worsening}'
-            f'</div>',
-            unsafe_allow_html=True,
+    # ── What keeps failing ────────────────────────────────────────────────────
+    st.markdown('<div class="ff-h">What keeps failing</div>', unsafe_allow_html=True)
+    if not problems:
+        st.markdown('<div class="ff-meta">Nothing yet — a problem shows here once the same failure repeats '
+                    '(patterns update hourly).</div>', unsafe_allow_html=True)
+    for i, g in enumerate(problems):
+        where = " · ".join(
+            [f"at <code>{html.escape(s)}</code>" for s in g["steps"][:1]]
+            + [html.escape(t.replace("_", " ")) for t in g["types"][:1]]
         )
-        # Root cause — large, readable
-        st.markdown(
-            f'<div style="font-size:15px;font-weight:600;color:#0f172a;margin-bottom:8px;line-height:1.5">'
-            f'{p.root_cause or "No root cause identified."}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        # Fix — highlighted
-        st.markdown(
-            f'<div style="background:{bg};border-left:3px solid {fg};border-radius:0 8px 8px 0;'
-            f'padding:10px 14px;font-size:13px;color:#1e293b;margin-bottom:10px">'
-            f'<span style="font-weight:700;color:{fg}">How to fix: </span>{fix}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        # Stats footer
-        st.markdown(
-            f'<div style="font-size:12px;color:#94a3b8">'
-            f'{p.failure_count} occurrences &nbsp;·&nbsp; '
-            f'{p.failure_rate * 100:.0f}% fail rate &nbsp;·&nbsp; '
-            f'First seen {_fmt_ts(p.first_seen)}'
-            f'</div>',
-            unsafe_allow_html=True,
-        )
-        st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
-        b1, b2, _ = st.columns([1.2, 1.2, 2])
-        if b1.button("See affected sessions →", key=f"pat_{p.id}"):
-            st.session_state["pattern_filter"] = {"type": p.pattern_type, "value": p.pattern_value}
-            st.session_state["selected_session"] = None
-            st.session_state["view"] = "🔍  Trace Viewer"
-            st.rerun(scope="app")
-        # The callback switches the view; the full rerun leaves this fragment so the Rules page renders.
-        if b2.button("🛡 Suggest a rule →", key=f"draft_{p.id}", on_click=request_draft, args=(p.id,),
-                     help="Propose a guard rule from the tool calls in these failing sessions. Nothing is saved yet."):
-            st.rerun(scope="app")
-
-
-def _render_failure_row(ev: Any, log: Any) -> None:
-    """Clean single row for the Recent Failures tab."""
-    score = int(round(ev.overall_score * 100))
-    ft = ev.failure_type or "unknown"
-    fg, _ = _ft_color(ft)
-    reason = _short_reason(ev.failure_reason, ft, log.step_name)
-
-    with st.container(border=True):
-        lc, rc = st.columns([6, 1])
-        with lc:
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">'
-                f'{_badge(ft)}'
-                f'<span style="font-size:13px;font-weight:700;color:{fg}">{score}/100</span>'
-                f'<span style="font-size:12px;color:#94a3b8">Step {log.step_number} · {log.step_name}</span>'
-                f'<span style="font-size:12px;color:#94a3b8">{_fmt_ts(ev.evaluated_at)}</span>'
-                f'</div>',
+        worse = ' · <span class="ff-worse">▲ getting worse</span>' if g["worsening"] else ""
+        with st.container(border=True):
+            text, actions = st.columns([4, 2.3], vertical_alignment="center")
+            text.markdown(
+                f'<div class="ff-title">{html.escape(g["title"])}</div>'
+                f'<div class="ff-meta"><b>{g["count"]} failure{"s" if g["count"] != 1 else ""}</b>'
+                f'{" · " + where if where else ""}{worse}</div>',
                 unsafe_allow_html=True,
             )
-            st.markdown(
-                f'<div style="font-size:13px;color:#1e293b;font-weight:500;line-height:1.4">'
-                f'{reason}</div>',
-                unsafe_allow_html=True,
-            )
-        with rc:
-            if st.button("Trace →", key=f"row_{ev.id}", use_container_width=True):
-                st.session_state["selected_session"] = log.session_id
-                st.session_state["view"] = "🔍  Trace Viewer"
+            a1, a2 = actions.columns(2)
+            p = g["first"]
+            if a1.button("See sessions", key=f"pat_{p.id}", use_container_width=True,
+                         on_click=_open_pattern_sessions, args=(p.pattern_type, p.pattern_value)):
+                st.rerun(scope="app")
+            if a2.button("Prevent it", key=f"draft_{p.id}", use_container_width=True,
+                         on_click=request_draft, args=(p.id,),
+                         help="Suggest a rule that blocks this before it happens. Nothing is saved yet."):
                 st.rerun(scope="app")
 
-
-def _render_pattern_card(p: Any) -> None:
-    ft = p.pattern_value
-    fg, _ = _ft_color(ft)
-    fix = _FIXES.get(ft, "") if p.pattern_type == "failure_type" else ""
-    worsening = (
-        '&nbsp;&nbsp;<span style="color:#ef4444;font-weight:700;font-size:11px">▲ worsening</span>'
-        if p.is_worsening else ""
+    # ── Latest failures (identical ones grouped, newest first) ────────────────
+    st.markdown('<div class="ff-h">Latest failures</div>', unsafe_allow_html=True)
+    grouped: Dict[Tuple[str, str], List[Tuple[Any, Any]]] = {}
+    for ev, log in recent:  # already newest first
+        reason = _short_reason(ev.failure_reason, ev.failure_type, log.step_name)
+        grouped.setdefault((reason, log.step_name), []).append((ev, log))
+    rows = list(grouped.items())
+    shown = st.session_state.get("_feed_shown", 8)
+    for (reason, step), items in rows[:shown]:
+        ev, log = items[0]
+        times = f"{len(items)} times · " if len(items) > 1 else ""
+        text, btn = st.columns([6, 1], vertical_alignment="center")
+        text.markdown(
+            f'<div class="ff-row">{html.escape(reason)}</div>'
+            f'<div class="ff-sub">{times}{html.escape(step)} · '
+            f'{"last " if len(items) > 1 else ""}{_ago(ev.evaluated_at)}</div>',
+            unsafe_allow_html=True,
+        )
+        if btn.button("Open" if len(items) == 1 else "Open latest", key=f"row_{ev.id}", use_container_width=True,
+                      on_click=_open_trace, args=(log.session_id,)):
+            st.rerun(scope="app")
+    more, csv, _ = st.columns([1, 1, 3])
+    if len(rows) > shown and more.button(f"Show more ({len(rows) - shown})", key="_feed_more"):
+        st.session_state["_feed_shown"] = shown + 10
+        st.rerun(scope="fragment")
+    (csv if len(rows) > shown else more).download_button(
+        "Download CSV",
+        data=pd.DataFrame([{
+            "session_id": log.session_id, "step": log.step_name, "failure_type": ev.failure_type or "",
+            "failure_reason": ev.failure_reason or "", "score": round(ev.overall_score * 100),
+            "evaluated_at": ev.evaluated_at.isoformat() if ev.evaluated_at else "",
+        } for ev, log in recent]).to_csv(index=False),
+        file_name=f"kalytera-failures-{agent_id}.csv", mime="text/csv", key="_feed_csv",
     )
-
-    with st.container(border=True):
-        lc, rc = st.columns([6, 1])
-        with lc:
-            st.markdown(
-                f"""
-                <div style="margin-bottom:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-                  <span style="background:#fef3c7;color:#92400e;padding:2px 8px;
-                               border-radius:4px;font-size:10px;font-weight:800;letter-spacing:0.05em">
-                    ⚠ PATTERN
-                  </span>
-                  {_badge(ft)}
-                  {worsening}
-                  <span style="font-size:12px;font-weight:800;color:{fg}">
-                    {p.pct_of_all_failures * 100:.0f}% of all failures
-                  </span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            if p.root_cause:
-                st.markdown(
-                    f'<div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:5px">'
-                    f'{p.root_cause}</div>',
-                    unsafe_allow_html=True,
-                )
-            if fix:
-                st.markdown(
-                    f'<div style="font-size:12px;color:#0891b2;margin-bottom:6px">→ {fix[:160]}</div>',
-                    unsafe_allow_html=True,
-                )
-            st.caption(
-                f"{p.failure_count} occurrences · {p.failure_rate * 100:.0f}% fail rate "
-                f"· first seen {_fmt_ts(p.first_seen)}"
-            )
-        with rc:
-            if st.button("View →", key=f"pat_{p.id}", use_container_width=True):
-                st.session_state["pattern_filter"] = {
-                    "type": p.pattern_type, "value": p.pattern_value,
-                }
-                st.session_state["selected_session"] = None
-                st.session_state["view"] = "🔍  Trace Viewer"
-                st.rerun(scope="app")
-
-
-def _render_failure_card(ev: Any, log: Any) -> None:
-    score = int(round(ev.overall_score * 100))
-    ft = ev.failure_type or "unknown"
-
-    with st.container(border=True):
-        lc, rc = st.columns([6, 1])
-        with lc:
-            st.markdown(
-                f"""
-                <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-                  <span style="background:#fef2f2;color:#991b1b;padding:2px 8px;
-                               border-radius:4px;font-size:10px;font-weight:800">✗ FAILED</span>
-                  {_badge(ft)}
-                  {_score_chip(score, False)}
-                  <span style="font-size:11px;color:#94a3b8">{_fmt_ts(ev.evaluated_at)}</span>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-            reason = _short_reason(ev.failure_reason, ft, log.step_name)
-            st.markdown(
-                f'<div style="font-size:13px;font-weight:600;color:#1e293b;margin-bottom:4px">'
-                f'{reason}</div>',
-                unsafe_allow_html=True,
-            )
-            st.markdown(
-                f'<div style="font-size:11px;color:#94a3b8;margin-bottom:4px">'
-                f'Step {log.step_number} · {log.step_name} · '
-                f'<code>{log.session_id[:26]}…</code></div>',
-                unsafe_allow_html=True,
-            )
-            fix = _fix_step(ev.failure_type, log.step_name)
-            st.markdown(
-                f'<div style="font-size:12px;color:#0891b2">→ {fix}</div>',
-                unsafe_allow_html=True,
-            )
-        with rc:
-            if st.button("Trace →", key=f"fail_{ev.id}", use_container_width=True):
-                st.session_state["selected_session"] = log.session_id
-                st.session_state["view"] = "🔍  Trace Viewer"
-                st.rerun(scope="app")
 
 
 def _show_failure_feed(agent_id: str) -> None:
-    _page_header("Failure Feed", "Recurring patterns and recent failures")
+    _page_header("Failure Feed", "What keeps going wrong, and the latest failures")
     _failure_feed_fragment(agent_id, "")
 
 
