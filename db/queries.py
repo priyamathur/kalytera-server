@@ -43,6 +43,23 @@ def insert_agent_log(payload: Dict[str, Any], db: Session) -> AgentLog:
     return row
 
 
+def insert_agent_logs(payloads: List[Dict[str, Any]], db: Session) -> None:
+    """Write many AgentLog rows in one commit (the sample agent's conversations)."""
+    db.add_all([
+        AgentLog(
+            id=p["id"], agent_id=p["agent_id"], session_id=p["session_id"],
+            step_number=int(p["step_number"]), step_name=str(p["step_name"]),
+            input=str(p["input"]), output=str(p["output"]),
+            tool_calls=json.dumps(p["tool_calls"]) if p.get("tool_calls") else None,
+            latency_ms=int(p.get("latency_ms", 0)), session_ended=bool(p.get("session_ended", False)),
+            timestamp=_parse_timestamp(p.get("timestamp")),
+            step_metadata=json.dumps(p["metadata"]) if p.get("metadata") else None,
+        )
+        for p in payloads
+    ])
+    db.commit()
+
+
 def upsert_agent_org(agent_id: str, org_id: str, db: Session) -> bool:
     """
     Claim agent_id for this org, or confirm the org already owns it. Safe to call

@@ -117,7 +117,7 @@ def build_router(resolve_org: Callable[..., Any],
         """Same sample as `kalytera quickstart`, created server-side. Runs once per account;
         calling it again returns the existing sample agent. Not counted against usage."""
         from db.models import AgentLog
-        from db.queries import insert_agent_log, upsert_agent_org
+        from db.queries import insert_agent_logs, upsert_agent_org
         from kalytera.quickstart import sample_sessions
 
         org_id = getattr(org, "id", None)
@@ -127,11 +127,10 @@ def build_router(resolve_org: Callable[..., Any],
         if not upsert_agent_org(agent_id, org_id, db):
             raise HTTPException(status_code=409, detail="sample agent name is taken")
         if not db.query(AgentLog.id).filter(AgentLog.agent_id == agent_id).first():
-            now = datetime.now(timezone.utc)
-            for steps in sample_sessions(uuid.uuid4().hex[:6]):
-                for step in steps:
-                    insert_agent_log({**step, "id": str(uuid.uuid4()), "agent_id": agent_id,
-                                      "timestamp": now.isoformat(), "metadata": {"source": "sample"}}, db)
+            now = datetime.now(timezone.utc).isoformat()
+            insert_agent_logs([{**step, "id": str(uuid.uuid4()), "agent_id": agent_id, "timestamp": now,
+                                "metadata": {"source": "sample"}}
+                               for steps in sample_sessions(uuid.uuid4().hex[:6]) for step in steps], db)
         key = f"{org_id}:{agent_id}"
         with _lock:
             job = _jobs.get(key)

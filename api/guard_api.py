@@ -221,7 +221,7 @@ def _suggestions(db: Session, org_id: Optional[str], agent_id: str) -> Dict[str,
     "suggested" (with the rule and its coverage), "exists" (an existing rule
     already does this) or "none" (with the reason, in plain English).
     """
-    existing = {_rule_key(_body(r)): r.rule_id for r in _current_rows(db, org_id, agent_id)}
+    existing = {_rule_key(_body(r)): (r.rule_id, r.mode) for r in _current_rows(db, org_id, agent_id)}
     patterns = (db.query(LossPattern).filter(LossPattern.agent_id == agent_id)
                 .order_by(LossPattern.failure_count.desc()).all())
     merged: Dict[str, Dict[str, Any]] = {}
@@ -246,7 +246,8 @@ def _suggestions(db: Session, org_id: Optional[str], agent_id: str) -> Dict[str,
             continue
         key = _rule_key(rule)
         if key in existing:
-            by_pattern[p.id] = {"status": "exists", "rule_id": existing[key], "rule": rule, "coverage": cov}
+            rule_id, mode = existing[key]
+            by_pattern[p.id] = {"status": "exists", "rule_id": rule_id, "mode": mode, "rule": rule, "coverage": cov}
             continue
         by_pattern[p.id] = {"status": "suggested", "rule": rule, "coverage": cov,
                             "evidence": draft.get("evidence", []), "warnings": draft.get("warnings", [])}

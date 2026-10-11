@@ -162,37 +162,39 @@ check(any(t.placeholder.startswith("🔍  Search sessions") for t in at.text_inp
 print("4. Failure Feed reads in sessions, with a ready rule")
 at = dashboard("🔴  Failure Feed")
 t = texts(at)
-check("<b>10 sessions</b> with a tool failure · 26% of all sessions" in t,
-      "refund problem: '10 sessions with a tool failure · 26% of all sessions'")
-check("<b>5 sessions</b> with a loop failure · 13% of all sessions" in t,
-      "loop problem: '5 sessions with a loop failure · 13% of all sessions'")
-check("failures</b>" not in t, "no '... failures' counts left")
-check("Rule ready:</b> Block <code>refund_api</code> when amount is more than" in t, "refund rule is ready")
-check("<b>10 of 10 sessions</b>" in t and "0 of 23 successful ones" in t,
-      "citation: caught 10 of 10 failed sessions, 0 of 23 successful")
-check("Rule ready:</b> Flag <code>lookup_order</code> when it's the 3rd call or more" in t, "loop rule is ready")
+check("2 problems keep happening</b> — 15 of 38 sessions failed (39%)" in t, "headline: 2 problems, 15 of 38 sessions (39%)")
+check('<div class="n">10</div><div class="l">sessions · 26%</div>' in t, "refund problem: 10 sessions · 26%")
+check('<div class="n">5</div><div class="l">sessions · 13%</div>' in t, "loop problem: 5 sessions · 13%")
+check('<span class="ff-chip">tool failure</span>' in t and '<span class="ff-chip">at issue_refund</span>' in t,
+      "type and step shown as chips")
+check("Suggested rule</span>Block <code>refund_api</code> when amount is more than" in t, "refund rule is suggested")
+check("Would have caught 10 of 10 failed sessions · touches 0 of 23 good ones" in t,
+      "citation: caught 10 of 10 failed sessions, 0 of 23 good")
+check("Suggested rule</span>Flag <code>lookup_order</code> when it's the 3rd call or more" in t, "loop rule is suggested")
+check(sum(b.label == "⚡ Make it a rule" and b.proto.type == "primary" for b in at.button) == 2,
+      "one highlighted next step per card")
 
 print("5. See sessions → open a trace → back")
-run(button(at, "See 10 sessions").click())
+run(button(at, "▸ 10 sessions").click())
 opens = [b for b in at.button if b.key and b.key.startswith("ps_")]
 check(len(opens) == 10, "10 sessions listed inline, under the card")
-check("<code>sess-27</code>" in texts(at), "newest failed session (sess-27) is listed")
+check('<span class="ff-mono">sess-27</span>' in texts(at), "newest failed session (sess-27) is listed")
 run(opens[0].click())
 check("Session trace" in texts(at), "trace opens in place")
 check("lookup_order" in texts(at) and "issue_refund" in texts(at), "trace shows the session's steps")
 run(button(at, "← Back to Failure Feed").click())
-check("What keeps failing" in texts(at), "back on the Failure Feed")
+check("problems keep happening" in texts(at), "back on the Failure Feed")
 
 print("6. Make it a rule (one click)")
 make = [b for b in at.button if b.label == "⚡ Make it a rule"]
 check(len(make) == 2, "both problems offer '⚡ Make it a rule'")
 run(make[0].click())
-check("✓ Added rule" in texts(at), "confirmation shown on the card")
+check('ff-pill watch">Watching</span>Block <code>refund_api</code>' in texts(at), "card now shows the rule as Watching")
 rules = client.get("/rules", params={"agent_id": AGENT}, headers=H).json()["rules"]
 check(len(rules) == 1 and rules[0]["mode"] == "shadow", "rule saved in watch (shadow) mode")
 check(rules[0]["match"]["tool"] == "refund_api", "it's the refund rule")
 at = dashboard("🔴  Failure Feed")
-check("<b>Your rule:</b> Block <code>refund_api</code>" in texts(at)
+check('Watching</span>Block <code>refund_api</code>' in texts(at)
       and any(b.label == "▶ Test it" for b in at.button), "after reload the card shows the rule, ready to test")
 check(len([b for b in at.button if b.label == "⚡ Make it a rule"]) == 1, "only the loop rule is still offered")
 
@@ -261,8 +263,8 @@ run(button(at, "▶ Run the sample agent").click())  # scores and switches to th
 run(at)
 t = texts(at)
 check("Kalytera found this on its own" in t, "lands on the sample agent's Failure Feed with a hint")
-check("<b>10 sessions</b> with a hallucination failure" in t and "Rule ready:</b> Block <code>refund_api</code>" in t,
-      "problem found and a rule is ready")
+check('<span class="ff-chip">hallucination</span>' in t and "Suggested rule</span>Block <code>refund_api</code>" in t,
+      "problem found and a rule is suggested")
 run(button(at, "⚡ Make it a rule").click())
 run(button(at, "▶ Test it").click())
 check("would have blocked it" in texts(at), "test while watching: allowed, but would have blocked")
@@ -270,6 +272,7 @@ check("amount=900" in texts(at), "the test uses a clearly-too-large refund (900)
 run(button(at, "Start blocking").click())
 t = texts(at)
 check("Blocked: refund_api(amount=900)" in t and "The tool never ran." in t, "after Start blocking: Blocked")
-check("That's the loop" in t, "and it points to connecting your own agent")
+check(any("That's the loop" in str(x.value) for x in at.toast), "a toast celebrates the loop")
+check(any("kalytera.session(" in c.value for c in at.code), "and offers the code for your own agent")
 
 print("\nAll dashboard checks passed.")

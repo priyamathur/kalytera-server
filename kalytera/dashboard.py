@@ -129,13 +129,15 @@ def _short_reason(reason: Optional[str], ft: Optional[str], step_name: str) -> s
     """Return a concise one-line failure reason for cards/feed — never a paragraph."""
     if not reason:
         return f"{ft or 'failure'} at {step_name}"
-    # Take text up to the first sentence break
-    for sep in (". ", "; ", "\n"):
+    # The first sentence; a semicolon doesn't end it ("refund_api failed; refund not completed.")
+    reason = reason.strip()
+    for sep in (". ", "\n"):
         idx = reason.find(sep)
         if 0 < idx < 120:
             return reason[:idx + 1].strip()
-    # Hard truncate at 100 chars
-    return reason[:100].rstrip(" ,") + ("…" if len(reason) > 100 else "")
+    if len(reason) <= 120:
+        return reason
+    return reason[:110].rsplit(" ", 1)[0].rstrip(" ,;") + "…"
 
 
 # ── DB helpers ────────────────────────────────────────────────────────────────
@@ -258,6 +260,14 @@ section[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked
 }
 .stButton > button[kind="primary"] {
     background: #6366f1 !important; border-color: #6366f1 !important; color: white !important;
+}
+/* Tertiary = a link-style action: no box, so the one primary button per card stands out */
+.stButton > button[kind="tertiary"], [data-testid="stDownloadButton"] > button[kind="tertiary"] {
+    border: none !important; background: transparent !important; box-shadow: none !important;
+    color: #4f46e5 !important; font-weight: 600 !important;
+}
+.stButton > button[kind="tertiary"]:hover, [data-testid="stDownloadButton"] > button[kind="tertiary"]:hover {
+    background: #eef2ff !important; color: #3730a3 !important;
 }
 .stButton > button[kind="primary"]:hover {
     background: #4f46e5 !important; border-color: #4f46e5 !important; color: white !important;
@@ -1139,55 +1149,75 @@ def _rule_option(g: Dict[str, Any], by_pattern: Dict[str, Any]) -> Dict[str, Any
 
 _FEED_CSS = """
 <style>
-.ff-title{font-size:16px;font-weight:600;color:#0f172a;line-height:1.45;margin-bottom:3px}
-.ff-meta{font-size:13px;color:#64748b}
-.ff-meta b{color:#0f172a}
-.ff-meta code,.ff-rule code{background:#f1f5f9;color:#334155;padding:0 5px;border-radius:4px;font-size:12px}
-.ff-worse{color:#dc2626;font-weight:600}
-.ff-rule{font-size:13px;color:#334155;background:#f8fafc;border:1px solid #eef2f7;border-radius:8px;
-         padding:8px 12px;margin-top:10px;line-height:1.55}
-.ff-rule .ok{color:#16a34a;font-weight:600}
-.ff-rule .warn{color:#b45309;font-weight:600}
-.ff-rule .muted{color:#94a3b8}
-.ff-row{font-size:14px;color:#1e293b;line-height:1.4}
+.ff-sum{font-size:15px;color:#334155;margin:-14px 0 18px}
+.ff-sum b{color:#0f172a}
+.ff-title{font-size:17px;font-weight:650;color:#0f172a;line-height:1.4}
+.ff-chips{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.ff-chip{font-size:12px;color:#475569;background:#f1f5f9;border-radius:999px;padding:2px 10px}
+.ff-chip.bad{color:#b91c1c;background:#fef2f2;font-weight:600}
+.ff-stat{text-align:right;line-height:1.1}
+.ff-stat .n{font-size:26px;font-weight:800;color:#0f172a}
+.ff-stat .l{font-size:12px;color:#64748b}
+.ff-rule{border-top:1px solid #f1f5f9;margin-top:12px;padding-top:12px;font-size:14px;color:#1e293b;line-height:1.5}
+.ff-rule code{background:#f1f5f9;color:#0f172a;padding:1px 6px;border-radius:5px;font-size:13px}
+.ff-pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+         border-radius:999px;padding:2px 9px;margin-right:8px;vertical-align:1px}
+.ff-pill.sug{background:#eef2ff;color:#4338ca}
+.ff-pill.watch{background:#fffbeb;color:#b45309}
+.ff-pill.block{background:#fef2f2;color:#b91c1c}
+.ff-note{font-size:13px;color:#64748b;margin-top:3px}
+.ff-note.ok{color:#15803d}.ff-note.warn{color:#b45309}.ff-note.bad{color:#b91c1c;font-weight:600}
+.ff-h{font-size:15px;font-weight:700;color:#0f172a;margin:28px 0 6px}
+.ff-row{font-size:14px;color:#1e293b;line-height:1.35}
 .ff-sub{font-size:12px;color:#94a3b8}
-.ff-h{font-size:15px;font-weight:700;color:#0f172a;margin:22px 0 8px}
+.ff-mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13px;color:#334155}
 </style>
 """
 
 
-def _problem_meta(g: Dict[str, Any], total: int) -> str:
-    """'12 sessions with a tool failure · 8% of sessions · at `issue_refund` · ▲ getting worse'."""
-    n = g["sessions"]
-    kind = g["types"][0].replace("_", " ") if g["types"] else ""
-    if kind:
-        label = kind if kind.endswith("failure") else f"{kind} failure"
-        kind = f"{'an' if label[0] in 'aeiou' else 'a'} {html.escape(label)}"
-    head = f"<b>{_n_sessions(n)}</b> with {kind or 'this failure'}"
-    parts = [head]
-    if total:
-        parts.append(f"{_pct(n, total)} of all sessions")
+def _chips(g: Dict[str, Any]) -> str:
+    chips = []
+    if g["types"]:
+        chips.append(html.escape(g["types"][0].replace("_", " ")))
     if g["steps"]:
-        parts.append(f"at <code>{html.escape(g['steps'][0])}</code>")
+        chips.append(f"at {html.escape(g['steps'][0])}")
+    out = "".join(f'<span class="ff-chip">{c}</span>' for c in chips)
     if g["worsening"]:
-        parts.append('<span class="ff-worse">▲ getting worse</span>')
-    return " · ".join(parts)
+        out += '<span class="ff-chip bad">▲ getting worse</span>'
+    return f'<div class="ff-chips">{out}</div>'
 
 
-def _rule_box(option: Dict[str, Any]) -> str:
-    status = option.get("status")
-    if status == "suggested":
-        cov = option.get("coverage") or {}
-        fm, ft = cov.get("failing_matched", 0), cov.get("failing_total", 0)
-        pm, pt = cov.get("passing_matched", 0), cov.get("passing_total", 0)
-        good = f' · <span class="{"ok" if pm == 0 else "warn"}">{pm} of {pt} successful ones</span>' if pt else ""
-        return (f'<div class="ff-rule">🛡 <b>Rule ready:</b> {sentence(option["rule"])}<br/>'
-                f'<span class="muted">Would have caught</span> <b>{fm} of {_n_sessions(ft)}</b> '
-                f'<span class="muted">that failed this way</span>{good}</div>')
-    if status == "exists":
-        return (f'<div class="ff-rule"><span class="ok">✓ Covered</span> by your rule '
-                f'<code>{html.escape(option.get("rule_id", ""))}</code> — manage it in Rules.</div>')
-    return f'<div class="ff-rule"><span class="muted">No rule to suggest: {html.escape(option.get("reason", ""))}</span></div>'
+def _coverage_note(cov: Dict[str, Any]) -> str:
+    fm, ft = cov.get("failing_matched", 0), cov.get("failing_total", 0)
+    pm, pt = cov.get("passing_matched", 0), cov.get("passing_total", 0)
+    good = f" · touches {pm} of {pt} good ones" if pt else ""
+    return (f'<div class="ff-note {"ok" if pm == 0 else "warn"}">Would have caught {fm} of {ft} failed '
+            f'sessions{good}</div>')
+
+
+_TEST_NOTE = {"blocked": "bad", "watching": "warn", "allowed": "ok", "error": "bad"}
+_TEST_ICON = {"blocked": "✋", "watching": "👀", "allowed": "✓", "error": "✗"}
+
+
+def _rule_line(option: Dict[str, Any], m: Optional[Dict[str, Any]]) -> str:
+    """One line for the rule: its state, what it does, and the latest evidence."""
+    if m:
+        mode = "block" if m["blocking"] else "watch"
+        label = "Blocking" if m["blocking"] else "Watching"
+        line = f'<span class="ff-pill {mode}">{label}</span>{sentence(m["rule"])}'
+        if m["test"]:
+            kind, text = m["test"]
+            note = f'<div class="ff-note {_TEST_NOTE.get(kind, "bad")}">{_TEST_ICON.get(kind, "")} {html.escape(text)}</div>'
+        elif m["blocking"]:
+            note = '<div class="ff-note">Stops matching calls before the tool runs.</div>'
+        else:
+            note = '<div class="ff-note">Counts matching calls, blocks nothing yet. Test it, then start blocking.</div>'
+        return f'<div class="ff-rule">{line}{note}</div>'
+    if option.get("status") == "suggested":
+        return (f'<div class="ff-rule"><span class="ff-pill sug">Suggested rule</span>{sentence(option["rule"])}'
+                f'{_coverage_note(option.get("coverage") or {})}</div>')
+    return (f'<div class="ff-rule"><div class="ff-note">No rule to suggest: '
+            f'{html.escape(option.get("reason", ""))}</div></div>')
 
 
 def _make_rule(agent_id: str, pattern_id: str, rule: Dict[str, Any]) -> None:
@@ -1206,6 +1236,8 @@ def _start_blocking(agent_id: str, pattern_id: str) -> None:
     ok, msg = promote_rule(agent_id, m["rule"]["id"])
     m["blocking"] = ok
     m["test"] = try_rule(agent_id, m["rule"]) if ok else ("error", msg)
+    if ok and m["test"][0] == "blocked":
+        st.session_state["_feed_toast"] = True
 
 
 def _rule_in_place(agent_id: str, p: Any, option: Dict[str, Any]) -> Optional[Dict[str, Any]]:
@@ -1213,48 +1245,59 @@ def _rule_in_place(agent_id: str, p: Any, option: Dict[str, Any]) -> Optional[Di
     made = st.session_state.setdefault("_feed_made", {})
     if p.id not in made and option.get("status") == "exists":
         made[p.id] = {"ok": True, "msg": "", "rule": {**option["rule"], "id": option["rule_id"]},
-                      "test": None, "blocking": False}
+                      "test": None, "blocking": option.get("mode") == "enforce"}
     m = made.get(p.id)
     return m if m and m["ok"] else None
 
 
-_TEST_STYLE = {"blocked": ("#fef2f2", "#b91c1c", "✋"), "watching": ("#fffbeb", "#b45309", "👀"),
-               "allowed": ("#f0fdf4", "#15803d", "✓"), "error": ("#fef2f2", "#b91c1c", "✗")}
+_OWN_AGENT_CODE = ('import kalytera\nkalytera.configure(api_key="kly_live_...", agent_id="support-bot")\n\n'
+                   '@kalytera.tool                    # checks your rules before each call\n'
+                   'def refund_api(order_id, amount): ...\n\n'
+                   'with kalytera.session(conversation_id, input=message) as s:\n'
+                   '    s.output = run_my_agent(message)')
 
 
-def _rule_controls(agent_id: str, p: Any, m: Dict[str, Any]) -> None:
-    """After a rule exists: try the call it should stop, then turn blocking on — right on the card."""
-    if m["msg"]:
-        st.markdown(f'<div class="ff-rule"><span class="ok">✓ {html.escape(m["msg"])}</span></div>',
-                    unsafe_allow_html=True)
-    else:
-        st.markdown(f'<div class="ff-rule">🛡 <b>Your rule:</b> {sentence(m["rule"])}</div>', unsafe_allow_html=True)
-    if m["test"]:
-        kind, text = m["test"]
-        bg, fg, icon = _TEST_STYLE.get(kind, _TEST_STYLE["error"])
-        st.markdown(f'<div style="background:{bg};color:{fg};border-radius:8px;padding:9px 12px;margin-top:8px;'
-                    f'font-size:14px;font-weight:600">{icon} {html.escape(text)}</div>', unsafe_allow_html=True)
-    if m["blocking"] and m["test"] and m["test"][0] == "blocked":
-        st.markdown(
-            '<div style="font-size:14px;color:#334155;margin-top:10px;line-height:1.6">🎉 <b>That\'s the loop.</b> '
-            'Kalytera spotted the failure in the conversations, wrote the rule from the tool calls, and now '
-            'stops the bad call before the tool runs — no code from you.</div>', unsafe_allow_html=True)
-        with st.popover("Do this for my own agent →"):
-            st.markdown("Two changes ([guide](https://github.com/priyamathur/kalytera-server"
-                        "#add-kalytera-to-an-agent-in-production)):")
-            st.code('import kalytera\nkalytera.configure(api_key="kly_live_...", agent_id="support-bot")\n\n'
-                    '@kalytera.tool                    # checks your rules before each call\n'
-                    'def refund_api(order_id, amount): ...\n\n'
-                    'with kalytera.session(conversation_id, input=message) as s:\n'
-                    '    s.output = run_my_agent(message)', language="python")
-    c1, c2, _ = st.columns([1.5, 1.3, 2.6])
-    c1.button("▶ Test it", key=f"test_{p.id}", type="secondary" if m["test"] else "primary",
-              use_container_width=True, on_click=_test_rule, args=(agent_id, p.id),
-              help="Sends the call this rule should catch through guard(), exactly as your agent would")
-    if not m["blocking"]:
-        c2.button("Start blocking", key=f"block_{p.id}", type="primary" if m["test"] else "secondary",
-                  use_container_width=True, on_click=_start_blocking, args=(agent_id, p.id),
-                  help="From now on guard() stops matching calls before the tool runs")
+def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], total: int, opened: set) -> None:
+    p = g["main"]
+    m = _rule_in_place(agent_id, p, option)
+    failed_make = st.session_state.get("_feed_made", {}).get(p.id)
+    with st.container(border=True):
+        head, stat = st.columns([5, 1.2])
+        head.markdown(f'<div class="ff-title">{html.escape(g["title"])}</div>{_chips(g)}', unsafe_allow_html=True)
+        pct = _pct(g["sessions"], total)
+        stat.markdown(f'<div class="ff-stat"><div class="n">{g["sessions"]}</div>'
+                      f'<div class="l">sessions{" · " + pct if pct else ""}</div></div>', unsafe_allow_html=True)
+        st.markdown(_rule_line(option, m), unsafe_allow_html=True)
+        if failed_make and not failed_make["ok"]:
+            st.error(failed_make["msg"])
+
+        # One highlighted button: the next step.
+        a1, a2, _, a4 = st.columns([1.5, 1.5, 1.6, 1.4])
+        if m is None and option.get("status") == "suggested":
+            a1.button("⚡ Make it a rule", key=f"make_{p.id}", type="primary", use_container_width=True,
+                      on_click=_make_rule, args=(agent_id, p.id, option["rule"]),
+                      help="Adds it in watch mode: it counts matching calls and blocks nothing yet")
+        elif m is not None:
+            tested = m["test"] is not None
+            a1.button("▶ Test it", key=f"test_{p.id}", use_container_width=True,
+                      type="primary" if not tested and not m["blocking"] else "secondary",
+                      on_click=_test_rule, args=(agent_id, p.id),
+                      help="Sends the call this rule should stop through guard(), as your agent would")
+            if not m["blocking"]:
+                a2.button("Start blocking", key=f"block_{p.id}", use_container_width=True,
+                          type="primary" if tested else "secondary", on_click=_start_blocking, args=(agent_id, p.id),
+                          help="From now on guard() stops matching calls before the tool runs")
+            else:
+                with a2.popover("Use in my agent", use_container_width=True):
+                    st.markdown("Two changes ([guide](https://github.com/priyamathur/kalytera-server"
+                                "#add-kalytera-to-an-agent-in-production)):")
+                    st.code(_OWN_AGENT_CODE, language="python")
+        is_open = p.id in opened
+        a4.button(("▾ Hide sessions" if is_open else f"▸ {_n_sessions(g['sessions'])}"), key=f"see_{p.id}",
+                  type="tertiary", use_container_width=True,
+                  on_click=opened.symmetric_difference_update, args=({p.id},))
+        if is_open:
+            _pattern_sessions(agent_id, p)
 
 
 @st.fragment(run_every=AUTO_REFRESH_S)
@@ -1264,6 +1307,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
         patterns = get_patterns_for_agent(agent_id, db)
         recent = get_recent_eval_failures(agent_id, 50, db)
         counts = get_session_failure_counts(agent_id, db)
+        names = get_step_names(agent_id, db)
     except Exception as _exc:
         st.error(f"Could not load failures: {_exc}", icon="🔴")
         return
@@ -1271,98 +1315,67 @@ def _failure_feed_fragment(agent_id: str) -> None:
         db.close()
 
     st.markdown(_FEED_CSS, unsafe_allow_html=True)
+    if st.session_state.pop("_feed_toast", False):
+        st.toast("**That's the loop.** Found → rule → blocked.", icon="🎉")
+    total, failed = counts.get("total", 0), counts.get("failed", 0)
     if not patterns and not recent:
         st.success("No failed sessions for this agent.", icon="✅")
         return
 
     problems = _problems(patterns, counts)
-    db = _db()
-    try:
-        names = get_step_names(agent_id, db)
-    finally:
-        db.close()
     for g in problems:
         g["steps"] = [step_label(v, names) for v in g["steps"]]
     by_pattern = fetch_suggestion_data(agent_id).get("by_pattern", {}) if problems else {}
-    total = counts.get("total", 0)
-    recent_sessions = len({log.session_id for _, log in recent})
-    n_recent = f"{recent_sessions}+" if len(recent) >= 50 else str(recent_sessions)
-    st.markdown(
-        f'<div class="ff-meta" style="margin:-8px 0 4px">{n_recent} recent failed '
-        f'session{"s" if recent_sessions != 1 else ""}'
-        + (f" · {len(problems)} problem{'s keep' if len(problems) != 1 else ' keeps'} happening" if problems else "")
-        + "</div>",
-        unsafe_allow_html=True,
-    )
 
-    # ── What keeps failing ────────────────────────────────────────────────────
-    st.markdown('<div class="ff-h">What keeps failing</div>', unsafe_allow_html=True)
-    if not problems:
-        st.markdown('<div class="ff-meta">Nothing yet — a problem shows here once the same failure repeats '
-                    '(patterns update hourly).</div>', unsafe_allow_html=True)
+    # The headline: how big the problem is, in one sentence.
+    if problems:
+        head = (f"<b>{len(problems)} problem{'s keep' if len(problems) != 1 else ' keeps'} happening</b> — "
+                f"{failed} of {total} sessions failed ({_pct(failed, total)})")
+    else:
+        head = f"{failed} of {total} sessions failed. A problem shows here once the same failure repeats (hourly)."
+    st.markdown(f'<div class="ff-sum">{head}</div>', unsafe_allow_html=True)
+
+    if agent_id.startswith(SAMPLE_PREFIX) and problems and not st.session_state.get("_feed_made"):
+        st.info("Kalytera found this on its own from the conversations. Start with **⚡ Make it a rule**.", icon="👇")
+
     opened: set = st.session_state.setdefault("_feed_open", set())
-    made: Dict[str, Any] = st.session_state.setdefault("_feed_made", {})
     for g in problems:
-        p = g["main"]
-        option = _rule_option(g, by_pattern)
-        with st.container(border=True):
-            st.markdown(
-                f'<div class="ff-title">{html.escape(g["title"])}</div>'
-                f'<div class="ff-meta">{_problem_meta(g, total)}</div>',
-                unsafe_allow_html=True,
-            )
-            in_place = _rule_in_place(agent_id, p, option)
-            result = made.get(p.id)
-            if in_place:
-                _rule_controls(agent_id, p, in_place)
-            else:
-                st.markdown(_rule_box(option), unsafe_allow_html=True)
-                if result and not result["ok"]:
-                    st.error(result["msg"])
-            b1, b2, _ = st.columns([1.3, 1.3, 3])
-            if option.get("status") == "suggested" and not in_place:
-                b1.button("⚡ Make it a rule", key=f"make_{p.id}", type="primary", use_container_width=True,
-                          on_click=_make_rule, args=(agent_id, p.id, option["rule"]),
-                          help="Adds this rule in watch mode: it counts matching calls and never blocks "
-                               "until you turn blocking on in Rules.")
-                see_col = b2
-            else:
-                see_col = b1
-            is_open = p.id in opened
-            see_col.button("Hide sessions" if is_open else f"See {_n_sessions(g['sessions'])}",
-                           key=f"see_{p.id}", use_container_width=True,
-                           on_click=opened.symmetric_difference_update, args=({p.id},))
-            if is_open:
-                _pattern_sessions(agent_id, p)
+        _problem_card(agent_id, g, _rule_option(g, by_pattern), total, opened)
 
-    # ── Latest failures (same failure grouped, newest first) ──────────────────
-    st.markdown('<div class="ff-h">Latest failed sessions</div>', unsafe_allow_html=True)
-    grouped: Dict[Tuple[str, str], Dict[str, Tuple[Any, Any]]] = {}
-    for ev, log in recent:  # already newest first
-        reason = _short_reason(ev.failure_reason, ev.failure_type, log.step_name)
-        grouped.setdefault((reason, log.step_name), {}).setdefault(log.session_id, (ev, log))
-    rows = list(grouped.items())
-    shown = st.session_state.get("_feed_shown", 8)
-    for (reason, step), by_session in rows[:shown]:
-        ev, log = next(iter(by_session.values()))
-        n = len(by_session)
-        count = f"{_n_sessions(n)} · " if n > 1 else ""
-        text, btn = st.columns([6, 1], vertical_alignment="center")
+    _latest_failures(agent_id, recent, names)
+
+
+def _latest_failures(agent_id: str, recent: List[Tuple[Any, Any]], names: Dict[str, str]) -> None:
+    """Newest failed sessions, one line each — a plain list, no grouping by wording."""
+    latest: Dict[str, Tuple[Any, Any]] = {}
+    for ev, log in recent:  # newest first
+        latest.setdefault(log.session_id, (ev, log))
+    if not latest:
+        return
+    st.markdown('<div style="height:18px"></div>', unsafe_allow_html=True)
+    with st.expander(f"Latest failed sessions ({len(latest)}{'+' if len(recent) >= 50 else ''})"):
+        _latest_rows(agent_id, recent, latest, names)
+
+
+def _latest_rows(agent_id: str, recent: List[Tuple[Any, Any]], latest: Dict[str, Tuple[Any, Any]],
+                 names: Dict[str, str]) -> None:
+    shown = st.session_state.get("_feed_shown", 5)
+    for sid, (ev, log) in list(latest.items())[:shown]:
+        text, btn = st.columns([7, 1], vertical_alignment="center")
+        step = step_label(ev.failure_step, names) if ev.failure_step else log.step_name
         text.markdown(
-            f'<div class="ff-row">{html.escape(reason)}</div>'
-            f'<div class="ff-sub">{count}at {html.escape(step)} · '
-            f'{"latest " if n > 1 else ""}{_ago(ev.evaluated_at)}</div>',
-            unsafe_allow_html=True,
-        )
-        if btn.button("Open" if n == 1 else "Open latest", key=f"row_{ev.id}", use_container_width=True):
-            _open_trace(log.session_id)
+            f'<div class="ff-row">{html.escape(_short_reason(ev.failure_reason, ev.failure_type, step))}</div>'
+            f'<div class="ff-sub">{_ago(ev.evaluated_at)} · <span class="ff-mono">{html.escape(sid)}</span>'
+            f' · score {round(ev.overall_score * 100)}</div>', unsafe_allow_html=True)
+        if btn.button("Open", key=f"row_{ev.id}", type="tertiary", use_container_width=True):
+            _open_trace(sid)
             st.rerun(scope="app")
-    more, csv, _ = st.columns([1, 1, 3])
-    if len(rows) > shown:
-        more.button(f"Show more ({len(rows) - shown})", key="_feed_more",
+    more, csv, _ = st.columns([1.2, 1.2, 4])
+    if len(latest) > shown:
+        more.button(f"Show {min(10, len(latest) - shown)} more", key="_feed_more", type="tertiary",
                     on_click=st.session_state.__setitem__, args=("_feed_shown", shown + 10))
-    (csv if len(rows) > shown else more).download_button(
-        "Download CSV",
+    csv.download_button(
+        "Download CSV", type="tertiary",
         data=pd.DataFrame([{
             "session_id": log.session_id, "step": log.step_name, "failure_type": ev.failure_type or "",
             "failure_reason": ev.failure_reason or "", "score": round(ev.overall_score * 100),
@@ -1373,35 +1386,29 @@ def _failure_feed_fragment(agent_id: str) -> None:
 
 
 def _pattern_sessions(agent_id: str, p: Any) -> None:
-    """The sessions behind one problem, inline under its card."""
+    """The sessions behind one problem, inline under its card: one compact line each."""
     db = _db()
     try:
         sessions = get_pattern_sessions(agent_id, p.pattern_type, p.pattern_value, PATTERN_SESSIONS_SHOWN, db)
-        names = get_step_names(agent_id, db)
     finally:
         db.close()
     if not sessions:
         st.caption("These sessions are no longer in the database.")
         return
     for s in sessions:
-        text, btn = st.columns([6, 1], vertical_alignment="center")
-        text.markdown(
-            f'<div class="ff-row"><code>{html.escape(s["session_id"])}</code></div>'
-            f'<div class="ff-sub">{_ago(s["failed_at"])} · score {int(s["overall_score"] * 100)}'
-            f'{" · at " + html.escape(step_label(s["failure_step"], names)) if s["failure_step"] else ""}</div>',
-            unsafe_allow_html=True,
-        )
-        if btn.button("Open", key=f"ps_{p.id}_{s['session_id']}", use_container_width=True):
+        text, btn = st.columns([7, 1], vertical_alignment="center")
+        text.markdown(f'<div class="ff-sub"><span class="ff-mono">{html.escape(s["session_id"])}</span> · '
+                      f'{_ago(s["failed_at"])} · score {int(s["overall_score"] * 100)}</div>',
+                      unsafe_allow_html=True)
+        if btn.button("Open", key=f"ps_{p.id}_{s['session_id']}", type="tertiary", use_container_width=True):
             _open_trace(s["session_id"])
             st.rerun(scope="app")
     if len(sessions) >= PATTERN_SESSIONS_SHOWN:
-        st.caption(f"Showing the latest {PATTERN_SESSIONS_SHOWN}. Search a session ID at the top right to find any other.")
+        st.caption(f"The latest {PATTERN_SESSIONS_SHOWN}. Search any session at the top right.")
 
 
 def _show_failure_feed(agent_id: str) -> None:
-    _page_header("Failure Feed", "What keeps going wrong, and the sessions it happened in")
-    if agent_id.startswith(SAMPLE_PREFIX):
-        _sample_hint()
+    _page_header("Failure Feed", "")
     _failure_feed_fragment(agent_id)
 
 
@@ -1797,14 +1804,19 @@ def _run_sample_agent() -> None:
     """Create the sample agent's conversations on the server and show scoring live."""
     import time
 
-    status, body = _rules_api("POST", "/agents/sample")
-    if status not in (200, 202):
-        st.error(f"Couldn't start the sample agent: {body.get('detail') if isinstance(body, dict) else body}")
-        return
-    agent = body["agent_id"]
+    # Show progress first: creating the conversations takes a few seconds on a cold server.
     with st.status("Running the sample agent…", expanded=True) as box:
-        st.write(f"✓ {SAMPLE_SESSIONS} customer conversations sent")
-        bar = st.progress(0.0, text="The AI judge is reading each conversation…")
+        sent = st.empty()
+        sent.write(f"Sending {SAMPLE_SESSIONS} customer conversations…")
+        bar = st.progress(0.0, text="Waiting for the server…")
+        status, body = _rules_api("POST", "/agents/sample")
+        if status not in (200, 202):
+            box.update(label="Couldn't start the sample agent", state="error")
+            st.error(body.get("detail") if isinstance(body, dict) else str(body))
+            return
+        agent = body["agent_id"]
+        sent.write(f"✓ {SAMPLE_SESSIONS} customer conversations sent")
+        bar.progress(0.0, text="The AI judge is reading each conversation…")
         deadline = time.monotonic() + SAMPLE_TIMEOUT_S
         while time.monotonic() < deadline:
             _, s_ = _rules_api("GET", f"/agents/{agent}/refresh")
@@ -1855,15 +1867,6 @@ def _welcome_panel() -> None:
                     '    s.output = run_my_agent(message)', language="python")
     if run:
         _run_sample_agent()
-
-
-def _sample_hint() -> None:
-    st.markdown(
-        '<div style="background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:10px;'
-        'padding:10px 14px;font-size:14px;margin-bottom:6px">👇 Kalytera found this on its own from the '
-        'conversations. Click <b>⚡ Make it a rule</b>, then <b>▶ Test it</b> and <b>Start blocking</b>.</div>',
-        unsafe_allow_html=True,
-    )
 
 
 _own_agents = [a for a in (_all_agents or []) if a != "demo-agent"]
