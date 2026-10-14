@@ -3,7 +3,7 @@ Score an agent's new sessions and look for failure patterns now, instead of
 waiting for the 30-second scoring loop and the hourly pattern analysis.
 
   POST /agents/{agent_id}/refresh   — start (or join) a refresh; returns its status
-  GET  /agents/{agent_id}/refresh   — status: idle | scoring | analyzing | done | error
+  GET  /agents/{agent_id}/refresh   — status: idle | preparing | scoring | analyzing | done | error
   POST /agents/sample               — create the sample refund agent for this account and
                                       start its refresh (the dashboard's "Run the sample agent")
 
@@ -59,6 +59,8 @@ def _run(job: Dict[str, Any], agent_id: str) -> None:
 
     db = SessionLocal()
     try:
+        if job.pop("seed", False):
+            _write_sample(agent_id, db)
         pending = list(dict.fromkeys(get_unevaluated_sessions(agent_id, MAX_REFRESH_SESSIONS, db)))
         job.update(state="scoring", to_score=len(pending), scored=0, judge_errors=0)
 
@@ -91,6 +93,20 @@ def _start(job: Dict[str, Any], agent_id: str) -> None:
     threading.Thread(target=_run, args=(job, agent_id), daemon=True).start()
 
 
+def _write_sample(agent_id: str, db: Session) -> None:
+    """The sample agent's conversations, written once (one commit)."""
+    from db.models import AgentLog
+    from db.queries import insert_agent_logs
+    from kalytera.quickstart import sample_sessions
+
+    if db.query(AgentLog.id).filter(AgentLog.agent_id == agent_id).first():
+        return
+    now = datetime.now(timezone.utc).isoformat()
+    insert_agent_logs([{**step, "id": str(uuid.uuid4()), "agent_id": agent_id, "timestamp": now,
+                        "metadata": {"source": "sample"}}
+                       for steps in sample_sessions(uuid.uuid4().hex[:6]) for step in steps], db)
+
+
 def _status(job: Optional[Dict[str, Any]], agent_id: str, db: Session) -> Dict[str, Any]:
     from db.queries import get_session_failure_counts
 
@@ -114,11 +130,10 @@ def build_router(resolve_org: Callable[..., Any],
 
     @router.post("/agents/sample", status_code=202)
     async def sample(org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
-        """Same sample as `kalytera quickstart`, created server-side. Runs once per account;
-        calling it again returns the existing sample agent. Not counted against usage."""
-        from db.models import AgentLog
-        from db.queries import insert_agent_logs, upsert_agent_org
-        from kalytera.quickstart import sample_sessions
+        """Same sample as `kalytera quickstart`, created server-side. Returns at once: the
+        conversations are written, scored and analysed in the background (poll GET
+        /agents/{agent_id}/refresh). Runs once per account; not counted against usage."""
+        from db.queries import upsert_agent_org
 
         org_id = getattr(org, "id", None)
         if org_id is None:
@@ -126,17 +141,13 @@ def build_router(resolve_org: Callable[..., Any],
         agent_id = sample_agent_id(org_id)
         if not upsert_agent_org(agent_id, org_id, db):
             raise HTTPException(status_code=409, detail="sample agent name is taken")
-        if not db.query(AgentLog.id).filter(AgentLog.agent_id == agent_id).first():
-            now = datetime.now(timezone.utc).isoformat()
-            insert_agent_logs([{**step, "id": str(uuid.uuid4()), "agent_id": agent_id, "timestamp": now,
-                                "metadata": {"source": "sample"}}
-                               for steps in sample_sessions(uuid.uuid4().hex[:6]) for step in steps], db)
         key = f"{org_id}:{agent_id}"
         with _lock:
             job = _jobs.get(key)
             new = job is None or job["state"] in ("done", "error")
             if new:
-                job = _jobs[key] = {"state": "scoring", "to_score": 0, "scored": 0, "judge_errors": 0}
+                job = _jobs[key] = {"state": "preparing", "to_score": 0, "scored": 0, "judge_errors": 0,
+                                    "seed": True}
         if new:
             _start(job, agent_id)
         return _status(job, agent_id, db)

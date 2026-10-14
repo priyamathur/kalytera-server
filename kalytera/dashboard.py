@@ -1815,7 +1815,6 @@ def _run_sample_agent() -> None:
             st.error(body.get("detail") if isinstance(body, dict) else str(body))
             return
         agent = body["agent_id"]
-        sent.write(f"✓ {SAMPLE_SESSIONS} customer conversations sent")
         bar.progress(0.0, text="The AI judge is reading each conversation…")
         deadline = time.monotonic() + SAMPLE_TIMEOUT_S
         while time.monotonic() < deadline:
@@ -1825,6 +1824,10 @@ def _run_sample_agent() -> None:
                 box.update(label="Scoring failed", state="error")
                 st.error(s_.get("error") if isinstance(s_, dict) else "Scoring failed")
                 return
+            if state == "preparing":
+                time.sleep(1)
+                continue
+            sent.write(f"✓ {SAMPLE_SESSIONS} customer conversations sent")
             to_score = s_.get("to_score") or 0
             done = SAMPLE_SESSIONS - to_score + s_.get("scored", 0) if to_score else 0
             if state in ("analyzing", "done"):
