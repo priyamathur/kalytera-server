@@ -142,3 +142,44 @@ def test_recent_session_results_one_row_per_session_with_the_users_message(seede
     assert (s1["passed"], s1["input"], s1["failure_reason"]) == (False, "Refund my $780 order", "Wandered off topic")
     assert rows[0]["evaluated_at"] >= rows[-1]["evaluated_at"]
     assert len(get_recent_session_results(AGENT, 2, seeded)) == 2
+
+
+def _log(db: Session, sid: str, n: int, minutes_ago: float, ended: bool = False, agent: str = AGENT) -> None:
+    db.add(AgentLog(id=f"{agent}-{sid}-{n}", agent_id=agent, session_id=sid, step_number=n, step_name="s",
+                    input="hi", output="ok", session_ended=ended,
+                    timestamp=datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)))
+
+
+def test_idle_sessions_are_judged_even_if_never_marked_ended(db: Session) -> None:
+    from db.queries import get_unevaluated_sessions
+
+    _log(db, "ended", 1, 1, ended=True)             # marked ended: ready
+    _log(db, "abandoned", 1, 30)                    # no end, idle 25+ min: ready
+    _log(db, "abandoned", 2, 25)
+    _log(db, "talking", 1, 30)                      # no end, but a step 2 minutes ago: still going
+    _log(db, "talking", 2, 2)
+    _log(db, "judged", 1, 30)                       # idle but already judged
+    db.add(EvalResult(log_id=f"{AGENT}-judged-1", session_id="judged", agent_id=AGENT, accuracy=1,
+                      goal_alignment=1, decision_quality=1, completeness=1, overall_score=1, passed=True))
+    _log(db, "abandoned", 1, 30, agent="other-bot")  # another agent's session
+    db.commit()
+    assert sorted(get_unevaluated_sessions(AGENT, 20, db)) == ["abandoned", "ended"]
+    assert get_unevaluated_sessions(AGENT, 1, db) == ["ended"]  # ended first when the batch is small
+
+
+def test_an_idle_session_is_judged_at_its_last_step(db: Session) -> None:
+    from unittest.mock import patch
+
+    from kalytera import judge
+
+    _log(db, "abandoned", 1, 30)
+    _log(db, "abandoned", 2, 25)
+    db.commit()
+    verdict = {"accuracy": 0.2, "goal_alignment": 0.2, "decision_quality": 0.2, "completeness": 0.2,
+               "helpfulness": 0.2, "factuality": 0.2, "overall_score": 0.2, "passed": False,
+               "failure_type": "incomplete", "failure_step": "2", "failure_reason": "Left without an answer",
+               "confidence": 0.9, "eval_error": False, "custom_scores": {}}
+    with patch.object(judge, "score_session", lambda *a, **k: verdict):
+        assert judge.evaluate_session("abandoned", db) is not None
+    row = db.query(EvalResult).filter(EvalResult.session_id == "abandoned").one()
+    assert row.log_id == f"{AGENT}-abandoned-2" and row.failure_type == "incomplete"

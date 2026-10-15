@@ -127,13 +127,18 @@ def get_unevaluated_logs(agent_id: str, batch_size: int, db: Session) -> List[Ag
     )
 
 
-def get_unevaluated_sessions(agent_id: str, batch_size: int, db: Session) -> List[str]:
+IDLE_SESSION_MINUTES = 10  # no new step for this long = the conversation is over, even if nobody said so
+
+
+def get_unevaluated_sessions(agent_id: str, batch_size: int, db: Session,
+                             now: Optional[datetime] = None) -> List[str]:
     """
-    Return session_ids for complete sessions (session_ended=True) that haven't
-    been evaluated yet. Used by session-level eval mode (one Haiku call per session).
+    Session_ids ready to be judged and not judged yet: sessions marked ended, and
+    sessions with no new step for IDLE_SESSION_MINUTES. Without the second kind,
+    proxy traffic, crashed apps and abandoned conversations would never be judged.
     """
     evaluated_log_ids = db.query(EvalResult.log_id).filter(EvalResult.agent_id == agent_id)
-    rows = (
+    ended = [r[0] for r in (
         db.query(AgentLog.session_id)
         .filter(
             AgentLog.agent_id == agent_id,
@@ -142,8 +147,22 @@ def get_unevaluated_sessions(agent_id: str, batch_size: int, db: Session) -> Lis
         )
         .limit(batch_size)
         .all()
+    )]
+    room = batch_size - len(ended)
+    if room <= 0:
+        return ended
+    cutoff = (now or datetime.now(timezone.utc)) - timedelta(minutes=IDLE_SESSION_MINUTES)
+    judged = db.query(EvalResult.session_id).filter(EvalResult.agent_id == agent_id)
+    idle = (
+        db.query(AgentLog.session_id)
+        .filter(AgentLog.agent_id == agent_id, AgentLog.session_id.notin_(judged))
+        .group_by(AgentLog.session_id)
+        .having(func.max(AgentLog.timestamp) < cutoff)
+        .having(func.sum(case((AgentLog.session_ended == True, 1), else_=0)) == 0)  # noqa: E712
+        .limit(room)
+        .all()
     )
-    return [r[0] for r in rows]
+    return ended + [r[0] for r in idle]
 
 
 # ---------------------------------------------------------------------------

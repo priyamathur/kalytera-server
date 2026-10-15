@@ -117,8 +117,8 @@ def score_session(
 def evaluate_session(session_id: str, db: Any) -> Optional[Dict[str, Any]]:
     """
     Fetch all AgentLog rows for a session, score it with one LLM call,
-    write one EvalResult linked to the session_ended log.
-    Returns the result dict or None if the session has no session_ended log.
+    write one EvalResult linked to the session_ended log (or the last step, for a
+    session that went idle without being marked ended). None if the session has no steps.
     """
     from db.models import AgentLog, EvalResult, AgentQualityConfig
 
@@ -126,9 +126,14 @@ def evaluate_session(session_id: str, db: Any) -> Optional[Dict[str, Any]]:
         db.query(AgentLog)
         .filter(AgentLog.session_id == session_id, AgentLog.session_ended == True)  # noqa: E712
         .first()
+    ) or (  # a session that went idle without being marked ended: judge it at its last step
+        db.query(AgentLog)
+        .filter(AgentLog.session_id == session_id)
+        .order_by(AgentLog.step_number.desc(), AgentLog.timestamp.desc())
+        .first()
     )
     if ended_log is None:
-        logger.warning("No session_ended log for session %s", session_id)
+        logger.warning("No steps for session %s", session_id)
         return None
 
     all_logs = (
