@@ -821,6 +821,14 @@ def update_org_stripe(org_id: str, stripe_customer_id: str, subscription_id: str
         db.commit()
 
 
+def set_org_tier_for_subscription(subscription_id: str, tier: str, db: Session) -> None:
+    """A plan change in Stripe (e.g. from the billing portal): the org follows its subscription."""
+    org = db.query(Organization).filter(Organization.stripe_subscription_id == subscription_id).first()
+    if org:
+        org.tier = tier
+        db.commit()
+
+
 def downgrade_org(subscription_id: str, db: Session) -> None:
     org = db.query(Organization).filter(Organization.stripe_subscription_id == subscription_id).first()
     if org:

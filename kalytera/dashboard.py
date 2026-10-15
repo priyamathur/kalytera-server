@@ -352,6 +352,44 @@ def _validate_key(key: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+@st.cache_data(ttl=60, show_spinner=False)
+def _account(key: str) -> Dict[str, Any]:
+    """Plan and usage (GET /billing/usage), refreshed every minute."""
+    return _validate_key(key) or {}
+
+
+def _start_checkout(plan: str) -> None:
+    status, body = _rules_api("POST", "/billing/checkout", {"plan": plan})
+    st.session_state["_billing_link"] = (("Continue to payment →", body["checkout_url"]) if status == 200 else
+                                         ("error", body.get("detail") if isinstance(body, dict) else str(body)))
+
+
+def _open_portal() -> None:
+    status, body = _rules_api("POST", "/billing/portal", {})
+    st.session_state["_billing_link"] = (("Open billing →", body["portal_url"]) if status == 200 else
+                                         ("error", body.get("detail") if isinstance(body, dict) else str(body)))
+
+
+def _billing_controls(tier: str, plans: Dict[str, Any]) -> None:
+    """Upgrade for free accounts (also resumes an abandoned checkout); Manage billing for paying ones."""
+    if tier == "free":
+        with st.popover("Upgrade", use_container_width=True):
+            for name in ("starter", "growth"):
+                p = plans.get(name) or {}
+                if p.get("price_usd"):
+                    st.button(f"{name.title()} — ${p['price_usd']}/mo · {p['sessions_per_month']:,} sessions",
+                              key=f"upgrade_{name}", use_container_width=True, on_click=_start_checkout, args=(name,))
+            st.caption("Payment is handled by Stripe. Your plan updates here within a minute of paying.")
+    elif tier in ("starter", "growth"):
+        st.button("Manage billing", key="billing_portal", use_container_width=True, on_click=_open_portal,
+                  help="Change card, see invoices, change plan or cancel (Stripe)")
+    link = st.session_state.pop("_billing_link", None)
+    if link and link[0] == "error":
+        st.error(link[1])
+    elif link:
+        st.link_button(link[0], link[1], type="primary", use_container_width=True)
+
+
 @st.cache_data(ttl=300, show_spinner=False)
 def _agents_for_key(key: str) -> List[str]:
     """Agents the key can see. Cached: this ran on every click and is one network round trip."""
@@ -523,10 +561,11 @@ with st.sidebar:
     st.markdown('<hr style="margin:20px 0 12px"/>', unsafe_allow_html=True)
 
     # ── Org info + usage bar ──────────────────────────────────────────────────
-    _org = st.session_state.get("org_name", "")
-    _tier = st.session_state.get("tier", "free")
-    _used = st.session_state.get("sessions_used", 0)
-    _limit = st.session_state.get("sessions_limit", 10000)
+    _acct = _account(_stored_key) if _stored_key else {}  # fresh, so an upgrade shows right after paying
+    _org = _acct.get("org_name") or st.session_state.get("org_name", "")
+    _tier = _acct.get("tier") or st.session_state.get("tier", "free")
+    _used = _acct.get("sessions_used", st.session_state.get("sessions_used", 0))
+    _limit = _acct.get("sessions_limit") or st.session_state.get("sessions_limit", 10000)
     _pct = min(round(_used / _limit * 100) if _limit else 0, 100)
     _bar_color = "#ef4444" if _pct >= 90 else "#6366f1"
     st.markdown(
@@ -546,6 +585,9 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
+
+    if _stored_key:
+        _billing_controls(_tier, _acct.get("plans") or {})
 
     if st.button("Sign out", use_container_width=True, key="signout_btn"):
         for _k in ["authenticated", "api_key", "org_name", "tier", "sessions_used", "sessions_limit"]:

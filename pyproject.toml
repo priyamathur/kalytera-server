@@ -46,7 +46,7 @@ server = [
     "python-dotenv==1.0.1",
     "pydantic==2.5.3",
     "python-multipart==0.0.27",
-    "stripe>=8.0.0",
+    "stripe>=16,<17",
 ]
 dev = [
     "pytest>=8.1.0",

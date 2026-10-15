@@ -283,6 +283,41 @@ check("14 of 38 sessions failed" in texts(at), "after: 14 of 38 — the feed fol
 labels = [b.label for b in at.button]
 check("▸ 9 sessions" in labels, f"and the refund problem now has 9 sessions, regrouped at once ({[l for l in labels if 'sessions' in l]})")
 
+print("10d. Billing: upgrade from the dashboard, then manage billing")
+import hashlib as _hl, hmac as _hm, json as _json, time as _time  # noqa: E401,E402
+import stripe as _stripe  # noqa: E402
+from api import billing as _billing  # noqa: E402
+
+os.environ["STRIPE_SECRET_KEY"], os.environ["STRIPE_WEBHOOK_SECRET"] = "sk_test_e2e", "whsec_e2e"
+_billing.TIERS["starter"]["stripe_price_id"], _billing.TIERS["growth"]["stripe_price_id"] = "price_s", "price_g"
+_checkouts: list = []
+_stripe.checkout.Session.create = staticmethod(lambda **p: _checkouts.append(p) or _stripe.StripeObject.construct_from(
+    {"url": "https://checkout.stripe.com/c/e2e"}, "k"))
+_stripe.billing_portal.Session.create = staticmethod(lambda **p: _stripe.StripeObject.construct_from(
+    {"url": "https://billing.stripe.com/p/e2e"}, "k"))
+_stripe.Subscription.retrieve = staticmethod(lambda sid, *a, **k: _stripe.StripeObject.construct_from(
+    {"id": sid, "items": {"data": [{"price": {"id": "price_g"}}]}}, "k"))
+_st.cache_data.clear()
+at = dashboard("📊  Overview")
+plans = [b.label for b in at.button if b.label.startswith(("Starter —", "Growth —"))]
+check(plans == ["Starter — $49/mo · 50,000 sessions", "Growth — $149/mo · 200,000 sessions"],
+      f"free account: Upgrade offers both plans with prices ({plans})")
+run(button(at, "Growth — $149/mo · 200,000 sessions").click())
+check(_checkouts and _checkouts[-1]["line_items"] == [{"price": "price_g", "quantity": 1}],
+      "choosing Growth starts a Stripe checkout for Growth")
+org_id = client.get("/billing/usage", headers=H).json()["org_id"]
+payload = _json.dumps({"id": "evt", "object": "event", "type": "checkout.session.completed", "data": {"object": {
+    "id": "cs", "client_reference_id": org_id, "customer": "cus_e2e", "subscription": "sub_e2e",
+    "payment_status": "paid"}}})
+_t = int(_time.time())
+_sig = _hm.new(b"whsec_e2e", f"{_t}.{payload}".encode(), _hl.sha256).hexdigest()
+r = client.post("/billing/webhook", content=payload, headers={"stripe-signature": f"t={_t},v1={_sig}"})
+check(r.status_code == 200, "Stripe's confirmation is accepted")
+_st.cache_data.clear()  # the plan box refreshes every minute; don't wait in a test
+at = dashboard("📊  Overview")
+check("growth" in texts(at) and any(b.label == "Manage billing" for b in at.button),
+      "after paying: plan shows growth, and Manage billing replaces Upgrade")
+
 print("11. A brand-new account: welcome panel → sample agent → rule → blocking")
 import kalytera.judge as _judge  # noqa: E402
 

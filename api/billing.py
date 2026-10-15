@@ -41,6 +41,7 @@ from db.queries import (
     list_organizations,
     list_users_for_org,
     revoke_api_key,
+    set_org_tier_for_subscription,
     update_org_stripe,
 )
 
@@ -59,6 +60,10 @@ TIERS: dict[str, dict] = {
     "growth":  {"sessions": 200_000, "price_usd": 149, "stripe_price_id": os.getenv("STRIPE_GROWTH_PRICE_ID", "")},
     "scale":   {"sessions": None,    "price_usd": None, "stripe_price_id": ""},
 }
+
+SUCCESS_URL = "https://api.kalytera.dev/welcome"   # after paying
+CANCEL_URL = "https://kalytera.dev/#pricing"       # after backing out of checkout
+DASHBOARD_URL = "https://app.kalytera.dev"
 
 router = APIRouter(tags=["billing"])
 
@@ -99,9 +104,9 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)):
         "dashboard_url": "https://app.kalytera.dev",
         "next_steps": (
             "1. pip install kalytera  "
-            "2. kalytera.configure(api_key='<your_key>', agent_id='<your-agent-name>')  "
-            "3. Add kalytera.trace() after each agent step  "
-            "4. Open https://app.kalytera.dev to see scores"
+            "2. export KALYTERA_API_KEY=<your_key>  "
+            "3. Add kalytera.init() at startup (OpenAI Agents SDK, LangChain / LangGraph)  "
+            "4. Open https://app.kalytera.dev"
         ),
     }
 
@@ -119,12 +124,11 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)):
     try:
         checkout = stripe.checkout.Session.create(
             mode="subscription",
-            payment_method_types=["card"],
             line_items=[{"price": plan_cfg["stripe_price_id"], "quantity": 1}],
             client_reference_id=org.id,
             customer_email=req.email,
-            success_url=req.success_url or "https://kalytera.dev/welcome",
-            cancel_url=req.cancel_url or "https://kalytera.dev/pricing",
+            success_url=req.success_url or SUCCESS_URL,
+            cancel_url=req.cancel_url or CANCEL_URL,
         )
     except Exception as exc:
         logger.error("Stripe checkout error: %s", exc)
@@ -414,8 +418,8 @@ def get_usage(
 
 class CheckoutRequest(BaseModel):
     plan: str          # "starter" | "growth"
-    success_url: str
-    cancel_url: str
+    success_url: str = SUCCESS_URL
+    cancel_url: str = DASHBOARD_URL
 
 
 @router.post("/billing/checkout")
@@ -427,7 +431,6 @@ def create_checkout(req: CheckoutRequest, auth=Depends(_require_apikey)):
         raise HTTPException(status_code=400, detail=f"Unknown or unconfigured plan: {req.plan}")
     params: dict = {
         "mode": "subscription",
-        "payment_method_types": ["card"],
         "line_items": [{"price": plan["stripe_price_id"], "quantity": 1}],
         "client_reference_id": org.id,
         "success_url": req.success_url,
@@ -437,6 +440,21 @@ def create_checkout(req: CheckoutRequest, auth=Depends(_require_apikey)):
         params["customer"] = org.stripe_customer_id
     session = stripe.checkout.Session.create(**params)
     return {"checkout_url": session.url}
+
+
+class PortalRequest(BaseModel):
+    return_url: str = DASHBOARD_URL
+
+
+@router.post("/billing/portal")
+def create_portal(req: PortalRequest, auth=Depends(_require_apikey)):
+    """Stripe's billing portal: change card, see invoices, change plan or cancel."""
+    _, org = auth
+    if not org.stripe_customer_id:
+        raise HTTPException(status_code=400, detail="No paid plan on this account yet.")
+    stripe = _stripe()
+    session = stripe.billing_portal.Session.create(customer=org.stripe_customer_id, return_url=req.return_url)
+    return {"portal_url": session.url}
 
 
 # ---------------------------------------------------------------------------
@@ -462,8 +480,12 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
     logger.info("Stripe event: %s", event_type)
 
     try:
-        if event_type == "checkout.session.completed":
+        if event_type in ("checkout.session.completed", "checkout.session.async_payment_succeeded"):
             obj = event["data"]["object"]
+            if getattr(obj, "payment_status", None) not in ("paid", "no_payment_required"):
+                # e.g. a bank payment still processing: wait for async_payment_succeeded
+                logger.info("Checkout %s not paid yet (%s)", getattr(obj, "id", None), getattr(obj, "payment_status", None))
+                return {"status": "ok"}
             org_id = getattr(obj, "client_reference_id", None)
             customer_id = getattr(obj, "customer", None)
             subscription_id = getattr(obj, "subscription", None)
@@ -475,6 +497,18 @@ async def stripe_webhook(request: Request, db: Session = Depends(get_db)):
                 logger.info("Org %s upgraded to %s", org_id, tier)
             else:
                 logger.error("Webhook: no client_reference_id in event — cannot identify org")
+
+        elif event_type == "customer.subscription.updated":
+            sub_obj = event["data"]["object"]
+            subscription_id = getattr(sub_obj, "id", None)
+            status = getattr(sub_obj, "status", None)
+            if status in ("active", "trialing", "past_due"):  # past_due: Stripe is still retrying the card
+                tier = _tier_from_subscription(stripe, subscription_id)
+                set_org_tier_for_subscription(subscription_id, tier, db)
+                logger.info("Subscription %s updated — tier %s", subscription_id, tier)
+            elif status in ("canceled", "unpaid", "incomplete_expired", "paused"):
+                downgrade_org(subscription_id, db)
+                logger.info("Subscription %s is %s — org downgraded to free", subscription_id, status)
 
         elif event_type in ("customer.subscription.deleted", "customer.subscription.paused"):
             sub_obj = event["data"]["object"]

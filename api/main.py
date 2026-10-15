@@ -366,23 +366,17 @@ h1{font-family:'Syne',sans-serif;font-weight:800;font-size:26px;letter-spacing:-
   <div class="logo"><div class="dot"></div>Kalytera</div>
   <div class="check">✓</div>
 
-  <h1>You're all set.</h1>
-  <p class="sub">Your plan is active. Paste your API key from the previous screen and you're ready.</p>
+  <h1>Payment received.</h1>
+  <p class="sub">Your plan switches on within a minute, as soon as Stripe confirms it. Your API key keeps working the whole time.</p>
   <div class="cb">
-    <div class="cb-lbl">Get started in 30 seconds</div>
-    <pre><span class="cm">pip install kalytera</span>
+    <div class="cb-lbl">Add Kalytera to your agent</div>
+    <pre><span class="cm">pip install kalytera
+export KALYTERA_API_KEY=kly_live_...</span>
 
 <span class="kw">import</span> kalytera
-kalytera.<span class="fn">configure</span>(
-  api_key=<span class="str">"kly_live_..."</span>,
-  agent_id=<span class="str">"my-agent"</span>,
-)
-
-<span class="kw">@</span>kalytera.<span class="fn">watch</span>
-<span class="kw">def</span> <span class="fn">your_agent</span>(user_input):
-    ...  <span class="cm"># nothing else changes</span></pre>
+kalytera.<span class="fn">init</span>()  <span class="cm"># first thing, before your agents run</span></pre>
   </div>
-  <a href="https://kalytera.dev" class="btn">Back to kalytera.dev →</a>
+  <a href="https://app.kalytera.dev" class="btn">Open the dashboard →</a>
   <div class="help">
     Questions? <a href="mailto:priya@kalytera.ai?subject=Kalytera%20support&body=Hi%20Priya%2C%0A%0AI%20just%20signed%20up%20for%20Kalytera%20and%20need%20help%20with%3A%0A%0A">Email priya@kalytera.ai</a>
   </div>
