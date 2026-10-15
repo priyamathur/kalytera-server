@@ -257,3 +257,34 @@ class BlockFeedback(Base):
     __table_args__ = (
         UniqueConstraint("agent_id", "session_id", "rule_id", name="uq_block_feedback"),
     )
+
+
+class Connection(Base):
+    """
+    Where an account's agent conversations come from (langfuse, langsmith) or where
+    its alerts go (slack). `secret` holds the credentials, encrypted (kalytera/secrets.py);
+    removing the connection deletes them.
+    """
+    __tablename__ = "connections"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    org_id = Column(String, nullable=False, index=True)
+    kind = Column(String, nullable=False)                # langfuse | langsmith | slack
+    agent_id = Column(String, nullable=True, index=True)  # the agent conversations go to; null for slack
+    settings = Column(Text, nullable=False, default="{}")  # JSON, not secret: base_url, project
+    secret = Column(Text, nullable=False)                # encrypted JSON: keys or webhook URL
+    status = Column(String, nullable=False, default="ok")  # ok | error
+    last_error = Column(Text, nullable=True)
+    last_synced_at = Column(SADateTime(timezone=True), nullable=True)
+    created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+
+
+class ProblemAlert(Base):
+    """An alert sent about a problem, so the same news is never sent twice."""
+    __tablename__ = "problem_alerts"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    org_id = Column(String, nullable=False, index=True)
+    pattern_id = Column(String, nullable=False, index=True)
+    reason = Column(String, nullable=False)              # new | worse
+    sent_at = Column(SADateTime(timezone=True), default=_now, nullable=False)

@@ -59,9 +59,10 @@ def _run(job: Dict[str, Any], agent_id: str) -> None:
 
     db = SessionLocal()
     try:
-        if job.pop("seed", False):
-            _write_sample(agent_id, db)
-        pending = list(dict.fromkeys(get_unevaluated_sessions(agent_id, MAX_REFRESH_SESSIONS, db)))
+        prepare = job.pop("prepare", None)  # e.g. write the sample's or a connection's conversations first
+        if prepare is not None:
+            prepare(db)
+        pending = list(dict.fromkeys(get_unevaluated_sessions(agent_id, job.get("limit", MAX_REFRESH_SESSIONS), db)))
         job.update(state="scoring", to_score=len(pending), scored=0, judge_errors=0)
 
         def one(sid: str) -> None:
@@ -77,12 +78,46 @@ def _run(job: Dict[str, Any], agent_id: str) -> None:
             list(pool.map(one, pending))
         job["state"] = "analyzing"
         job["patterns"] = run_analysis(agent_id, db)
+        _alert_now(agent_id, db)
         job["state"] = "done"
     except Exception as exc:
         db.rollback()
         job.update(state="error", error=str(exc))
     finally:
         db.close()
+
+
+def _alert_now(agent_id: str, db: Session) -> None:
+    """Problems found by this run reach Slack now, not at the next hourly analysis."""
+    from api.connections_api import send_alerts
+    from db.models import AgentOrg
+
+    try:
+        owner = db.query(AgentOrg.org_id).filter(AgentOrg.agent_id == agent_id).scalar()
+        if owner:
+            send_alerts(db, org_id=owner)
+    except Exception:  # an alert problem must never fail the run
+        db.rollback()
+
+
+def start_job(key: str, agent_id: str, prepare: Optional[Callable[[Session], None]] = None,
+              limit: int = MAX_REFRESH_SESSIONS) -> Dict[str, Any]:
+    """Start (or join) the background job that prepares, scores and analyses an agent's sessions."""
+    with _lock:
+        job = _jobs.get(key)
+        new = job is None or job["state"] in ("done", "error")
+        if new:
+            job = _jobs[key] = {"state": "preparing" if prepare else "scoring", "to_score": 0, "scored": 0,
+                                "judge_errors": 0, "limit": limit}
+            if prepare is not None:
+                job["prepare"] = prepare
+    if new:
+        _start(job, agent_id)
+    return job
+
+
+def job_status(key: str, agent_id: str, db: Session) -> Dict[str, Any]:
+    return _status(_jobs.get(key), agent_id, db)
 
 
 def sample_agent_id(org_id: str) -> str:
@@ -141,27 +176,12 @@ def build_router(resolve_org: Callable[..., Any],
         agent_id = sample_agent_id(org_id)
         if not upsert_agent_org(agent_id, org_id, db):
             raise HTTPException(status_code=409, detail="sample agent name is taken")
-        key = f"{org_id}:{agent_id}"
-        with _lock:
-            job = _jobs.get(key)
-            new = job is None or job["state"] in ("done", "error")
-            if new:
-                job = _jobs[key] = {"state": "preparing", "to_score": 0, "scored": 0, "judge_errors": 0,
-                                    "seed": True}
-        if new:
-            _start(job, agent_id)
+        job = start_job(f"{org_id}:{agent_id}", agent_id, prepare=lambda d: _write_sample(agent_id, d))
         return _status(job, agent_id, db)
 
     @router.post("/agents/{agent_id}/refresh", status_code=202)
     async def start(agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
-        key = _check(agent_id, org, db)
-        with _lock:
-            job = _jobs.get(key)
-            new = job is None or job["state"] in ("done", "error")
-            if new:
-                job = _jobs[key] = {"state": "scoring", "to_score": 0, "scored": 0, "judge_errors": 0}
-        if new:
-            _start(job, agent_id)
+        job = start_job(_check(agent_id, org, db), agent_id)
         return _status(job, agent_id, db)
 
     @router.get("/agents/{agent_id}/refresh")
