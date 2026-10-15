@@ -11,6 +11,7 @@ from db.models import AgentLog, Base, EvalResult
 from db.queries import (
     get_failures_by_step,
     get_pattern_sessions,
+    get_recent_session_results,
     get_session_failure_counts,
     get_session_steps,
     get_todays_stats,
@@ -129,3 +130,15 @@ def test_step_names_label_numbered_steps(seeded: Session) -> None:
     assert step_label("2", names) == "reply"
     assert step_label("reply", names) == "reply"
     assert step_label(None, names) == ""
+
+
+def test_recent_session_results_one_row_per_session_with_the_users_message(seeded: Session) -> None:
+    seeded.query(AgentLog).filter(AgentLog.agent_id == AGENT, AgentLog.session_id == "s1",
+                                  AgentLog.step_number == 1).update({"input": "Refund my $780 order"})
+    seeded.commit()
+    rows = get_recent_session_results(AGENT, 10, seeded)
+    assert sorted(r["session_id"] for r in rows) == ["s1", "s2", "s3", "s4"]  # never the other agent's s1
+    s1 = next(r for r in rows if r["session_id"] == "s1")
+    assert (s1["passed"], s1["input"], s1["failure_reason"]) == (False, "Refund my $780 order", "Wandered off topic")
+    assert rows[0]["evaluated_at"] >= rows[-1]["evaluated_at"]
+    assert len(get_recent_session_results(AGENT, 2, seeded)) == 2

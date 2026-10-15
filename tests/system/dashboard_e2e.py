@@ -154,8 +154,9 @@ run(at)
 at.text_input[0].input(KEY)
 run(at.button[0].click())
 check(at.session_state["authenticated"] is True, "key accepted")
-check(list(at.radio[0].options) == ["📊  Overview", "🔴  Failure Feed", "🛡  Rules"],
-      "sidebar has Overview, Failure Feed, Rules (no Trace Viewer tab)")
+check(list(at.radio[0].options) == ["🔴  Failure Feed", "📊  Overview", "🛡  Rules"],
+      "sidebar: Failure Feed first, then Overview, Rules (no Trace Viewer tab)")
+check(at.radio[0].value == "🔴  Failure Feed", "lands on the Failure Feed: what needs fixing")
 check(any(t.placeholder.startswith("🔍  Search sessions") for t in at.text_input), "search box at the top")
 
 # ── 4. Failure Feed ──────────────────────────────────────────────────────────
@@ -234,7 +235,7 @@ check("39% of sessions" in t, "shown as 39% of 38 sessions")
 
 print("10. An old bookmark to the Trace Viewer tab doesn't break")
 at = dashboard("🔍  Trace Viewer")
-check(at.radio[0].value == "📊  Overview", "falls back to Overview")
+check(at.radio[0].value == "🔴  Failure Feed", "falls back to the Failure Feed")
 
 print("11. A brand-new account: welcome panel → sample agent → rule → blocking")
 import kalytera.judge as _judge  # noqa: E402
@@ -258,21 +259,46 @@ at = AppTest.from_file("kalytera/dashboard.py", default_timeout=120)
 at.session_state["authenticated"] = True
 at.session_state["api_key"] = NEW_KEY
 run(at)
-check("Run the sample agent" in texts(at) or any(b.label == "▶ Run the sample agent" for b in at.button),
-      "new account sees the welcome panel")
+t = texts(at)
+check("Stop your agent repeating the same mistakes" in t, "new account lands on the onboarding page")
+check(not at.radio and not at.selectbox, "nothing to pick or navigate yet: no agent picker, no nav")
+check(any(b.label == "▶ Run the sample agent" for b in at.button), "one primary action: run the sample agent")
+check(any(NEW_KEY in c.value for c in at.code), "the connect code has the account's key filled in")
+check("Waiting for your agent" in t, "and waits for the agent's first session")
 run(button(at, "▶ Run the sample agent").click())  # scores and switches to the sample agent
 run(at)
 t = texts(at)
-check("Kalytera found this on its own" in t, "lands on the sample agent's Failure Feed with a hint")
+check(at.radio[0].value == "🔴  Failure Feed", "lands on the sample agent's Failure Feed")
+check('ob-step done"><span class="n">✓</span><span class="t">Find the problem' in t
+      and 'ob-step now"><span class="n">2</span><span class="t">Make it a rule' in t, "stepper: found ✓, now make a rule")
 check('<span class="ff-chip">hallucination</span>' in t and "Suggested rule</span>Block <code>refund_api</code>" in t,
       "problem found and a rule is suggested")
 run(button(at, "⚡ Make it a rule").click())
-check("Would have caught 10 of 10 failed sessions" in texts(at), "watching shows the evidence for the rule")
+t = texts(at)
+check('ob-step now"><span class="n">3</span><span class="t">Block it' in t, "stepper moves to: block it")
+check("Would have caught 10 of 10 failed sessions" in t, "watching shows the evidence for the rule")
 run(button(at, "Start blocking").click())
 t = texts(at)
 check("Blocked: refund_api(amount=900)" in t and "The tool never ran." in t, "after Start blocking: a live check shows it blocked")
 check("Live check" in t and "amount=900" in t, "the check uses a clearly-too-large refund (900)")
 check(any("That's the loop" in str(x.value) for x in at.toast), "a toast celebrates the loop")
-check(any("kalytera.session(" in c.value for c in at.code), "and offers the code for your own agent")
+check("now point it at your agent" in t and any(NEW_KEY in c.value for c in at.code),
+      "finish card: connect your own agent, key filled in")
+check("ob-step now" not in t and t.count('ob-step done') >= 3, "stepper: all three steps done")
+
+print("12. Sidebar: connect page; empty agent says what's happening")
+run(button(at, "＋ Connect an agent").click())
+check("Connect an agent" in texts(at) and any(NEW_KEY in c.value for c in at.code), "connect page with the key")
+resp = client.post("/trace", headers={"Authorization": f"Bearer {NEW_KEY}"}, json={
+    "id": str(uuid.uuid4()), "agent_id": "fresh-bot", "session_id": "fresh-1", "step_number": 1,
+    "step_name": "agent", "input": "hi", "output": "hello", "tool_calls": [], "session_ended": True,
+    "timestamp": datetime.now(timezone.utc).isoformat()})
+assert resp.status_code == 201, resp.text
+at.session_state["_switch_to"] = ("fresh-bot", "🔴  Failure Feed")
+run(at)
+check("No sessions scored yet" in texts(at), "a just-connected agent: 'no sessions scored yet', not 'all good'")
+run(button(at, "↻ Score my sessions now").click())
+run(at)
+check("Its one session passed" in texts(at), "Score now → its one session is scored")
 
 print("\nAll dashboard checks passed.")

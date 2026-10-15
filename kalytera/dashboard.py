@@ -73,6 +73,7 @@ ALL_FT = [
 ]
 
 AUTO_REFRESH_S = 30
+MIN_REPEAT = 5  # the analyzer only reports a failure once it repeats this often (analyzer.MIN_FAILURE_COUNT)
 TREND_DAYS = 7
 SESSION_LIMIT = 100
 PATTERN_SESSIONS_SHOWN = 10
@@ -166,6 +167,7 @@ from db.queries import (  # noqa: E402
     get_quality_config,
     get_quality_trend,
     get_recent_eval_failures,
+    get_recent_session_results,
     get_pattern_sessions,
     get_session_failure_counts,
     get_step_names,
@@ -353,6 +355,10 @@ def _validate_key(key: str) -> Optional[Dict[str, Any]]:
 @st.cache_data(ttl=300, show_spinner=False)
 def _agents_for_key(key: str) -> List[str]:
     """Agents the key can see. Cached: this ran on every click and is one network round trip."""
+    return _fetch_agents(key)
+
+
+def _fetch_agents(key: str) -> List[str]:
     try:
         r = _requests.get(f"{_API}/agents", headers={"Authorization": f"Bearer {key}"}, timeout=5)
         return r.json() if r.status_code == 200 else []
@@ -450,13 +456,6 @@ with st.sidebar:
         """,
         unsafe_allow_html=True,
     )
-    st.markdown('<hr style="margin:0 0 16px"/>', unsafe_allow_html=True)
-
-    st.markdown(
-        '<p style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.08em;'
-        'text-transform:uppercase;margin-bottom:4px;padding:0 4px">AGENT</p>',
-        unsafe_allow_html=True,
-    )
     _stored_key = st.session_state.get("api_key", "")
     if _stored_key:
         _all_agents = _agents_for_key(_stored_key)
@@ -468,44 +467,58 @@ with st.sidebar:
             _all_agents = []
         finally:
             _db_s.close()
+    # A new account has nothing to pick or navigate yet: the page itself is the next step.
+    _new_account = bool(_stored_key) and not any(a != "demo-agent" for a in _all_agents or [])
 
-    if _all_agents:
-        # The API lists your own agents first; the shared demo agent only when you have none.
-        _own = [a for a in _all_agents if a != "demo-agent"]
-        _def = _all_agents.index(_own[0]) if _own else 0
-        if st.session_state.get("agent_id") not in _all_agents:
-            st.session_state["agent_id"] = _all_agents[_def]
-        agent_id: str = st.selectbox(
-            "agent", _all_agents, key="agent_id", label_visibility="collapsed",
+    _NAV_OPTIONS = ["🔴  Failure Feed", "📊  Overview", "🛡  Rules"]
+    if not _new_account:
+        st.markdown('<hr style="margin:0 0 16px"/>', unsafe_allow_html=True)
+    if _new_account:
+        agent_id: str = "demo-agent"
+        view: str = _NAV_OPTIONS[0]
+    else:
+        st.markdown(
+            '<p style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.08em;'
+            'text-transform:uppercase;margin-bottom:4px;padding:0 4px">AGENT</p>',
+            unsafe_allow_html=True,
+        )
+        if _all_agents:
+            # The API lists your own agents first; the shared demo agent only when you have none.
+            _own = [a for a in _all_agents if a != "demo-agent"]
+            _def = _all_agents.index(_own[0]) if _own else 0
+            if st.session_state.get("agent_id") not in _all_agents:
+                st.session_state["agent_id"] = _all_agents[_def]
+            agent_id = st.selectbox(
+                "agent", _all_agents, key="agent_id", label_visibility="collapsed",
+                on_change=lambda: st.session_state.pop("open_session", None),
+            )
+        else:
+            agent_id = st.text_input(
+                "agent", value="demo-agent", key="agent_id_text",
+                label_visibility="collapsed", placeholder="Enter agent ID…",
+            )
+
+        st.markdown('<div style="height:20px"/>', unsafe_allow_html=True)
+        st.markdown(
+            '<p style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.08em;'
+            'text-transform:uppercase;margin-bottom:4px;padding:0 4px">NAVIGATE</p>',
+            unsafe_allow_html=True,
+        )
+        if st.session_state.get("view") not in _NAV_OPTIONS:
+            st.session_state.pop("view", None)  # e.g. the old Trace Viewer entry
+        view = st.radio(
+            "nav", _NAV_OPTIONS, key="view", label_visibility="collapsed",
             on_change=lambda: st.session_state.pop("open_session", None),
         )
-    else:
-        agent_id = st.text_input(
-            "agent", value="demo-agent", key="agent_id_text",
-            label_visibility="collapsed", placeholder="Enter agent ID…",
-        )
 
-    st.markdown('<div style="height:20px"/>', unsafe_allow_html=True)
-
-    st.markdown(
-        '<p style="font-size:10px;font-weight:700;color:#94a3b8;letter-spacing:0.08em;'
-        'text-transform:uppercase;margin-bottom:4px;padding:0 4px">NAVIGATE</p>',
-        unsafe_allow_html=True,
-    )
-    _NAV_OPTIONS = ["📊  Overview", "🔴  Failure Feed", "🛡  Rules"]
-    if st.session_state.get("view") not in _NAV_OPTIONS:
-        st.session_state.pop("view", None)  # e.g. the old Trace Viewer entry
-    view: str = st.radio(
-        "nav", _NAV_OPTIONS, key="view", label_visibility="collapsed",
-        on_change=lambda: st.session_state.pop("open_session", None),
-    )
-
-    if _stored_key and not any(a.startswith("sample-refund-bot-") for a in _all_agents or []) \
-            and any(a != "demo-agent" for a in _all_agents or []):
         st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
-        st.button("▶ Try the sample agent", key="sidebar_sample", use_container_width=True,
-                  on_click=st.session_state.__setitem__, args=("_want_sample", True),
-                  help="See Kalytera find a failing agent's problem and block it — about 2 minutes")
+        if _stored_key:
+            st.button("＋ Connect an agent", key="sidebar_connect", use_container_width=True,
+                      on_click=st.session_state.__setitem__, args=("_want_connect", True))
+        if _stored_key and not any(a.startswith("sample-refund-bot-") for a in _all_agents or []):
+            st.button("▶ Try the sample agent", key="sidebar_sample", use_container_width=True,
+                      on_click=st.session_state.__setitem__, args=("_want_sample", True),
+                      help="See Kalytera find a failing agent's problem and block it — about a minute")
 
     st.markdown('<hr style="margin:20px 0 12px"/>', unsafe_allow_html=True)
 
@@ -1312,31 +1325,65 @@ def _failure_feed_fragment(agent_id: str) -> None:
     if st.session_state.pop("_feed_toast", False):
         st.toast("**That's the loop.** Found → rule → blocked.", icon="🎉")
     total, failed = counts.get("total", 0), counts.get("failed", 0)
+    if total == 0:
+        st.info("No sessions scored yet. Kalytera scores a session about 30 seconds after it ends "
+                "(when the `kalytera.session()` block exits).", icon="⏳")
+        if st.button("↻ Score my sessions now", key="check_now"):
+            st.session_state["_want_check"] = True
+            st.rerun(scope="app")
+        return
     if not patterns and not recent:
-        st.success("No failed sessions for this agent.", icon="✅")
+        st.success(f"All {total} sessions passed. Nothing to fix." if total > 1 else
+                   "Its one session passed. Nothing to fix.", icon="✅")
         return
 
     problems = _problems(patterns, counts)
     for g in problems:
         g["steps"] = [step_label(v, names) for v in g["steps"]]
     by_pattern = fetch_suggestion_data(agent_id).get("by_pattern", {}) if problems else {}
+    options = [_rule_option(g, by_pattern) for g in problems]
 
     # The headline: how big the problem is, in one sentence.
     if problems:
         head = (f"<b>{len(problems)} problem{'s keep' if len(problems) != 1 else ' keeps'} happening</b> — "
                 f"{failed} of {total} sessions failed ({_pct(failed, total)})")
+        st.markdown(f'<div class="ff-sum">{head}</div>', unsafe_allow_html=True)
     else:
-        head = f"{failed} of {total} sessions failed. A problem shows here once the same failure repeats (hourly)."
-    st.markdown(f'<div class="ff-sum">{head}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="ff-sum"><b>{failed} of {total} sessions failed.</b> A problem shows here once '
+                    f'the same failure happens {MIN_REPEAT} times.</div>', unsafe_allow_html=True)
+        if st.button("↻ Look for problems now", key="check_now", help="Otherwise Kalytera looks every hour"):
+            st.session_state["_want_check"] = True
+            st.rerun(scope="app")
 
-    if agent_id.startswith(SAMPLE_PREFIX) and problems and not st.session_state.get("_feed_made"):
-        st.info("Kalytera found this on its own from the conversations. Start with **⚡ Make it a rule**.", icon="👇")
+    stage = _sample_progress(agent_id, problems, options) if agent_id.startswith(SAMPLE_PREFIX) and problems else 0
 
     opened: set = st.session_state.setdefault("_feed_open", set())
-    for g in problems:
-        _problem_card(agent_id, g, _rule_option(g, by_pattern), total, opened)
+    for g, option in zip(problems, options):
+        _problem_card(agent_id, g, option, total, opened)
+    if stage == 4:
+        _sample_finish()
 
     _latest_failures(agent_id, recent, names)
+
+
+def _sample_progress(agent_id: str, problems: List[Dict[str, Any]], options: List[Dict[str, Any]]) -> int:
+    """The sample agent's guided loop: which of the three steps you're on (4 = all done)."""
+    states = [_rule_in_place(agent_id, g["main"], o) for g, o in zip(problems, options)]
+    stage = 4 if any(m and m["blocking"] for m in states) else 3 if any(states) else 2
+    st.markdown(_ONBOARD_CSS + _loop_html(stage), unsafe_allow_html=True)
+    return stage
+
+
+def _sample_finish() -> None:
+    """Under the blocked card: the loop is done, so the next step is the user's own agent."""
+    st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown('<div class="ob-card-t">That\'s the whole loop — now point it at your agent</div>'
+                    '<div class="ob-card-d">Kalytera found the problem on its own, wrote the rule from the '
+                    'sessions, and the next bad refund never ran. Your agent gets the same, with two changes:'
+                    '</div>', unsafe_allow_html=True)
+        _connect_steps()
+        _wait_for_first_agent()
 
 
 def _latest_failures(agent_id: str, recent: List[Tuple[Any, Any]], names: Dict[str, str]) -> None:
@@ -1792,82 +1839,208 @@ def _search_bar() -> None:
 SAMPLE_PREFIX = "sample-refund-bot-"
 SAMPLE_SESSIONS = 24
 SAMPLE_TIMEOUT_S = 240
+LIVE_ROWS = 6
+FEED_VIEW = "🔴  Failure Feed"
+
+_ONBOARD_CSS = """
+<style>
+.ob-hero{font-size:30px;font-weight:850;color:#0f172a;letter-spacing:-0.02em;line-height:1.2;margin:8px 0 10px}
+.ob-sub{font-size:15.5px;color:#475569;line-height:1.6;max-width:720px;margin-bottom:26px}
+.ob-loop{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 22px}
+.ob-step{flex:1 1 180px;padding:12px 14px;border-radius:12px;border:1px solid #e2e8f0;background:#fff}
+.ob-step .n{display:inline-flex;width:22px;height:22px;border-radius:11px;align-items:center;justify-content:center;
+  font-size:12px;font-weight:800;background:#eef2ff;color:#4f46e5;margin-right:8px}
+.ob-step .t{font-size:14px;font-weight:750;color:#0f172a}
+.ob-step .d{font-size:12.5px;color:#64748b;line-height:1.45;margin-top:5px}
+.ob-step.done{border-color:#bbf7d0;background:#f0fdf4}.ob-step.done .n{background:#16a34a;color:#fff}
+.ob-step.now{border-color:#a5b4fc;box-shadow:0 0 0 3px #eef2ff}.ob-step.now .n{background:#4f46e5;color:#fff}
+.ob-step.todo{opacity:.6}
+.ob-card-t{font-size:17px;font-weight:800;color:#0f172a;margin-bottom:4px}
+.ob-card-d{font-size:13.5px;color:#64748b;line-height:1.5;margin-bottom:12px}
+.ob-wait{font-size:13px;color:#64748b;display:flex;align-items:center;gap:8px;margin-top:4px}
+.ob-dot{width:8px;height:8px;border-radius:4px;background:#f59e0b;animation:obp 1.4s infinite}
+@keyframes obp{0%{opacity:1}50%{opacity:.25}100%{opacity:1}}
+.lv-row{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13.5px}
+.lv-row .i{width:18px;flex-shrink:0;font-weight:800}.lv-row .i.ok{color:#16a34a}.lv-row .i.bad{color:#dc2626}
+.lv-row .q{color:#334155}.lv-row .r{color:#dc2626}.lv-row .p{color:#94a3b8}
+.lv-tally{font-size:13px;color:#64748b;margin:2px 0 6px}
+</style>
+"""
+
+_LOOP = [("Find the problem", "An AI judge reads every session and groups the failures that keep happening."),
+         ("Make it a rule", "One click turns a problem into a rule, drafted from your own sessions."),
+         ("Block it", "The bad tool call is stopped before it runs. Your agent can tell the user why.")]
+
+
+def _loop_html(stage: int = 0) -> str:
+    """The three steps. stage 0 explains them; 1–3 marks the current one; 4 means all done."""
+    out = []
+    for i, (title, desc) in enumerate(_LOOP, start=1):
+        cls = "" if stage == 0 else "done" if i < stage else "now" if i == stage else "todo"
+        mark = "✓" if cls == "done" else str(i)
+        out.append(f'<div class="ob-step {cls}"><span class="n">{mark}</span><span class="t">{title}</span>'
+                   f'<div class="d">{desc}</div></div>')
+    return f'<div class="ob-loop">{"".join(out)}</div>'
+
+
+def _connect_code() -> str:
+    key = st.session_state.get("api_key") or "kly_live_..."
+    return (f'import kalytera\nkalytera.configure(api_key="{key}", agent_id="support-bot")\n\n'
+            '@kalytera.tool                    # checks your rules before each call\n'
+            'def refund_api(order_id, amount): ...\n\n'
+            'with kalytera.session(conversation_id, input=message) as s:\n'
+            '    s.output = run_my_agent(message)')
+
+
+def _connect_steps() -> None:
+    st.code("pip install kalytera", language="bash")
+    st.code(_connect_code(), language="python")
+    st.caption("Your key is already filled in. Put `@kalytera.tool` on the tools your agent calls and wrap each "
+               "conversation in `kalytera.session()`. [Full guide](https://github.com/priyamathur/kalytera-server"
+               "#add-kalytera-to-an-agent-in-production)")
+
+
+@st.fragment(run_every=5)
+def _wait_for_first_agent() -> None:
+    """Sentry-style: watch for the user's own agent, then take them straight to it."""
+    key = st.session_state.get("api_key", "")
+    agents = _fetch_agents(key) if key else []
+    mine = [a for a in agents if a != "demo-agent" and not a.startswith(SAMPLE_PREFIX)]
+    if mine and mine[0] not in st.session_state.get("_known_agents", []):
+        _agents_for_key.clear()
+        st.session_state["_switch_to"] = (mine[0], FEED_VIEW)
+        st.rerun(scope="app")
+    st.session_state["_known_agents"] = mine
+    st.markdown('<div class="ob-wait"><span class="ob-dot"></span>Waiting for your agent\'s first session… '
+                'this page opens it as soon as it arrives.</div>', unsafe_allow_html=True)
+
+
+def _live_rows(agent: str) -> str:
+    """The latest judged conversations: what the user asked, and what went wrong."""
+    db = _db()
+    try:
+        rows = get_recent_session_results(agent, LIVE_ROWS, db)
+        counts = get_session_failure_counts(agent, db)
+    except Exception:
+        return ""
+    finally:
+        db.close()
+    if not rows:
+        return ""
+    lines = []
+    for r in rows:
+        q = (r["input"] or r["session_id"]).strip()
+        q = html.escape(q if len(q) <= 70 else q[:68].rstrip() + "…")
+        if r["passed"]:
+            lines.append(f'<div class="lv-row"><span class="i ok">✓</span><span class="q">“{q}”</span>'
+                         f'<span class="p">handled correctly</span></div>')
+        else:
+            why = html.escape(_short_reason(r["failure_reason"], None, "") or "failed")
+            lines.append(f'<div class="lv-row"><span class="i bad">✗</span><span class="q">“{q}”</span>'
+                         f'<span class="r">{why}</span></div>')
+    ok = counts["total"] - counts["failed"]
+    tally = (f'<div class="lv-tally"><b style="color:#16a34a">{ok} passed</b> · '
+             f'<b style="color:#dc2626">{counts["failed"]} failed</b> so far</div>')
+    return tally + "".join(lines)
+
+
+def _follow_job(agent: str, box: Any, total_hint: int, verb: str) -> Optional[Dict[str, Any]]:
+    """Poll a refresh job, showing progress and each conversation as the judge reads it."""
+    import time
+
+    bar = st.progress(0.0, text="Waiting for the server…")
+    rows = st.empty()
+    deadline = time.monotonic() + SAMPLE_TIMEOUT_S
+    while time.monotonic() < deadline:
+        _, s_ = _rules_api("GET", f"/agents/{agent}/refresh")
+        state = s_.get("state") if isinstance(s_, dict) else "error"
+        if state == "error":
+            box.update(label="Scoring failed", state="error")
+            st.error(s_.get("error") if isinstance(s_, dict) else "Scoring failed")
+            return None
+        if state != "preparing":
+            to_score = s_.get("to_score") or 0
+            total = to_score or total_hint
+            done = min(s_.get("scored", 0), total)
+            if state in ("analyzing", "done"):
+                bar.progress(1.0, text="Looking for what the failures have in common…")
+            elif total:
+                bar.progress(done / total, text=f"The AI judge is reading {verb} {min(done + 1, total)} of {total}…")
+            rows.markdown(_live_rows(agent), unsafe_allow_html=True)
+            if state in ("done", "idle"):
+                box.update(label=f"Done — {s_.get('sessions_failed', 0)} of {s_.get('sessions_scored', 0)} "
+                                 f"{verb}s failed", state="complete")
+                return s_
+        time.sleep(1 if state == "preparing" else 2)
+    box.update(label="Still scoring — this page updates in a minute", state="running")
+    return None
 
 
 def _run_sample_agent() -> None:
-    """Create the sample agent's conversations on the server and show scoring live."""
-    import time
-
+    """Create the sample agent's conversations on the server and show the judge reading them."""
+    st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
+    st.markdown('<div class="ob-hero" style="font-size:24px">Finding the problem…</div>', unsafe_allow_html=True)
+    st.markdown(_loop_html(1), unsafe_allow_html=True)
     # Show progress first: creating the conversations takes a few seconds on a cold server.
-    with st.status("Running the sample agent…", expanded=True) as box:
-        sent = st.empty()
-        sent.write(f"Sending {SAMPLE_SESSIONS} customer conversations…")
-        bar = st.progress(0.0, text="Waiting for the server…")
+    with st.status(f"A sample refund agent just handled {SAMPLE_SESSIONS} customer conversations. "
+                   "Kalytera wasn't told what's wrong with it.", expanded=True) as box:
         status, body = _rules_api("POST", "/agents/sample")
         if status not in (200, 202):
             box.update(label="Couldn't start the sample agent", state="error")
             st.error(body.get("detail") if isinstance(body, dict) else str(body))
             return
         agent = body["agent_id"]
-        bar.progress(0.0, text="The AI judge is reading each conversation…")
-        deadline = time.monotonic() + SAMPLE_TIMEOUT_S
-        while time.monotonic() < deadline:
-            _, s_ = _rules_api("GET", f"/agents/{agent}/refresh")
-            state = s_.get("state") if isinstance(s_, dict) else "error"
-            if state == "error":
-                box.update(label="Scoring failed", state="error")
-                st.error(s_.get("error") if isinstance(s_, dict) else "Scoring failed")
-                return
-            if state == "preparing":
-                time.sleep(1)
-                continue
-            sent.write(f"✓ {SAMPLE_SESSIONS} customer conversations sent")
-            to_score = s_.get("to_score") or 0
-            done = SAMPLE_SESSIONS - to_score + s_.get("scored", 0) if to_score else 0
-            if state in ("analyzing", "done"):
-                bar.progress(1.0, text="Looking for what the failures have in common…")
-            else:
-                bar.progress(min(done, SAMPLE_SESSIONS) / SAMPLE_SESSIONS,
-                             text=f"The AI judge is reading conversation {min(done + 1, SAMPLE_SESSIONS)} "
-                                  f"of {SAMPLE_SESSIONS}…")
-            if state == "done":
-                box.update(label=f"Done — {s_.get('sessions_failed', 0)} of {s_.get('sessions_scored', 0)} "
-                                 f"conversations failed", state="complete")
-                break
-            time.sleep(2)
-        else:
-            box.update(label="Still scoring — check Failure Feed in a minute", state="running")
-    st.session_state["_switch_to"] = (agent, "🔴  Failure Feed")
+        _follow_job(agent, box, SAMPLE_SESSIONS, "conversation")
+    st.session_state["_switch_to"] = (agent, FEED_VIEW)
     st.rerun()
 
 
+def _check_now(agent_id: str) -> None:
+    """Score this agent's waiting sessions and look for problems now, instead of on the hourly run."""
+    _page_header("Failure Feed", "")
+    with st.status("Checking your latest sessions…", expanded=True) as box:
+        status, body = _rules_api("POST", f"/agents/{agent_id}/refresh")
+        if status not in (200, 202):
+            box.update(label="Couldn't start the check", state="error")
+            st.error(body.get("detail") if isinstance(body, dict) else str(body))
+            return
+        _follow_job(agent_id, box, 0, "session")
+    _overview_data.clear()
+    st.rerun()
+
+
+def _connect_page() -> None:
+    st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
+    _page_header("Connect an agent", "Two changes in your code. Works with any framework.")
+    _connect_steps()
+    _wait_for_first_agent()
+
+
 def _welcome_panel() -> None:
-    with st.container(border=True):
-        st.markdown(
-            '<div style="font-size:20px;font-weight:800;color:#0f172a;margin-bottom:6px">'
-            'See Kalytera catch a failing agent — about 2 minutes, no code</div>'
-            '<div style="font-size:14px;color:#475569;line-height:1.65;max-width:760px">'
-            'A sample refund agent handles 24 customer conversations. Its refund tool rejects refunds over '
-            '$500, but the agent tells the customer the refund went through anyway. <b>Kalytera isn\'t told any '
-            'of this</b> — watch it find the problem, write the rule, and stop the next bad refund.</div>',
-            unsafe_allow_html=True,
-        )
-        c1, c2, _ = st.columns([1.4, 1.6, 3])
-        run = c1.button("▶ Run the sample agent", type="primary", use_container_width=True, key="run_sample")
-        with c2.popover("Connect my own agent", use_container_width=True):
-            st.markdown("Two changes in your code ([guide](https://github.com/priyamathur/kalytera-server"
-                        "#add-kalytera-to-an-agent-in-production)):")
-            st.code('import kalytera\nkalytera.configure(api_key="kly_live_...", agent_id="support-bot")\n\n'
-                    '@kalytera.tool                    # checks your rules before each call\n'
-                    'def refund_api(order_id, amount): ...\n\n'
-                    'with kalytera.session(conversation_id, input=message) as s:\n'
-                    '    s.output = run_my_agent(message)', language="python")
-    if run:
-        _run_sample_agent()
+    """A new account's first screen: what Kalytera does, and two ways to see it — no code, or your agent."""
+    st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
+    st.markdown('<div class="ob-hero">Stop your agent repeating the same mistakes</div>'
+                '<div class="ob-sub">Kalytera reads every conversation your agent has, finds the failures that '
+                'keep happening, and turns each one into a rule that blocks the bad tool call before it runs.</div>',
+                unsafe_allow_html=True)
+    st.markdown(_loop_html(0), unsafe_allow_html=True)
+    left, right = st.columns(2, gap="medium")
+    with left.container(border=True):
+        st.markdown('<div class="ob-card-t">See it on a sample agent</div>'
+                    '<div class="ob-card-d">A refund bot with a hidden bug: it tells customers big refunds went '
+                    'through when they didn\'t. Watch Kalytera find it and block it. '
+                    '<b>About a minute, no code.</b></div>', unsafe_allow_html=True)
+        st.button("▶ Run the sample agent", type="primary", use_container_width=True, key="run_sample",
+                  on_click=st.session_state.__setitem__, args=("_want_sample", True))
+    with right.container(border=True):
+        st.markdown('<div class="ob-card-t">Connect your agent</div>'
+                    '<div class="ob-card-d">Two changes in your code. Works with any framework.</div>',
+                    unsafe_allow_html=True)
+        with st.expander("Show the code (your key is filled in)", expanded=False):
+            _connect_steps()
+        _wait_for_first_agent()
 
 
-_own_agents = [a for a in (_all_agents or []) if a != "demo-agent"]
-_has_sample = any(a.startswith(SAMPLE_PREFIX) for a in _own_agents)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1879,8 +2052,12 @@ if _open_sid:
     _show_trace(agent_id, str(_open_sid))
 elif st.session_state.pop("_want_sample", False):
     _run_sample_agent()
-elif _stored_key and not _own_agents:
-    _welcome_panel()  # a new account: nothing of its own to show yet
+elif _new_account:
+    _welcome_panel()  # nothing of its own to show yet
+elif st.session_state.pop("_want_connect", False):
+    _connect_page()
+elif st.session_state.pop("_want_check", False):
+    _check_now(agent_id)
 elif "Overview" in view:
     _show_overview(agent_id)
 elif "Failure" in view:

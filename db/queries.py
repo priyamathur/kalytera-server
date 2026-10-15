@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from sqlalchemy import case, distinct, func
+from sqlalchemy import and_, case, distinct, func
 from sqlalchemy.orm import Session
 
 from db.models import AgentLog, AgentOrg, AgentQualityConfig, ApiKey, EvalResult, GoldenLabel, LossPattern, Organization, User, UsageRecord
@@ -942,3 +942,28 @@ def _parse_timestamp(value: Any) -> datetime:
 def _float_type() -> Any:
     from sqlalchemy import Float
     return Float
+
+
+def get_recent_session_results(agent_id: str, limit: int, db: Session) -> List[Dict[str, Any]]:
+    """
+    Newest scored sessions with what the user asked (step 1's input), newest first:
+    [{"session_id", "passed", "failure_reason", "input", "evaluated_at"}]. Feeds the
+    live list while the dashboard waits for a scoring run.
+    """
+    rows = (
+        db.query(EvalResult, AgentLog.input)
+        .outerjoin(AgentLog, and_(AgentLog.agent_id == EvalResult.agent_id,
+                                  AgentLog.session_id == EvalResult.session_id,
+                                  AgentLog.step_number == 1))
+        .filter(EvalResult.agent_id == agent_id, EvalResult.eval_error == False)  # noqa: E712
+        .order_by(EvalResult.evaluated_at.desc())
+        .limit(limit * 3)  # a session can have several result rows
+        .all()
+    )
+    out: Dict[str, Dict[str, Any]] = {}
+    for ev, text in rows:
+        if ev.session_id not in out:
+            out[ev.session_id] = {"session_id": ev.session_id, "passed": bool(ev.passed),
+                                  "failure_reason": ev.failure_reason, "input": text or "",
+                                  "evaluated_at": ev.evaluated_at}
+    return list(out.values())[:limit]
