@@ -13,7 +13,7 @@ from kalytera import quickstart, tracer
 
 
 def _fake_score_session(steps: List[Any], weights: Optional[Dict[str, float]] = None,
-                        pass_threshold: float = 0.7) -> Dict[str, Any]:
+                        pass_threshold: float = 0.7, custom_metrics: Any = None) -> Dict[str, Any]:
     """Stand-in for the LLM judge: a session fails if any tool call failed."""
     bad = next((s for s in steps if any(c.get("success") is False for c in (s.tool_calls or []))), None)
     base = dict(accuracy=0.9, goal_alignment=0.9, decision_quality=0.9, completeness=0.9, helpfulness=0.9,

@@ -550,3 +550,60 @@ def test_end_to_end_score_step_via_anthropic_provider(monkeypatch: object) -> No
 
     assert result["passed"] is True
     assert result["eval_error"] is False
+
+
+# ---------------------------------------------------------------------------
+# Session judge: developer dimensions and long replies
+# ---------------------------------------------------------------------------
+
+TONE = [{"name": "tone", "weight": 0.2, "description": "Polite and on-brand, never blames the customer."}]
+SIX = {"accuracy": 0.16, "goal_alignment": 0.16, "decision_quality": 0.12, "completeness": 0.12,
+       "helpfulness": 0.12, "factuality": 0.12, "tone": 0.2}
+
+
+def test_session_judge_is_asked_about_custom_dimensions() -> None:
+    from kalytera.prompts import build_session_prompt
+
+    prompt = build_session_prompt(_steps(), TONE)[0]["content"]
+    assert "7. tone: Polite and on-brand" in prompt
+    assert '"tone": 0.0' in prompt
+    assert "| tone" in prompt  # can be named as the failure type
+
+
+def test_custom_dimension_counts_in_the_score_and_can_be_the_failure() -> None:
+    reply = json.dumps({"accuracy": 1, "goal_alignment": 1, "decision_quality": 1, "completeness": 1,
+                        "helpfulness": 1, "factuality": 1, "tone": 0.0, "overall_score": 0.5, "passed": False,
+                        "failure_type": "tone", "failure_step": 2, "failure_reason": "Blamed the customer at step 2",
+                        "confidence": 0.9})
+    with patch("kalytera.judge._call_judge", return_value=reply):
+        result = score_session(_steps(), weights=SIX, pass_threshold=0.85, custom_metrics=TONE)
+    assert result["overall_score"] == 0.8  # tone's 20% is part of the score
+    assert result["passed"] is False and result["failure_type"] == "tone"
+    assert result["custom_scores"] == {"tone": 0.0}
+
+
+def test_without_the_custom_dimension_a_perfect_session_would_be_capped() -> None:
+    """The bug this guards against: custom weights given, custom scores ignored → max score 0.8."""
+    reply = json.dumps({k: 1 for k in ("accuracy", "goal_alignment", "decision_quality", "completeness",
+                                       "helpfulness", "factuality", "tone")} | {"overall_score": 1, "passed": True,
+                                                                        "failure_type": None, "failure_step": None,
+                                                                        "failure_reason": None, "confidence": 1})
+    with patch("kalytera.judge._call_judge", return_value=reply):
+        assert score_session(_steps(), weights=SIX, custom_metrics=TONE)["overall_score"] == 1.0
+
+
+def test_judge_sees_long_replies_not_just_the_first_200_characters() -> None:
+    from kalytera.prompts import build_session_prompt
+
+    late_claim = "Your refund of $900 has been issued."
+    long_reply = "Thanks for your patience. " * 40 + late_claim  # the false claim is at character ~1040
+    steps = [StepContext(step_number=1, step_name="reply", input="Refund my order", output=long_reply)]
+    assert late_claim in build_session_prompt(steps)[0]["content"]
+
+
+def test_long_sessions_share_a_text_budget() -> None:
+    from kalytera.prompts import SESSION_TEXT_BUDGET, build_session_prompt
+
+    steps = [StepContext(step_number=i, step_name="s", input="x" * 5000, output="y" * 5000) for i in range(1, 41)]
+    content = build_session_prompt(steps)[0]["content"]
+    assert len(content) < SESSION_TEXT_BUDGET * 1.6 and "more characters]" in content

@@ -267,7 +267,7 @@ print("11. A brand-new account: welcome panel → sample agent → rule → bloc
 import kalytera.judge as _judge  # noqa: E402
 
 
-def _stand_in_judge(steps, weights=None, pass_threshold=0.7):  # no LLM key in tests
+def _stand_in_judge(steps, weights=None, pass_threshold=0.7, custom_metrics=None):  # no LLM key in tests
     bad = next((s for s in steps if any(c.get("success") is False for c in (s.tool_calls or []))), None)
     base = dict(accuracy=0.9, goal_alignment=0.9, decision_quality=0.9, completeness=0.9, helpfulness=0.9,
                 factuality=0.9, custom_scores={}, confidence=0.9, eval_error=False)

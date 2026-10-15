@@ -162,12 +162,23 @@ def build_retry_prompt(step: StepContext) -> List[Dict[str, str]]:
     return [{"role": "user", "content": user}]
 
 
-def build_session_prompt(steps: List[StepContext]) -> List[Dict[str, str]]:
+SESSION_TEXT_BUDGET = 24000  # characters of step input/output shown to the judge per session
+MIN_FIELD_CHARS = 300
+MAX_FIELD_CHARS = 2000
+
+
+def build_session_prompt(steps: List[StepContext],
+                         custom_metrics: Optional[List[Dict[str, Any]]] = None) -> List[Dict[str, str]]:
     """
     Returns an Anthropic messages list for session-level evaluation.
     Sends all steps at once — one Haiku call per complete session instead of per step.
+    Developer-defined dimensions are scored too, and can be named as the failure type.
     """
+    custom = custom_metrics or []
     steps_text = _format_all_steps(steps)
+    extra_dims = "".join(f"{7 + i}. {m['name']}: {m.get('description', 'Custom evaluation dimension.')}\n"
+                         for i, m in enumerate(custom))
+    failure_list = " | ".join([*sorted(FAILURE_TYPES), *(m["name"] for m in custom)])
     user = (
         f"Evaluate this complete agent session ({len(steps)} steps end-to-end).\n\n"
         f"Session steps:\n{steps_text}\n\n"
@@ -177,29 +188,37 @@ def build_session_prompt(steps: List[StepContext]) -> List[Dict[str, str]]:
         f"3. decision_quality: Was reasoning sound and tool selection appropriate?\n"
         f"4. completeness: Was the user's request fully resolved by the end?\n"
         f"5. helpfulness: Did the session practically help the user accomplish their goal?\n"
-        f"6. factuality: Were all claims verifiable and grounded — no hallucinations?\n\n"
-        f"If the session failed, identify the failure type:\n"
-        f"{_FAILURE_LIST}\n\n"
+        f"6. factuality: Were all claims verifiable and grounded — no hallucinations?\n"
+        f"{extra_dims}\n"
+        f"If the session failed, identify the failure type (a custom dimension's name if that is what failed):\n"
+        f"{failure_list}\n\n"
         f"failure_step: step number where the failure originated (null if passed).\n"
         f"failure_reason: one short phrase, max 12 words. "
         f'Format: "[what failed] at step N; [one-word consequence]." '
         f'Example: "Payment API timed out at step 3; charge not completed."\n\n'
         f"Respond with JSON only:\n"
-        f"{_JSON_TEMPLATE}"
+        f"{_build_json_template(custom)}"
     )
     return [{"role": "user", "content": user}]
+
+
+def _clip(text: str, limit: int) -> str:
+    return text if len(text) <= limit else text[:limit] + f"… [{len(text) - limit} more characters]"
 
 
 def _format_all_steps(steps: List[StepContext]) -> str:
     if not steps:
         return "  (none)"
+    # Share one budget across all inputs and outputs, so a long reply isn't cut at 200 characters
+    # (where a hallucination late in the reply would be invisible) and long sessions stay affordable.
+    limit = max(MIN_FIELD_CHARS, min(MAX_FIELD_CHARS, SESSION_TEXT_BUDGET // (2 * len(steps))))
     lines = []
     for s in steps:
         tool_text = _format_tool_calls(s.tool_calls)
         lines.append(
             f"  Step {s.step_number} ({s.step_name}):\n"
-            f"    Input:  {s.input[:200]!r}\n"
-            f"    Output: {s.output[:200]!r}\n"
+            f"    Input:  {_clip(s.input, limit)!r}\n"
+            f"    Output: {_clip(s.output, limit)!r}\n"
             f"    Tools:  {tool_text}"
         )
     return "\n".join(lines)

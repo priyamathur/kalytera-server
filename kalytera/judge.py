@@ -88,6 +88,7 @@ def score_session(
     steps: List[StepContext],
     weights: Optional[Dict[str, float]] = None,
     pass_threshold: float = _PASS_THRESHOLD,
+    custom_metrics: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """
     Score a complete session (all steps) with one LLM call.
@@ -100,7 +101,7 @@ def score_session(
 
     w = weights or _DEFAULT_WEIGHTS
 
-    raw = _call_judge(build_session_prompt(steps))
+    raw = _call_judge(build_session_prompt(steps, custom_metrics))
     parsed = _parse_json(raw)
 
     if parsed is None:
@@ -110,7 +111,7 @@ def score_session(
     if parsed is None:
         return _error_result(steps[-1])
 
-    return _build_result(parsed, w, pass_threshold, steps[-1].step_number)
+    return _build_result(parsed, w, pass_threshold, steps[-1].step_number, custom_metrics)
 
 
 def evaluate_session(session_id: str, db: Any) -> Optional[Dict[str, Any]]:
@@ -143,9 +144,9 @@ def evaluate_session(session_id: str, db: Any) -> Optional[Dict[str, Any]]:
         .filter(AgentQualityConfig.agent_id == ended_log.agent_id)
         .first()
     )
-    weights, pass_threshold, _ = _weights_from_config(config)
+    weights, pass_threshold, custom_metrics = _weights_from_config(config)
 
-    result = score_session(steps, weights=weights, pass_threshold=pass_threshold)
+    result = score_session(steps, weights=weights, pass_threshold=pass_threshold, custom_metrics=custom_metrics)
 
     result_for_db = {k: v for k, v in result.items() if k != "custom_scores"}
     custom_scores_json = json.dumps(result.get("custom_scores") or {}) or None
@@ -361,7 +362,7 @@ def _build_result(
     raw_failure_type = parsed.get("failure_type")
     failure_type = (
         raw_failure_type
-        if not passed and raw_failure_type in FAILURE_TYPES
+        if not passed and raw_failure_type in FAILURE_TYPES | {m["name"] for m in custom}
         else None
     )
     failure_reason = parsed.get("failure_reason") if not passed else None
