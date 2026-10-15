@@ -112,6 +112,12 @@ def sync_all(db: Session) -> Dict[str, int]:
     return pulled
 
 
+def _release_if_empty(agent_id: str, org_id: str, db: Session) -> None:
+    if db.query(AgentLog.id).filter(AgentLog.agent_id == agent_id).first() is None:
+        db.query(AgentOrg).filter(AgentOrg.agent_id == agent_id, AgentOrg.org_id == org_id).delete()
+        db.commit()
+
+
 def _utc(ts: datetime) -> datetime:
     return ts if ts.tzinfo else ts.replace(tzinfo=timezone.utc)
 
@@ -238,7 +244,11 @@ def build_router(resolve_org: Callable[..., Any]) -> APIRouter:
         settings, secrets = dict(body.settings), {k: v.strip() for k, v in body.secrets.items()}
 
         def prepare(d: Session) -> None:
-            convs = _fetch(body.kind, settings, secrets, since=None)  # raises with a clear message on bad keys
+            try:
+                convs = _fetch(body.kind, settings, secrets, since=None)  # raises with a clear message on bad keys
+            except Exception:
+                _release_if_empty(agent_id, org_id, d)  # a failed connect leaves no empty agent behind
+                raise
             conn = Connection(org_id=org_id, kind=body.kind, agent_id=agent_id, settings=json.dumps(settings),
                               secret=vault.encrypt(secrets), last_synced_at=datetime.now(timezone.utc))
             d.add(conn)

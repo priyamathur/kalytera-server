@@ -186,6 +186,9 @@ def build_router(resolve_org: Callable[..., Any],
 
     @router.get("/agents/{agent_id}/refresh")
     async def status(agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        own_job = f"{getattr(org, 'id', '')}:{agent_id}"
+        if org is not None and own_job in _jobs:  # a job this account started, even if it released the agent
+            return _status(_jobs[own_job], agent_id, db)
         key = _check(agent_id, org, db)
         return _status(_jobs.get(key), agent_id, db)
 

@@ -13,7 +13,7 @@ from test_quickstart import _fake_score_session, _start_and_wait
 import api.connections_api as conn_api
 import api.refresh_api as refresh_api
 import kalytera.judge as judge
-from db.models import AgentLog, Connection, LossPattern, ProblemAlert
+from db.models import AgentLog, AgentOrg, Connection, LossPattern, ProblemAlert
 from kalytera import vault
 
 
@@ -89,6 +89,9 @@ def test_bad_keys_say_why_and_save_nothing(cx: SimpleNamespace) -> None:
     status = cx.client.get(f"/agents/{agent}/refresh").json()
     assert status["state"] == "error" and "rejected these keys" in status["error"]
     assert cx.client.get("/connections").json()["connections"] == []
+    db = cx.session()
+    assert db.query(AgentOrg).filter(AgentOrg.agent_id == agent).count() == 0  # no empty agent left behind
+    db.close()
 
 
 def test_sync_pulls_only_whats_new(cx: SimpleNamespace) -> None:

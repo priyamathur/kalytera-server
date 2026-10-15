@@ -467,11 +467,18 @@ if not st.session_state.get("authenticated"):
 
 
 # A finished sample run switches agent and page; widgets can only be set before they render.
+# A Slack alert links to app.kalytera.dev/?agent=…&problem=…: open that problem.
+if st.query_params.get("agent"):
+    st.session_state["_switch_to"] = (st.query_params["agent"], "🔴  Failure Feed")
+    st.session_state["_focus_problem"] = st.query_params.get("problem")
+    st.query_params.clear()
+
 _switch = st.session_state.pop("_switch_to", None)
 if _switch:
     _agents_for_key.clear()
     st.session_state["agent_id"], st.session_state["view"] = _switch
     st.session_state.pop("open_session", None)
+    st.session_state.pop("_page", None)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -546,13 +553,13 @@ with st.sidebar:
             st.session_state.pop("view", None)  # e.g. the old Trace Viewer entry
         view = st.radio(
             "nav", _NAV_OPTIONS, key="view", label_visibility="collapsed",
-            on_change=lambda: st.session_state.pop("open_session", None),
+            on_change=lambda: [st.session_state.pop(k, None) for k in ("open_session", "_page")],
         )
 
         st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
         if _stored_key:
             st.button("＋ Connect an agent", key="sidebar_connect", use_container_width=True,
-                      on_click=st.session_state.__setitem__, args=("_want_connect", True))
+                      on_click=st.session_state.__setitem__, args=("_page", "connect"))
         if _stored_key and not any(a.startswith("sample-refund-bot-") for a in _all_agents or []):
             st.button("▶ Try the sample agent", key="sidebar_sample", use_container_width=True,
                       on_click=st.session_state.__setitem__, args=("_want_sample", True),
@@ -1154,6 +1161,7 @@ def _show_overview(agent_id: str) -> None:
 
     if agent_id != "demo-agent":
         with st.expander("Data & retention", expanded=False):
+            _sharing_setting()
             _retention_setting()
             st.markdown("**Delete this agent's data**")
             st.caption("Removes every session, score, problem, rule, guard decision and label Kalytera stores "
@@ -1263,7 +1271,7 @@ _FEED_CSS = """
 """
 
 
-def _chips(g: Dict[str, Any]) -> str:
+def _chips(g: Dict[str, Any], seen_in: Optional[int] = None) -> str:
     chips = []
     if g["types"]:
         chips.append(html.escape(g["types"][0].replace("_", " ")))
@@ -1272,6 +1280,9 @@ def _chips(g: Dict[str, Any]) -> str:
     out = "".join(f'<span class="ff-chip">{c}</span>' for c in chips)
     if g["worsening"]:
         out += '<span class="ff-chip bad">▲ getting worse</span>'
+    if seen_in:
+        out += f'<span class="ff-chip" title="Anonymous: from agents like this one in other companies">' \
+               f'also seen in {seen_in} other companies</span>'
     return f'<div class="ff-chips">{out}</div>'
 
 
@@ -1338,13 +1349,14 @@ def _rule_in_place(agent_id: str, p: Any, option: Dict[str, Any]) -> Optional[Di
     return m if m and m["ok"] else None
 
 
-def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], total: int, opened: set) -> None:
+def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], total: int, opened: set,
+                  seen_in: Optional[int] = None) -> None:
     p = g["main"]
     m = _rule_in_place(agent_id, p, option)
     failed_make = st.session_state.get("_feed_made", {}).get(p.id)
     with st.container(border=True):
         head, stat = st.columns([5, 1.2])
-        head.markdown(f'<div class="ff-title">{html.escape(g["title"])}</div>{_chips(g)}', unsafe_allow_html=True)
+        head.markdown(f'<div class="ff-title">{html.escape(g["title"])}</div>{_chips(g, seen_in)}', unsafe_allow_html=True)
         pct = _pct(g["sessions"], total)
         stat.markdown(f'<div class="ff-stat"><div class="n">{g["sessions"]}</div>'
                       f'<div class="l">sessions{" · " + pct if pct else ""}</div></div>', unsafe_allow_html=True)
@@ -1388,6 +1400,8 @@ def _failure_feed_fragment(agent_id: str) -> None:
         db.close()
 
     st.markdown(_FEED_CSS, unsafe_allow_html=True)
+    if not agent_id.startswith(SAMPLE_PREFIX) and agent_id != "demo-agent":
+        _profile_prompt(agent_id)
     if st.session_state.pop("_feed_toast", False):
         st.toast("**That's the loop.** Found → rule → blocked.", icon="🎉")
     total, failed = counts.get("total", 0), counts.get("failed", 0)
@@ -1424,12 +1438,47 @@ def _failure_feed_fragment(agent_id: str) -> None:
     stage = _sample_progress(agent_id, problems, options) if agent_id.startswith(SAMPLE_PREFIX) and problems else 0
 
     opened: set = st.session_state.setdefault("_feed_open", set())
+    focus = st.session_state.pop("_focus_problem", None)  # opened from a Slack alert
+    if focus and any(g["main"].id == focus for g in problems):
+        opened.add(focus)
+    seen = {} if agent_id.startswith(SAMPLE_PREFIX) else {
+        k["failure_type"]: k["companies"] for k in _known_problems(st.session_state.get("api_key", ""), agent_id)}
     for g, option in zip(problems, options):
-        _problem_card(agent_id, g, option, total, opened)
+        _problem_card(agent_id, g, option, total, opened, seen.get(g["types"][0]) if g["types"] else None)
     if stage == 4:
         _sample_finish()
 
     _latest_failures(agent_id, recent, names)
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _agent_profile(key: str, agent_id: str) -> Dict[str, Any]:
+    status, body = _rules_api("GET", f"/agents/{agent_id}/profile")
+    return body if status == 200 and isinstance(body, dict) else {}
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def _known_problems(key: str, agent_id: str) -> List[Dict[str, Any]]:
+    """Mistakes common in agents like this one at other companies (anonymous; only from 5 companies)."""
+    status, body = _rules_api("GET", f"/agents/{agent_id}/known-problems")
+    return body.get("problems", []) if status == 200 and isinstance(body, dict) else []
+
+
+def _profile_prompt(agent_id: str) -> None:
+    """Asked once: lets Kalytera compare this agent with similar ones (anonymously)."""
+    key = st.session_state.get("api_key", "")
+    profile = _agent_profile(key, agent_id)
+    if not profile or (profile.get("industry") and profile.get("agent_type")):
+        return
+    with st.container(border=True):
+        st.markdown('<div class="ff-row"><b>What does this agent do?</b> Kalytera then warns you about mistakes '
+                    'that agents like it make at other companies.</div>', unsafe_allow_html=True)
+        chosen = _profile_fields(f"profile_{agent_id}")
+        if st.button("Save", key=f"profile_save_{agent_id}"):
+            _rules_api("PUT", f"/agents/{agent_id}/profile", chosen)
+            _agent_profile.clear()
+            _known_problems.clear()
+            st.rerun(scope="app")
 
 
 def _sample_progress(agent_id: str, problems: List[Dict[str, Any]], options: List[Dict[str, Any]]) -> int:
@@ -1446,10 +1495,10 @@ def _sample_finish() -> None:
     with st.container(border=True):
         st.markdown('<div class="ob-card-t">That\'s the whole loop — now point it at your agent</div>'
                     '<div class="ob-card-d">Kalytera found the problem on its own, wrote the rule from the '
-                    'sessions, and the next bad refund never ran. Your agents get the same with one line:'
-                    '</div>', unsafe_allow_html=True)
-        _connect_steps()
-        _wait_for_first_agent()
+                    'sessions, and the next bad refund never ran. Connect Langfuse or LangSmith to see your own '
+                    'agent\'s mistakes in minutes, no code.</div>', unsafe_allow_html=True)
+        st.button("Connect your agent", type="primary", key="finish_connect",
+                  on_click=st.session_state.__setitem__, args=("_page", "connect"))
 
 
 def _latest_failures(agent_id: str, recent: List[Tuple[Any, Any]], names: Dict[str, str]) -> None:
@@ -1603,6 +1652,23 @@ def _score_bar(label: str, value: float, color: str) -> str:
         f'<div style="background:{color};width:{width}%;height:5px;border-radius:4px;transition:width 0.3s"></div>'
         f'</div></div>'
     )
+
+
+_SHARING_HELP = ("Kalytera catches mistakes in your agents that it has already seen in other agents. To do that, "
+                 "it shares anonymous, aggregated patterns: types of mistakes and the shapes of rules that stopped "
+                 "them — never conversations, names or your limits — and shows a pattern only once at least 5 "
+                 "companies share it. Turning this off removes your contributions right away.")
+
+
+def _sharing_setting() -> None:
+    status, body = _rules_api("GET", "/account/sharing")
+    if status != 200:
+        return
+    on = st.toggle("Anonymous pattern sharing", value=bool(body.get("share_patterns", True)), key="share_toggle",
+                   help=_SHARING_HELP)
+    if on != body.get("share_patterns", True):
+        _rules_api("PUT", "/account/sharing", {"share_patterns": on})
+        st.success("Sharing is on." if on else "Sharing is off; your contributions were removed.")
 
 
 _RETENTION = {"Until I delete it": None, "30 days": 30, "90 days": 90, "180 days": 180, "365 days": 365}
@@ -1956,7 +2022,7 @@ _ONBOARD_CSS = """
 
 _LOOP = [("Find the problem", "An AI judge reads every session and groups the failures that keep happening."),
          ("Make it a rule", "One click turns a problem into a rule, drafted from your own sessions."),
-         ("Block it", "The bad tool call is stopped before it runs. Your agent can tell the user why.")]
+         ("Stop it", "A costly action, like a bad refund, is stopped before it runs. Your agent tells the user why.")]
 
 
 def _loop_html(stage: int = 0) -> str:
@@ -1981,7 +2047,7 @@ def _connect_steps() -> None:
     st.code(f'pip install kalytera\nexport KALYTERA_API_KEY="{key}"', language="bash")
     st.code("import kalytera\nkalytera.init()   # first thing, before your agents run", language="python")
     st.caption("That's all for the **OpenAI Agents SDK** and **LangChain / LangGraph**: each agent shows up "
-               "under its own name, every run is scored, and every tool call is checked against your rules. "
+               "under its own name, every run is judged, and every action is checked against your rules. "
                "Your key is already filled in.")
     with st.expander("Your own agent loop, no framework?"):
         st.code(_NO_FRAMEWORK_CODE, language="python")
@@ -1994,11 +2060,13 @@ def _wait_for_first_agent() -> None:
     key = st.session_state.get("api_key", "")
     agents = _fetch_agents(key) if key else []
     mine = [a for a in agents if a != "demo-agent" and not a.startswith(SAMPLE_PREFIX)]
-    if mine and mine[0] not in st.session_state.get("_known_agents", []):
+    known = st.session_state.setdefault("_known_agents", list(mine))  # agents that existed before don't count
+    new = [a for a in mine if a not in known]
+    if new:
+        known.extend(new)
         _agents_for_key.clear()
-        st.session_state["_switch_to"] = (mine[0], FEED_VIEW)
+        st.session_state["_switch_to"] = (new[0], FEED_VIEW)
         st.rerun(scope="app")
-    st.session_state["_known_agents"] = mine
     st.markdown('<div class="ob-wait"><span class="ob-dot"></span>Waiting for your agent\'s first session… '
                 'this page opens it as soon as it arrives.</div>', unsafe_allow_html=True)
 
@@ -2032,19 +2100,20 @@ def _live_rows(agent: str) -> str:
     return tally + "".join(lines)
 
 
-def _follow_job(agent: str, box: Any, total_hint: int, verb: str) -> Optional[Dict[str, Any]]:
+def _follow_job(agent: str, box: Any, total_hint: int, verb: str,
+                preparing: str = "Waiting for the server…") -> Optional[Dict[str, Any]]:
     """Poll a refresh job, showing progress and each conversation as the judge reads it."""
     import time
 
-    bar = st.progress(0.0, text="Waiting for the server…")
+    bar = st.progress(0.0, text=preparing)
     rows = st.empty()
     deadline = time.monotonic() + SAMPLE_TIMEOUT_S
     while time.monotonic() < deadline:
         _, s_ = _rules_api("GET", f"/agents/{agent}/refresh")
         state = s_.get("state") if isinstance(s_, dict) else "error"
         if state == "error":
-            box.update(label="Scoring failed", state="error")
-            st.error(s_.get("error") if isinstance(s_, dict) else "Scoring failed")
+            box.update(label="Couldn't finish", state="error")
+            st.error(s_.get("error") if isinstance(s_, dict) else "Something went wrong")
             return None
         if state != "preparing":
             to_score = s_.get("to_score") or 0
@@ -2097,38 +2166,172 @@ def _check_now(agent_id: str) -> None:
     st.rerun()
 
 
+from api.memory_api import AGENT_TYPES, INDUSTRIES  # noqa: E402
+from kalytera.importers import LANGFUSE_REGIONS, LANGSMITH_REGIONS  # noqa: E402
+
+_SOURCE = {"langfuse": "Langfuse", "langsmith": "LangSmith"}
+_KEEP_SAFE = ("Kalytera stores these keys encrypted, only ever reads conversations, and deletes the keys when you "
+              "remove the connection.")
+
+
+def _profile_fields(prefix: str) -> Dict[str, str]:
+    c1, c2 = st.columns(2)
+    industry = c1.selectbox("Industry", list(INDUSTRIES.values()), key=f"{prefix}_industry")
+    kind = c2.selectbox("What the agent does", list(AGENT_TYPES.values()), key=f"{prefix}_type")
+    return {"industry": next(k for k, v in INDUSTRIES.items() if v == industry),
+            "agent_type": next(k for k, v in AGENT_TYPES.items() if v == kind)}
+
+
+def _connect_form(kind: str) -> None:
+    with st.form(f"connect_{kind}"):
+        name = st.text_input("Agent name", placeholder="support-bot", help="How this agent shows up in Kalytera")
+        profile = _profile_fields(kind)
+        if kind == "langfuse":
+            region = st.selectbox("Region", [*LANGFUSE_REGIONS, "Self-hosted"])
+            custom = st.text_input("Self-hosted URL (only if self-hosted)", placeholder="https://langfuse.acme.com")
+            pk = st.text_input("Public key", placeholder="pk-lf-…")
+            sk = st.text_input("Secret key", type="password", placeholder="sk-lf-…")
+            body = {"settings": {"base_url": custom.strip() if region == "Self-hosted" else LANGFUSE_REGIONS[region]},
+                    "secrets": {"public_key": pk, "secret_key": sk}}
+            missing = not (pk and sk and (region != "Self-hosted" or custom))
+        else:
+            region = st.selectbox("Region", list(LANGSMITH_REGIONS))
+            project = st.text_input("Project", placeholder="support-bot-prod", help="The project name in LangSmith")
+            key = st.text_input("API key", type="password", placeholder="lsv2_…")
+            body = {"settings": {"api_url": LANGSMITH_REGIONS[region], "project": project}, "secrets": {"api_key": key}}
+            missing = not (key and project)
+        st.caption(_KEEP_SAFE)
+        go = st.form_submit_button("Connect and read my conversations", type="primary", use_container_width=True)
+    if go:
+        if missing or not name.strip():
+            st.error("Fill in the agent name and the keys first.")
+            return
+        _run_connect({"kind": kind, "agent_name": name.strip(), **body}, profile)
+
+
+def _run_connect(body: Dict[str, Any], profile: Dict[str, str]) -> None:
+    with st.status(f"Reading your conversations from {_SOURCE[body['kind']]}…", expanded=True) as box:
+        status, resp = _rules_api("POST", "/connections", body)
+        if status != 202:
+            box.update(label="Couldn't connect", state="error")
+            st.error(resp.get("detail") if isinstance(resp, dict) else str(resp))
+            return
+        agent = resp["agent_id"]
+        _rules_api("PUT", f"/agents/{agent}/profile", profile)
+        done = _follow_job(agent, box, 0, "conversation",
+                           preparing=f"Reading the last 30 days from {_SOURCE[body['kind']]}…")
+    if done is None:
+        return
+    _agents_for_key.clear()
+    st.session_state.setdefault("_known_agents", []).append(agent)  # don't treat it as a new arrival later
+    st.session_state["_switch_to"] = (agent, FEED_VIEW)
+    st.rerun()
+
+
+def _sync_now(conn_id: str, agent: str) -> None:
+    with st.status("Reading new conversations…", expanded=True) as box:
+        status, resp = _rules_api("POST", f"/connections/{conn_id}/sync")
+        if status != 202:
+            box.update(label="Couldn't sync", state="error")
+            st.error(resp.get("detail") if isinstance(resp, dict) else str(resp))
+            return
+        _follow_job(agent, box, 0, "conversation", preparing="Reading new conversations…")
+
+
+def _connections_list() -> None:
+    status, body = _rules_api("GET", "/connections")
+    conns = body.get("connections", []) if status == 200 and isinstance(body, dict) else []
+    if not conns:
+        return
+    st.markdown("**Your connections**")
+    for c in conns:
+        with st.container(border=True):
+            text, sync, remove = st.columns([5, 1.3, 1.1], vertical_alignment="center")
+            last = _ago(datetime.fromisoformat(c["last_synced_at"])) if c.get("last_synced_at") else "never"
+            state = ("Reading new conversations every 15 minutes" if c["status"] == "ok"
+                     else f"⚠ {html.escape(c.get('last_error') or 'error')}")
+            text.markdown(f'<div class="kr-meta"><b>{_SOURCE.get(c["kind"], c["kind"])}</b> → '
+                          f'<code>{html.escape(c["agent_id"])}</code> · last read {last}<br>{state}</div>',
+                          unsafe_allow_html=True)
+            if sync.button("Sync now", key=f"sync_{c['id']}", use_container_width=True):
+                _sync_now(c["id"], c["agent_id"])
+            with remove.popover("Remove", use_container_width=True):
+                st.caption("Stops reading new conversations and deletes the stored keys. "
+                           "Conversations already read stay until you delete the agent's data.")
+                if st.button("Remove connection", key=f"rm_{c['id']}", type="primary"):
+                    _rules_api("DELETE", f"/connections/{c['id']}")
+                    st.rerun()
+
+
+def _slack_settings() -> None:
+    st.markdown("**Alerts in Slack**")
+    status, body = _rules_api("GET", "/alerts")
+    if status != 200 or not isinstance(body, dict):
+        return
+    if body.get("slack"):
+        msg = ("On: you'll hear about new problems and ones getting worse." if body.get("status") != "error"
+               else f"⚠ Slack refused the last message: {body.get('last_error')}")
+        text, off = st.columns([5, 1.1], vertical_alignment="center")
+        text.markdown(f'<div class="kr-meta">{html.escape(msg)}</div>', unsafe_allow_html=True)
+        if off.button("Turn off", key="slack_off", use_container_width=True):
+            _rules_api("DELETE", "/alerts/slack")
+            st.rerun()
+        return
+    with st.form("slack_form"):
+        url = st.text_input("Slack incoming webhook URL", placeholder="https://hooks.slack.com/services/…",
+                            help="In Slack: create an app → Incoming Webhooks → Add to a channel → copy the URL. "
+                                 "Guide: api.slack.com/messaging/webhooks")
+        go = st.form_submit_button("Send a test message and turn on")
+    if go:
+        s_, b_ = _rules_api("PUT", "/alerts/slack", {"webhook_url": url})
+        if s_ == 200:
+            st.success("Done — check the channel for Kalytera's test message.")
+        else:
+            st.error(b_.get("detail") if isinstance(b_, dict) else str(b_))
+
+
 def _connect_page() -> None:
     st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
-    _page_header("Connect an agent", "One line for OpenAI Agents SDK and LangChain / LangGraph agents.")
-    _connect_steps()
-    _wait_for_first_agent()
+    _page_header("Connect", "")
+    st.markdown('<div class="ob-sub" style="margin-top:-14px">Point Kalytera at where your agent\'s production '
+                'conversations already are. It reads the last 30 days right away, then keeps watching. '
+                'No code.</div>', unsafe_allow_html=True)
+    lf, ls, code = st.tabs(["Langfuse", "LangSmith", "Add to your code (also stops mistakes)"])
+    with lf:
+        _connect_form("langfuse")
+    with ls:
+        _connect_form("langsmith")
+    with code:
+        _connect_steps()
+        _wait_for_first_agent()
+    st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
+    _connections_list()
+    _slack_settings()
 
 
 def _welcome_panel() -> None:
-    """A new account's first screen: what Kalytera does, and two ways to see it — no code, or your agent."""
+    """A new account's first screen: connect where conversations already are, or try the sample."""
     st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="ob-hero">Stop your agent repeating the same mistakes</div>'
-                '<div class="ob-sub">Kalytera reads every conversation your agent has, finds the failures that '
-                'keep happening, and turns each one into a rule that blocks the bad tool call before it runs.</div>',
-                unsafe_allow_html=True)
+    st.markdown('<div class="ob-hero">Kalytera catches every mistake your AI agents make in production</div>'
+                '<div class="ob-sub">Connect it once. It watches every conversation, tells you when something goes '
+                'wrong, and stops costly mistakes from happening again.</div>', unsafe_allow_html=True)
     st.markdown(_loop_html(0), unsafe_allow_html=True)
-    left, right = st.columns(2, gap="medium")
+    left, right = st.columns([1.25, 1], gap="medium")
     with left.container(border=True):
-        st.markdown('<div class="ob-card-t">See it on a sample agent</div>'
-                    '<div class="ob-card-d">A refund bot with a hidden bug: it tells customers big refunds went '
-                    'through when they didn\'t. Watch Kalytera find it and block it. '
-                    '<b>About a minute, no code.</b></div>', unsafe_allow_html=True)
-        st.button("▶ Run the sample agent", type="primary", use_container_width=True, key="run_sample",
-                  on_click=st.session_state.__setitem__, args=("_want_sample", True))
+        st.markdown('<div class="ob-card-t">See your agent\'s real mistakes</div>'
+                    '<div class="ob-card-d">Connect <b>Langfuse</b> or <b>LangSmith</b>. Kalytera reads your recent '
+                    'production conversations while you watch, then keeps watching. <b>No code, about two '
+                    'minutes.</b></div>', unsafe_allow_html=True)
+        st.button("Connect", type="primary", use_container_width=True, key="welcome_connect",
+                  on_click=st.session_state.__setitem__, args=("_page", "connect"))
+        st.caption("Not using either? The Connect page also has the one line to add to your agent's code.")
     with right.container(border=True):
-        st.markdown('<div class="ob-card-t">Connect your agent</div>'
-                    '<div class="ob-card-d">One line in your code for OpenAI Agents SDK and LangChain / LangGraph.</div>',
-                    unsafe_allow_html=True)
-        with st.expander("Show the code (your key is filled in)", expanded=False):
-            _connect_steps()
-        _wait_for_first_agent()
-
-
+        st.markdown('<div class="ob-card-t">Try a sample agent</div>'
+                    '<div class="ob-card-d">A refund bot with a hidden bug. Watch Kalytera find it and stop it. '
+                    'About a minute.</div>', unsafe_allow_html=True)
+        st.button("▶ Run the sample agent", use_container_width=True, key="run_sample",
+                  on_click=st.session_state.__setitem__, args=("_want_sample", True))
+    _wait_for_first_agent()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -2140,10 +2343,10 @@ if _open_sid:
     _show_trace(agent_id, str(_open_sid))
 elif st.session_state.pop("_want_sample", False):
     _run_sample_agent()
+elif st.session_state.get("_page") == "connect":
+    _connect_page()
 elif _new_account:
     _welcome_panel()  # nothing of its own to show yet
-elif st.session_state.pop("_want_connect", False):
-    _connect_page()
 elif st.session_state.pop("_want_check", False):
     _check_now(agent_id)
 elif "Overview" in view:

@@ -341,12 +341,11 @@ at.session_state["authenticated"] = True
 at.session_state["api_key"] = NEW_KEY
 run(at)
 t = texts(at)
-check("Stop your agent repeating the same mistakes" in t, "new account lands on the onboarding page")
+check("Kalytera catches every mistake your AI agents make in production" in t, "new account lands on the welcome page")
 check(not at.radio and not at.selectbox, "nothing to pick or navigate yet: no agent picker, no nav")
-check(any(b.label == "▶ Run the sample agent" for b in at.button), "one primary action: run the sample agent")
-check(any(NEW_KEY in c.value for c in at.code), "the connect code has the account's key filled in")
-check(any(c.value.startswith("import kalytera\nkalytera.init()") for c in at.code), "connecting is one line: kalytera.init()")
-check("Waiting for your agent" in t, "and waits for the agent's first session")
+check(button(at, "Connect").proto.type == "primary", "the main action is Connect (Langfuse / LangSmith, no code)")
+check(any(b.label == "▶ Run the sample agent" for b in at.button), "the sample agent is the other option")
+check("Waiting for your agent" in t, "and it waits for an agent that uses kalytera.init()")
 run(button(at, "▶ Run the sample agent").click())  # scores and switches to the sample agent
 run(at)
 t = texts(at)
@@ -357,20 +356,119 @@ check('<span class="ff-chip">hallucination</span>' in t and "Suggested rule</spa
       "problem found and a rule is suggested")
 run(button(at, "⚡ Make it a rule").click())
 t = texts(at)
-check('ob-step now"><span class="n">3</span><span class="t">Block it' in t, "stepper moves to: block it")
+check('ob-step now"><span class="n">3</span><span class="t">Stop it' in t, "stepper moves to: stop it")
 check("Would have caught 10 of 10 failed sessions" in t, "watching shows the evidence for the rule")
 run(button(at, "Start blocking").click())
 t = texts(at)
-check("Blocked: refund_api(amount=900)" in t and "The tool never ran." in t, "after Start blocking: a live check shows it blocked")
+check("Blocked: refund_api(amount=900)" in t and "The action never ran." in t, "after Start blocking: a live check shows it blocked")
 check("Live check" in t and "amount=900" in t, "the check uses a clearly-too-large refund (900)")
 check(any("That's the loop" in str(x.value) for x in at.toast), "a toast celebrates the loop")
-check("now point it at your agent" in t and any(NEW_KEY in c.value for c in at.code),
-      "finish card: connect your own agent, key filled in")
+check("now point it at your agent" in t and any(b.label == "Connect your agent" for b in at.button),
+      "finish card: connect your own agent")
 check("ob-step now" not in t and t.count('ob-step done') >= 3, "stepper: all three steps done")
 
-print("12. Sidebar: connect page; empty agent says what's happening")
+print("12. Connect page: Langfuse with no code → its mistakes, live")
+import api.connections_api as _conn_api  # noqa: E402
+from cryptography.fernet import Fernet  # noqa: E402
+
+os.environ["KALYTERA_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
+_pulls: list = []
+
+
+def _fake_fetch(kind, settings, secrets, since):  # Langfuse's API, as converted by kalytera.importers
+    _pulls.append((kind, settings, since))
+    if secrets.get("secret_key") == "wrong":
+        raise ValueError("Langfuse rejected these keys. Use the project's public key (pk-lf-…) and secret key.")
+    return [{"id": f"tr{i}", "started_at": None, "turns": [{
+        "user": f"Refund ${'950' if i < 6 else '30'} for order {i}", "assistant": "Your refund was issued.",
+        "actions": [{"name": "refund_api", "input": {"amount": 950 if i < 6 else 30}, "success": i >= 6,
+                     "error": None if i >= 6 else "over limit"}]}]} for i in range(9)]
+
+
+_conn_api._fetch = _fake_fetch
+_slack_posts: list = []
+_conn_api.requests.post = lambda url, json, timeout: (_slack_posts.append(json) or
+                                                     type("R", (), {"status_code": 200, "text": "ok"})())
 run(button(at, "＋ Connect an agent").click())
-check("Connect an agent" in texts(at) and any(NEW_KEY in c.value for c in at.code), "connect page with the key")
+t = texts(at)
+check("Point Kalytera at where your agent" in t, "connect page opens")
+check(any(NEW_KEY in c.value for c in at.code), "its 'add to your code' tab has the key filled in")
+
+
+def _fill_langfuse(secret: str) -> None:
+    form_inputs = [x for x in at.text_input if x.label in ("Agent name", "Public key", "Secret key")][:3]
+    form_inputs[0].input("Billing bot")
+    form_inputs[1].input("pk-lf-1")
+    form_inputs[2].input(secret)
+
+
+_fill_langfuse("wrong")
+run(next(b for b in at.button if b.label == "Connect and read my conversations").click())
+check("rejected these keys" in texts(at), "wrong keys: says why")
+check(client.get("/connections", headers={"Authorization": f"Bearer {NEW_KEY}"}).json()["connections"] == [],
+      "and saves nothing")
+_fill_langfuse("sk-lf-2")
+run(next(b for b in at.button if b.label == "Connect and read my conversations").click())  # reruns into the feed
+
+
+def reopen(old: AppTest) -> AppTest:
+    """A fresh page load with the same session (AppTest keeps the previous page's elements after st.rerun)."""
+    new = AppTest.from_file("kalytera/dashboard.py", default_timeout=120)
+    for k in ("authenticated", "api_key", "agent_id", "view"):
+        if k in old.session_state:
+            new.session_state[k] = old.session_state[k]
+    return run(new)
+
+
+at = reopen(at)
+t = texts(at)
+agent_picker = next(x for x in at.selectbox if x.key == "agent_id")
+check(at.radio[0].value == "🔴  Failure Feed" and "billing-bot" in str(agent_picker.value)
+      and "Point Kalytera at where your agent" not in t, "after reading: lands on the new agent's Failure Feed")
+check("6 of 9 sessions failed" in t, "its real mistakes are there: 6 of 9 conversations failed")
+conns = client.get("/connections", headers={"Authorization": f"Bearer {NEW_KEY}"}).json()["connections"]
+check(len(conns) == 1 and conns[0]["kind"] == "langfuse" and conns[0]["status"] == "ok", "the connection is saved")
+NEW_AGENT = conns[0]["agent_id"]
+prof = client.get(f"/agents/{NEW_AGENT}/profile", headers={"Authorization": f"Bearer {NEW_KEY}"}).json()
+check((prof["industry"], prof["agent_type"], prof["system"]) == ("retail", "support", "langfuse"),
+      "the profile was saved (industry and type from the form, system from the connection)")
+
+print("12b. Rules from your other agents")
+at.session_state["view"] = "🛡  Rules"
+run(at)
+check("From your other agents" in texts(at) and "here it would have caught 6 of 6 failed sessions" in texts(at),
+      "the sample agent's refund rule is offered, checked on this agent's conversations")
+
+print("12c. Slack: set up, a new problem arrives, the link opens it")
+at.session_state["_page"] = "connect"
+run(at)
+next(x for x in at.text_input if x.label == "Slack incoming webhook URL").input("https://hooks.slack.com/services/T/B/x")
+run(next(b for b in at.button if b.label == "Send a test message and turn on").click())
+check(_slack_posts and _slack_posts[0]["text"].startswith("Kalytera is connected"), "test message sent")
+check("check the channel" in texts(at), "and the page says so")
+db = SessionLocal()
+from db.models import LossPattern as _LP  # noqa: E402
+pattern = db.query(_LP).filter(_LP.agent_id == NEW_AGENT).first()
+db.close()
+at2 = AppTest.from_file("kalytera/dashboard.py", default_timeout=120)
+at2.session_state["authenticated"], at2.session_state["api_key"] = True, NEW_KEY
+at2.query_params["agent"], at2.query_params["problem"] = NEW_AGENT, pattern.id
+run(at2)
+check(at2.radio[0].value == "🔴  Failure Feed"
+      and NEW_AGENT in str(next(x for x in at2.selectbox if x.key == "agent_id").value),
+      "a Slack link opens that agent's Failure Feed")
+check(any(b.label == "▾ Hide sessions" for b in at2.button), "with that problem's conversations already open")
+
+print("12d. Sharing is on by default and can be turned off")
+at2.session_state["view"] = "📊  Overview"
+run(at2)
+toggle = next(x for x in at2.toggle if x.key == "share_toggle")
+check(toggle.value is True and "never conversations" in toggle.help, "on, with the explanation on hover")
+run(toggle.set_value(False))
+check(client.get("/account/sharing", headers={"Authorization": f"Bearer {NEW_KEY}"}).json()["share_patterns"] is False,
+      "turning it off is saved")
+
+print("12e. An agent added with kalytera.init(): asks what it does; empty agent says what's happening")
 resp = client.post("/trace", headers={"Authorization": f"Bearer {NEW_KEY}"}, json={
     "id": str(uuid.uuid4()), "agent_id": "fresh-bot", "session_id": "fresh-1", "step_number": 1,
     "step_name": "agent", "input": "hi", "output": "hello", "tool_calls": [], "session_ended": True,
@@ -379,6 +477,7 @@ assert resp.status_code == 201, resp.text
 at.session_state["_switch_to"] = ("fresh-bot", "🔴  Failure Feed")
 run(at)
 check("No sessions scored yet" in texts(at), "a just-connected agent: 'no sessions scored yet', not 'all good'")
+check("What does this agent do?" in texts(at), "it asks what the agent does (to compare with similar agents)")
 run(button(at, "↻ Score my sessions now").click())
 run(at)
 check("Its one session passed" in texts(at), "Score now → its one session is scored")

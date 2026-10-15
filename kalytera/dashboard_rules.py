@@ -87,6 +87,7 @@ def create_rule(agent_id: str, rule: Dict[str, Any]) -> Tuple[bool, str, Optiona
     _fetch_suggestions.clear()
     _rule_stats.clear()
     _fetch_impact.clear()
+    _rules_from_account.clear()
     if status == 201:
         return True, (f"Added rule “{body['id']}”. It's watching: it counts matching calls and blocks nothing "
                       f"until you turn on blocking."), body["id"]
@@ -115,7 +116,7 @@ def try_rule(agent_id: str, rule: Dict[str, Any]) -> Tuple[str, str]:
     if body.get("rule_id") == rid:
         verb = "Flagged for review" if body["decision"] == "ESCALATE" else "Blocked"
         reason = (body.get("reason") or "").rstrip(". ")
-        return "blocked", f"{verb}: {call} — “{reason}”. The tool never ran."
+        return "blocked", f"{verb}: {call} — “{reason}”. The action never ran."
     if any(h["rule_id"] == rid for h in body.get("shadow_hits", [])):
         return "watching", f"Allowed: {call} — but the rule would have blocked it. It's only watching."
     return "allowed", f"Allowed: {call} — the rule doesn't match it."
@@ -126,6 +127,7 @@ def promote_rule(agent_id: str, rid: str) -> Tuple[bool, str]:
     _fetch_suggestions.clear()
     _rule_stats.clear()
     _fetch_impact.clear()
+    _rules_from_account.clear()
     if status in (200, 409):
         return True, "Blocking is on. Running agents pick it up within 30 seconds."
     return False, _detail(body)
@@ -264,6 +266,23 @@ def show_rules(agent_id: str) -> None:
         for i, sug in enumerate(suggestions):
             _suggestion_card(agent_id, sug, i)
 
+    from_account = [r for r in _rules_from_account(st.session_state.get("api_key", ""), agent_id)
+                    if r["coverage"]["failing_matched"] and not any(_same_rule(r["rule"], x) for x in rules)]
+    if from_account:
+        _section("From your other agents", "Rules you already use elsewhere, checked on this agent's conversations.")
+        for i, r in enumerate(from_account):
+            cov = r["coverage"]
+            with st.container(border=True):
+                text, add = st.columns([4, 1.4], vertical_alignment="center")
+                text.markdown(
+                    f'<div class="kr-sentence">{sentence(r["rule"])}</div>'
+                    f'<div class="kr-meta">From <code>{_e(r["from_agent"])}</code> · here it would have caught '
+                    f'{cov["failing_matched"]} of {cov["failing_total"]} failed sessions and touched '
+                    f'{cov["passing_matched"]} of {cov["passing_total"]} good ones</div>', unsafe_allow_html=True)
+                if add.button("Add rule", key=f"add_acct_{i}", type="primary", use_container_width=True,
+                              help="Adds it in watch mode: it counts matches but never blocks"):
+                    _create(agent_id, {k: v for k, v in r["rule"].items() if k not in ("version", "mode")})
+
     if rules:
         _section("Your rules")
         outcomes = {r["rule_id"]: r for r in impact_report(agent_id).get("rules", [])}
@@ -288,6 +307,12 @@ def _fetch_suggestions(api_key: str, agent_id: str) -> Dict[str, Any]:
     except Exception:
         body = {}
     return {"suggestions": body.get("suggestions", []), "by_pattern": body.get("by_pattern", {})}
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _rules_from_account(api_key: str, agent_id: str) -> List[Dict[str, Any]]:
+    status, body = _api("GET", f"/agents/{agent_id}/rules/from-account")
+    return body.get("rules", []) if status == 200 and isinstance(body, dict) else []
 
 
 def impact_report(agent_id: str) -> Dict[str, Any]:
@@ -619,6 +644,7 @@ def _act(method: str, path: str, agent_id: str, ok: str) -> None:
     _fetch_suggestions.clear()
     _rule_stats.clear()
     _fetch_impact.clear()
+    _rules_from_account.clear()
     st.session_state["rule_flash"] = ("success", ok) if status == 200 else ("error", _detail(body))
     st.rerun()
 
