@@ -374,3 +374,19 @@ def test_suggestions_for_another_orgs_agent_404(env: SimpleNamespace) -> None:
     _seed_pattern(env)
     env.org = SimpleNamespace(id="org-2")
     assert env.client.get("/rules/suggestions", params={"agent_id": AGENT}).status_code == 404
+
+
+def test_rule_history_lists_every_change(env: SimpleNamespace) -> None:  # noqa: F811
+    from kalytera.dashboard_rules import describe_versions
+
+    _create(env)
+    env.client.post("/rules/refund_cap/promote", params={"agent_id": AGENT})
+    env.client.put("/rules/refund_cap", json={**REFUND_CAP, "match": {"tool": "refund_api", "args": [
+        {"field": "amount", "op": ">", "value": 800}]}})
+    env.client.post("/rules/refund_cap/demote", params={"agent_id": AGENT})
+    versions = env.client.get("/rules/refund_cap", params={"agent_id": AGENT}).json()["versions"]
+    assert [v["rule"]["match"]["args"][0]["value"] for v in versions] == [800, 800, 500, 500]
+    what = [w for _, w in describe_versions(versions)]
+    assert what[0] == "Created — watching" and what[1] == "Started blocking"
+    assert what[2].startswith("Edited: ") and "800" in what[2]
+    assert what[3] == "Stopped blocking (watching again)"

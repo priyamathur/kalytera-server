@@ -263,6 +263,10 @@ check("Agent Overview" in texts(at), "Overview still renders with blocking dates
 delete = next(b for b in at.button if b.label == "Delete all data")
 check(delete.disabled, "deleting needs the agent's name typed first")
 
+at = dashboard("🛡  Rules")
+run(next(b for b in at.button if b.label == "History").click())
+check("Started blocking" in texts(at) and "Created — watching" in texts(at), "rule history shows each change")
+
 print("10c. A person's verdict replaces the judge's")
 at = dashboard("🔴  Failure Feed")
 check("15 of 38 sessions failed" in texts(at), "before: 15 of 38 sessions failed")

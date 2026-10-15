@@ -464,6 +464,8 @@ def _rule_card(agent_id: str, rule: Dict[str, Any], outcome: Optional[Dict[str, 
         with a3.popover("⋯", use_container_width=True, **menu_kwargs):
             if st.button("Edit", key=f"edit_{rid}", use_container_width=True):
                 _json_dialog(agent_id, rule, mode="edit")
+            if st.button("History", key=f"history_{rid}", use_container_width=True):
+                _history_dialog(agent_id, rid)
             if st.button("Delete", key=f"delete_{rid}", use_container_width=True):
                 _delete_dialog(agent_id, rid)
         if outcome and outcome.get("blocked_sessions"):
@@ -471,6 +473,34 @@ def _rule_card(agent_id: str, rule: Dict[str, Any], outcome: Optional[Dict[str, 
 
 
 # ── Dialogs ──────────────────────────────────────────────────────────────────
+
+def describe_versions(versions: List[Dict[str, Any]]) -> List[Tuple[str, str]]:
+    """(when, what changed) for each version of a rule, oldest first."""
+    out: List[Tuple[str, str]] = []
+    prev: Optional[Dict[str, Any]] = None
+    for v in sorted(versions, key=lambda v: v["version"]):
+        when = str(v["created_at"])[:16].replace("T", " ")
+        if prev is None:
+            what = "Created — watching" if v["mode"] == "shadow" else "Created — blocking"
+        elif v["mode"] != prev["mode"]:
+            what = "Started blocking" if v["mode"] == "enforce" else "Stopped blocking (watching again)"
+        else:
+            what = f"Edited: {sentence(v['rule'])}"
+        out.append((when, what))
+        prev = v
+    return out
+
+
+@st.dialog("Rule history")
+def _history_dialog(agent_id: str, rid: str) -> None:
+    status, body = _api("GET", f"/rules/{rid}", params={"agent_id": agent_id})
+    if status != 200:
+        st.error(f"Couldn't load the history: {_detail(body)}")
+        return
+    for when, what in reversed(describe_versions(body.get("versions", []))):
+        st.markdown(f'<div class="kr-meta"><b>{_e(when)}</b> · {what}</div>', unsafe_allow_html=True)
+    st.caption("Times are UTC. Kalytera doesn't yet record which person made each change.")
+
 
 @st.dialog("New rule")
 def _new_rule_dialog(agent_id: str) -> None:

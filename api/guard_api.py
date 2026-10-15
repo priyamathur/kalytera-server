@@ -313,7 +313,8 @@ def build_router(resolve_org: Callable[..., Any],
             raise HTTPException(status_code=404, detail=f"rule {rule_id} not found for agent {agent_id}")
         return {
             "rule": _body(versions[0]),
-            "versions": [{"version": v.version, "mode": v.mode, "created_at": v.created_at} for v in versions],
+            "versions": [{"version": v.version, "mode": v.mode, "created_at": v.created_at, "rule": _body(v)}
+                         for v in versions],
         }
 
     @router.put("/rules/{rule_id}")
