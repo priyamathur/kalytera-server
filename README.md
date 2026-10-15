@@ -89,6 +89,14 @@ Kalytera check
 
 If something is wrong you get a specific reason — a rejected key, the monthly limit, or an unreachable server — instead of an empty dashboard. The same check is available in Python as `kalytera.check()`.
 
+## Connect once — no code
+
+Already sending your agent's conversations to **Langfuse** or **LangSmith**? Open **[app.kalytera.dev](https://app.kalytera.dev)** → **Connect**, paste that project's keys, and Kalytera reads the last 30 days of production conversations while you watch, then keeps reading new ones every 15 minutes. Minutes later the Failure Feed shows what your agent keeps getting wrong.
+
+Add a Slack incoming webhook on the same page and Kalytera tells you when a new problem appears or one gets worse, with a link straight to it.
+
+Keys are stored encrypted and only used to read conversations. To **stop** mistakes as well as catch them, add one line to the agent (below).
+
 ## Add Kalytera to an agent in production
 
 ```bash

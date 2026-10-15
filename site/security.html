@@ -35,12 +35,19 @@ ul{padding-left:20px}
 <tr><td>Each step your agent sends: input, output, actions taken (name, arguments, success, error, latency), metadata</td><td>Yes, until you delete it or your retention period ends</td></tr>
 <tr><td>The judge's scores and failure reason for each session</td><td>Yes, until you delete it or your retention period ends</td></tr>
 <tr><td>Rule checks (<code>guard()</code> decisions)</td><td>Tool name, decision, rule — <b>a hash of the arguments, not the arguments</b></td></tr>
+<tr><td>Langfuse / LangSmith keys and Slack webhook URLs (if you connect them)</td><td><b>Encrypted</b> (Fernet: AES with an HMAC). Used only to read conversations or send alerts; deleted when you remove the connection</td></tr>
 <tr><td>Your account</td><td>Email, organisation name. API keys are stored only as SHA-256 hashes.</td></tr>
 </table>
 
 <h2>Mask personal data before it leaves your servers</h2>
 <p><code>kalytera.init(redact=True)</code> (or <code>KALYTERA_REDACT=1</code>) replaces email addresses, phone numbers and card numbers with <code>[email]</code>, <code>[phone]</code>, <code>[card]</code> in everything the SDK sends. Rules are still checked on the real values inside your process, so blocking works the same.</p>
 <div class="note">This is pattern matching, not a guarantee: names, street addresses and unusual formats are not caught.</div>
+
+<h2>Connections</h2>
+<p>If you connect Langfuse or LangSmith, Kalytera reads your conversations from it — the last 30 days, then new ones every 15 minutes — and never writes anything back. Removing the connection stops the reading and deletes the stored keys; conversations already read stay until you delete the agent's data.</p>
+
+<h2>Anonymous pattern sharing</h2>
+<p>On by default; turn it off in the dashboard (Overview → Data &amp; retention). With it on, Kalytera can tell you about mistakes that agents like yours make at other companies. What's shared is anonymous and aggregated: a mistake type from Kalytera's fixed list, a category of action (refund, payment, booking…), the shape of a rule (e.g. "refund blocked above an amount"), and your agent's industry, type and system. <b>Never</b> conversation text, reasons, names, IDs, your tool or agent names, your own custom dimensions, or your limits. A pattern is shown only once at least 5 companies share it. Turning sharing off removes your contributions right away.</p>
 
 <h2>Who processes it</h2>
 <ul>
