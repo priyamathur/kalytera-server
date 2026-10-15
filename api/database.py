@@ -57,11 +57,11 @@ def _apply_schema_additions() -> None:
         cur.execute("""
             SELECT table_name, column_name, data_type
             FROM information_schema.columns
-            WHERE table_name IN ('eval_results', 'agent_quality_configs', 'organizations')
+            WHERE table_name IN ('eval_results', 'agent_quality_configs', 'organizations', 'agent_orgs')
               AND column_name IN (
                 'failure_step', 'helpfulness', 'factuality', 'custom_scores',
                 'weight_helpfulness', 'weight_factuality', 'custom_metrics', 'judge_passed',
-                'retention_days'
+                'retention_days', 'share_patterns', 'industry', 'agent_type', 'system'
               )
         """)
         cols: dict = {(r[0], r[1]): r[2] for r in cur.fetchall()}
@@ -87,6 +87,11 @@ def _apply_schema_additions() -> None:
             _ddl("ALTER TABLE eval_results ADD COLUMN factuality FLOAT")
         if ("eval_results", "custom_scores") not in cols:
             _ddl("ALTER TABLE eval_results ADD COLUMN custom_scores TEXT")
+        if ("organizations", "share_patterns") not in cols:
+            _ddl("ALTER TABLE organizations ADD COLUMN share_patterns BOOLEAN NOT NULL DEFAULT TRUE")
+        for col in ("industry", "agent_type", "system"):
+            if ("agent_orgs", col) not in cols:
+                _ddl(f"ALTER TABLE agent_orgs ADD COLUMN {col} TEXT")
         if ("organizations", "retention_days") not in cols:
             _ddl("ALTER TABLE organizations ADD COLUMN retention_days INTEGER")
         if ("eval_results", "judge_passed") not in cols:
@@ -123,7 +128,7 @@ def initialize_database():
         from db.models import (  # noqa: F401 — import all models so Base.metadata is fully populated
             Base, AgentLog, EvalResult, LossPattern, AgentQualityConfig,
             Organization, User, ApiKey, UsageRecord, AgentOrg,
-            GuardRule, GuardEvent, BlockFeedback, Connection, ProblemAlert,
+            GuardRule, GuardEvent, BlockFeedback, Connection, ProblemAlert, GlobalFact,
         )
         print("🔧 Creating database tables...")
         Base.metadata.create_all(bind=engine)

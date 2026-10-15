@@ -242,6 +242,9 @@ def build_router(resolve_org: Callable[..., Any]) -> APIRouter:
             conn = Connection(org_id=org_id, kind=body.kind, agent_id=agent_id, settings=json.dumps(settings),
                               secret=vault.encrypt(secrets), last_synced_at=datetime.now(timezone.utc))
             d.add(conn)
+            profile = d.query(AgentOrg).filter(AgentOrg.agent_id == agent_id).first()
+            if profile is not None and not profile.system:
+                profile.system = body.kind  # where its conversations come from
             d.commit()
             write_new(convs, agent_id, body.kind, org_id, d)
 

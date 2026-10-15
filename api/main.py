@@ -41,6 +41,7 @@ from api.proxy_router import router as proxy_router
 from api.guard_api import build_router as build_guard_router
 from api.connections_api import build_router as build_connections_router
 from api.impact_api import build_router as build_impact_router
+from api.memory_api import build_router as build_memory_router
 from api.refresh_api import build_router as build_refresh_router, score_session_once
 
 logger = logging.getLogger(__name__)
@@ -227,6 +228,7 @@ def _eval_steps(agent_ids: List[str], db: Any) -> None:
 def _analysis_batch() -> None:
     """Sync: run pattern detection across all agents."""
     from api.connections_api import send_alerts
+    from api.memory_api import refresh_shared_facts
     from db.queries import purge_expired_data
     from kalytera.analyzer import run_all
 
@@ -235,6 +237,7 @@ def _analysis_batch() -> None:
         purge_expired_data(db)  # accounts that chose a retention period; hourly is often enough
         run_all(db)
         send_alerts(db)
+        refresh_shared_facts(db)
     except Exception as exc:
         logger.error("[analysis_batch] error: %s", exc)
     finally:
@@ -356,6 +359,7 @@ app.include_router(build_guard_router(_resolve_org, get_agent_ids_for_org))
 app.include_router(build_refresh_router(_resolve_org, get_agent_ids_for_org))
 app.include_router(build_impact_router(_resolve_org, get_agent_ids_for_org))
 app.include_router(build_connections_router(_resolve_org))
+app.include_router(build_memory_router(_resolve_org, get_agent_ids_for_org))
 
 
 # ---------------------------------------------------------------------------

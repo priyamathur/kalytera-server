@@ -131,6 +131,7 @@ class Organization(Base):
     created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     retention_days = Column(Integer, nullable=True)  # delete production data older than this; null = keep
+    share_patterns = Column(Boolean, nullable=False, default=True)  # anonymous pattern sharing (on by default)
 
 
 class User(Base):
@@ -190,6 +191,10 @@ class AgentOrg(Base):
     org_id = Column(String, ForeignKey("organizations.id"), nullable=False, index=True)
     first_seen = Column(SADateTime(timezone=True), default=_now, nullable=False)
     last_seen = Column(SADateTime(timezone=True), default=_now, nullable=False)
+    # Agent profile: what the agent does, so Kalytera can compare it with similar agents (anonymously).
+    industry = Column(String, nullable=True)
+    agent_type = Column(String, nullable=True)
+    system = Column(String, nullable=True)
 
 
 class GuardRule(Base):
@@ -288,3 +293,23 @@ class ProblemAlert(Base):
     pattern_id = Column(String, nullable=False, index=True)
     reason = Column(String, nullable=False)              # new | worse
     sent_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+
+
+class GlobalFact(Base):
+    """
+    One account's anonymous contribution to shared memory (api/memory_api.py): no ids,
+    text or names — a mistake type, an action category and a rule shape, in a segment.
+    org_hash is one-way and only used to count distinct accounts and to delete on opt-out.
+    """
+    __tablename__ = "global_facts"
+
+    id = Column(String, primary_key=True)
+    org_hash = Column(String, nullable=False, index=True)
+    industry = Column(String, nullable=False)
+    agent_type = Column(String, nullable=False)
+    system = Column(String, nullable=False)
+    kind = Column(String, nullable=False)                     # problem | rule
+    failure_type = Column(String, nullable=False, default="")
+    action_category = Column(String, nullable=False, default="")
+    rule_shape = Column(String, nullable=False, default="")
+    last_seen = Column(SADateTime(timezone=True), nullable=False)
