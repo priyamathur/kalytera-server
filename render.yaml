@@ -1,9 +1,3 @@
-databases:
-  - name: kalytera-postgres
-    plan: free
-    databaseName: kalytera
-    user: kalytera
-
 services:
   # Main FastAPI Application
   - type: web
@@ -20,10 +14,8 @@ services:
         sync: false
       - key: KALYTERA_API_KEY
         sync: false
-      - key: DATABASE_URL
-        fromDatabase:
-          name: kalytera-postgres
-          property: connectionString
+      - key: DATABASE_URL        # Neon Postgres connection string, set in the Render dashboard
+        sync: false
       - key: PYTHONPATH
         value: .
       - key: PYTHONUNBUFFERED
@@ -40,10 +32,8 @@ services:
     buildCommand: pip install -r requirements.txt && alembic upgrade head
     startCommand: streamlit run kalytera/dashboard.py --server.port $PORT --server.address 0.0.0.0
     envVars:
-      - key: DATABASE_URL
-        fromDatabase:
-          name: kalytera-postgres
-          property: internalConnectionString
+      - key: DATABASE_URL        # same Neon connection string as kalytera-api
+        sync: false
       - key: KALYTERA_API_ENDPOINT
         value: https://api.kalytera.dev
       - key: PYTHONPATH
