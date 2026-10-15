@@ -39,6 +39,7 @@ from db.queries import (
 from api.billing import router as billing_router, TIERS, hash_key
 from api.proxy_router import router as proxy_router
 from api.guard_api import build_router as build_guard_router
+from api.impact_api import build_router as build_impact_router
 from api.refresh_api import build_router as build_refresh_router, score_session_once
 
 logger = logging.getLogger(__name__)
@@ -318,6 +319,7 @@ app.include_router(billing_router)
 app.include_router(proxy_router)
 app.include_router(build_guard_router(_resolve_org, get_agent_ids_for_org))
 app.include_router(build_refresh_router(_resolve_org, get_agent_ids_for_org))
+app.include_router(build_impact_router(_resolve_org, get_agent_ids_for_org))
 
 
 # ---------------------------------------------------------------------------

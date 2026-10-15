@@ -336,7 +336,7 @@ import requests as _requests
 
 from kalytera.dashboard_rules import (  # noqa: E402
     API as _API, _api as _rules_api, create_rule, fetch_suggestion_data, promote_rule, sentence, show_rules,
-    try_rule,
+    try_rule, with_source, impact_report,
 )
 
 
@@ -687,6 +687,15 @@ def _show_overview(agent_id: str) -> None:
 
     # ── Quality trend + session volume ───────────────────────────────────────
     _section_head("Quality Trend", f"last {TREND_DAYS} days — avg score · pass rate")
+    outcomes = impact_report(agent_id)
+    ba = outcomes.get("before_after_blocking")
+    if ba and ba["comparable"]:
+        st.markdown(
+            f'<div style="font-size:14px;color:#0f172a;margin:-4px 0 10px">Since blocking started '
+            f'({ba["since"][:10]}): failed sessions <b>{_pct(ba["before_failed"], ba["before_sessions"])}</b> → '
+            f'<b>{_pct(ba["after_failed"], ba["after_sessions"])}</b> '
+            f'<span style="color:#94a3b8">({ba["before_sessions"]} sessions before, {ba["after_sessions"]} since; '
+            f'other changes to the agent also count)</span></div>', unsafe_allow_html=True)
     ch1, ch2 = st.columns([3, 2])
 
     with ch1:
@@ -710,6 +719,11 @@ def _show_overview(agent_id: str) -> None:
                 marker=dict(size=4),
                 hovertemplate="%{y:.0f}%<extra>Pass Rate</extra>",
             ))
+            for r in outcomes.get("rules", []):
+                if r.get("blocking_since") and r["blocking_since"][:10] >= str(df_t["date"].min())[:10]:
+                    fig.add_vline(x=r["blocking_since"][:10], line_dash="dot", line_color="#4f46e5", line_width=1)
+                    fig.add_annotation(x=r["blocking_since"][:10], y=104, text=f"blocking {html.escape(r['rule_id'])}",
+                                       showarrow=False, xanchor="left", font=dict(size=10, color="#4f46e5"))
             fig.add_hline(y=70, line_dash="dash", line_color="#ef4444", line_width=1,
                           annotation_text="70 — pass threshold",
                           annotation_position="bottom right",
@@ -1281,7 +1295,10 @@ def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], tota
         a1, _, a4 = st.columns([1.5, 3.1, 1.4])
         if m is None and option.get("status") == "suggested":
             a1.button("⚡ Make it a rule", key=f"make_{p.id}", type="primary", use_container_width=True,
-                      on_click=_make_rule, args=(agent_id, p.id, option["rule"], option.get("coverage") or {}),
+                      on_click=_make_rule,
+                      args=(agent_id, p.id, with_source(option["rule"], {"pattern_type": p.pattern_type,
+                                                                          "pattern_value": p.pattern_value}),
+                            option.get("coverage") or {}),
                       help="Adds it in watch mode first, so you can check it before it blocks anything")
         elif m is not None and not m["blocking"]:
             a1.button("Start blocking", key=f"block_{p.id}", type="primary", use_container_width=True,
@@ -2053,3 +2070,4 @@ elif "Failure" in view:
     _show_failure_feed(agent_id)
 elif "Rules" in view:
     show_rules(agent_id)
+

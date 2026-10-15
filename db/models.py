@@ -233,3 +233,25 @@ class GuardEvent(Base):
     error = Column(Text, nullable=True)
     source = Column(String, nullable=False, default="sdk")  # sdk | api
     timestamp = Column(SADateTime(timezone=True), default=_now, nullable=False, index=True)
+
+
+class BlockFeedback(Base):
+    """
+    A person's verdict on one block: was stopping this call right or wrong?
+    Keyed by session and rule (guard events keep only a hash of the arguments;
+    the call itself is in the session's trace). Feeds the Impact report's false-block count.
+    """
+    __tablename__ = "block_feedback"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    org_id = Column(String, nullable=True, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    session_id = Column(String, nullable=False)
+    rule_id = Column(String, nullable=False)
+    wrong = Column(Boolean, nullable=False)
+    note = Column(String, nullable=True)
+    created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("agent_id", "session_id", "rule_id", name="uq_block_feedback"),
+    )

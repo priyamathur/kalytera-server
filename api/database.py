@@ -118,7 +118,7 @@ def initialize_database():
         from db.models import (  # noqa: F401 — import all models so Base.metadata is fully populated
             Base, AgentLog, EvalResult, LossPattern, AgentQualityConfig,
             Organization, User, ApiKey, UsageRecord, AgentOrg,
-            GuardRule, GuardEvent,
+            GuardRule, GuardEvent, BlockFeedback,
         )
         print("🔧 Creating database tables...")
         Base.metadata.create_all(bind=engine)

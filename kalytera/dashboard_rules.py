@@ -74,11 +74,19 @@ def _detail(body: Any) -> str:
     return d if isinstance(d, str) else json.dumps(d) if d else "Unknown error"
 
 
+def with_source(rule: Dict[str, Any], pattern: Dict[str, Any]) -> Dict[str, Any]:
+    """Remember which problem a rule was made from, so the Impact report can compare it before and after."""
+    if not pattern.get("pattern_type") or pattern.get("pattern_value") is None:
+        return rule
+    return {**rule, "source": {"pattern_type": pattern["pattern_type"], "pattern_value": str(pattern["pattern_value"])}}
+
+
 def create_rule(agent_id: str, rule: Dict[str, Any]) -> Tuple[bool, str, Optional[str]]:
     """Create a rule (always in watch mode). Returns (ok, message for the user, rule id)."""
     status, body = _api("POST", "/rules", {**rule, "agent_id": rule.get("agent_id") or agent_id})
     _fetch_suggestions.clear()
     _rule_stats.clear()
+    _fetch_impact.clear()
     if status == 201:
         return True, (f"Added rule “{body['id']}”. It's watching: it counts matching calls and blocks nothing "
                       f"until you turn on blocking."), body["id"]
@@ -117,6 +125,7 @@ def promote_rule(agent_id: str, rid: str) -> Tuple[bool, str]:
     status, body = _api("POST", f"/rules/{rid}/promote", params={"agent_id": agent_id})
     _fetch_suggestions.clear()
     _rule_stats.clear()
+    _fetch_impact.clear()
     if status in (200, 409):
         return True, "Blocking is on. Running agents pick it up within 30 seconds."
     return False, _detail(body)
@@ -257,8 +266,9 @@ def show_rules(agent_id: str) -> None:
 
     if rules:
         _section("Your rules")
+        outcomes = {r["rule_id"]: r for r in impact_report(agent_id).get("rules", [])}
         for rule in rules:
-            _rule_card(agent_id, rule)
+            _rule_card(agent_id, rule, outcomes.get(rule["id"]))
     else:
         _empty_state(agent_id, has_suggestions=bool(suggestions))
 
@@ -278,6 +288,70 @@ def _fetch_suggestions(api_key: str, agent_id: str) -> Dict[str, Any]:
     except Exception:
         body = {}
     return {"suggestions": body.get("suggestions", []), "by_pattern": body.get("by_pattern", {})}
+
+
+def impact_report(agent_id: str) -> Dict[str, Any]:
+    """Before/after blocking and block reviews (GET /agents/{id}/impact) — cached 30s."""
+    return _fetch_impact(st.session_state.get("api_key", ""), agent_id)
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _fetch_impact(api_key: str, agent_id: str) -> Dict[str, Any]:
+    status, body = _api("GET", f"/agents/{agent_id}/impact")
+    return body if status == 200 and isinstance(body, dict) else {}
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def _blocks(api_key: str, agent_id: str, rule_id: str) -> List[Dict[str, Any]]:
+    status, body = _api("GET", f"/agents/{agent_id}/blocks", params={"rule_id": rule_id, "limit": "10"})
+    return body.get("blocks", []) if status == 200 else []
+
+
+def _review(agent_id: str, session_id: str, rule_id: str, wrong: bool) -> None:
+    st.session_state[f"_review_open_{rule_id}"] = True
+    status, body = _api("POST", f"/agents/{agent_id}/blocks/feedback",
+                        {"session_id": session_id, "rule_id": rule_id, "wrong": wrong})
+    _fetch_impact.clear()
+    _blocks.clear()
+    if status != 200:
+        st.toast(f"Couldn't save that: {_detail(body)}")
+
+
+def _outcome_line(outcome: Optional[Dict[str, Any]]) -> str:
+    """For a blocking rule made from a problem: that problem's rate before vs after blocking."""
+    ba = (outcome or {}).get("problem_before_after")
+    if not ba:
+        return ""
+    before, after = ba["before_per_day"], ba["after_per_day"]
+    if before is None or after is None:
+        side = "since blocking started" if after is None else "of history before blocking"
+        days = ba["days_after"] if after is None else ba["days_before"]
+        return (f'<div class="kr-meta">Before/after: too early to compare — {days:g} days {side}; '
+                f'needs 7 on each side.</div>')
+    change = f" ({round(100 * (after - before) / before):+d}%)" if before else ""
+    color = "#16a34a" if after < before else "#dc2626"
+    return (f'<div class="kr-meta">This problem: {before:g} failed sessions a day before blocking → '
+            f'<b style="color:{color}">{after:g} a day after{change}</b> · {ba["days_after"]:g} days so far. '
+            f'Changes to the agent in that time also count.</div>')
+
+
+def _review_blocks(agent_id: str, rid: str, outcome: Dict[str, Any]) -> None:
+    label = (f"Review blocks — {outcome['marked_wrong']} marked wrong, {outcome['unreviewed']} not reviewed")
+    with st.expander(label, expanded=st.session_state.get(f"_review_open_{rid}", False)):
+        st.caption("Open a session to see the stopped call. Blocks marked wrong are counted as false blocks.")
+        for b in _blocks(st.session_state.get("api_key", ""), agent_id, rid):
+            text, open_, right, wrong = st.columns([4, 1, 1, 1], vertical_alignment="center")
+            verdict = {"wrong": " · <b style='color:#dc2626'>marked wrong</b>",
+                       "right": " · <b style='color:#16a34a'>marked right</b>"}.get(b["verdict"] or "", "")
+            text.markdown(f'<div class="kr-meta"><code>{_e(b["session_id"])}</code> · {b["at"][:10]}{verdict}</div>',
+                          unsafe_allow_html=True)
+            if open_.button("Open", key=f"rvo_{rid}_{b['session_id']}", type="tertiary"):
+                st.session_state["open_session"] = b["session_id"]
+                st.rerun()
+            right.button("✓ Right", key=f"rvr_{rid}_{b['session_id']}", type="tertiary", on_click=_review,
+                         args=(agent_id, b["session_id"], rid, False), disabled=b["verdict"] == "right")
+            wrong.button("✗ Wrong", key=f"rvw_{rid}_{b['session_id']}", type="tertiary", on_click=_review,
+                         args=(agent_id, b["session_id"], rid, True), disabled=b["verdict"] == "wrong")
 
 
 @st.cache_data(ttl=30, show_spinner=False)
@@ -349,7 +423,7 @@ def _suggestion_card(agent_id: str, sug: Dict[str, Any], i: int) -> None:
         a1, a2, a3 = actions.columns([1.6, 1, 0.55])
         if a1.button("Add rule", type="primary", key=f"add_sug_{i}", use_container_width=True,
                      help="Adds it in watch mode: it counts matches but never blocks"):
-            _create(agent_id, rule)
+            _create(agent_id, with_source(rule, (sug.get("patterns") or [{}])[0]))
         if a2.button("Not now", key=f"hide_sug_{i}", use_container_width=True):
             st.session_state.setdefault("hidden_suggestions", set()).add(_rule_sig(rule))
             st.rerun()
@@ -363,7 +437,7 @@ def _suggestion_card(agent_id: str, sug: Dict[str, Any], i: int) -> None:
                 st.caption(w)
 
 
-def _rule_card(agent_id: str, rule: Dict[str, Any]) -> None:
+def _rule_card(agent_id: str, rule: Dict[str, Any], outcome: Optional[Dict[str, Any]] = None) -> None:
     rid, mode = rule["id"], rule.get("mode", "shadow")
     stats = _rule_stats(st.session_state.get("api_key", ""), agent_id, rid, rule.get("version"))
     pill = ('<span class="kr-pill kr-block" title="Enforce mode">Blocking</span>' if mode == "enforce"
@@ -374,7 +448,7 @@ def _rule_card(agent_id: str, rule: Dict[str, Any]) -> None:
         text.markdown(
             f'<div class="kr-name">{_e(rid)}{pill}</div>'
             f'<div class="kr-sentence">{sentence(rule)}</div>'
-            f'<div class="kr-meta">{_stats_line(stats, rule)}{reason}</div>',
+            f'<div class="kr-meta">{_stats_line(stats, rule)}{reason}</div>{_outcome_line(outcome)}',
             unsafe_allow_html=True,
         )
         a1, a2, a3 = actions.columns([1.6, 1, 0.55])
@@ -392,6 +466,8 @@ def _rule_card(agent_id: str, rule: Dict[str, Any]) -> None:
                 _json_dialog(agent_id, rule, mode="edit")
             if st.button("Delete", key=f"delete_{rid}", use_container_width=True):
                 _delete_dialog(agent_id, rid)
+        if outcome and outcome.get("blocked_sessions"):
+            _review_blocks(agent_id, rid, outcome)
 
 
 # ── Dialogs ──────────────────────────────────────────────────────────────────
@@ -512,6 +588,7 @@ def _act(method: str, path: str, agent_id: str, ok: str) -> None:
     status, body = _api(method, path, params={"agent_id": agent_id})
     _fetch_suggestions.clear()
     _rule_stats.clear()
+    _fetch_impact.clear()
     st.session_state["rule_flash"] = ("success", ok) if status == 200 else ("error", _detail(body))
     st.rerun()
 

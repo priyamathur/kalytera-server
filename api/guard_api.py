@@ -386,6 +386,7 @@ def _stats(db: Session, org_id: Optional[str], agent_id: str, rule_id: str) -> D
         db.query(GuardEvent)
         .filter(GuardEvent.org_id.is_(None) if org_id is None else GuardEvent.org_id == org_id)
         .filter(GuardEvent.agent_id == agent_id)
+        .filter(~GuardEvent.session_id.startswith("dashboard-test-"))  # the dashboard's live checks
     )
     enforced = dict(
         base.filter(GuardEvent.rule_id == rule_id)

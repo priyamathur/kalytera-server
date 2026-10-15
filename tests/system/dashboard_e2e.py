@@ -194,6 +194,8 @@ check('ff-pill watch">Watching</span>Block <code>refund_api</code>' in texts(at)
 rules = client.get("/rules", params={"agent_id": AGENT}, headers=H).json()["rules"]
 check(len(rules) == 1 and rules[0]["mode"] == "shadow", "rule saved in watch (shadow) mode")
 check(rules[0]["match"]["tool"] == "refund_api", "it's the refund rule")
+check((rules[0].get("source") or {}).get("pattern_value") is not None, "the rule remembers the problem it came from")
+LOOP_RULE_ID = rules[0]["id"]
 at = dashboard("🔴  Failure Feed")
 check('Watching</span>Block <code>refund_api</code>' in texts(at)
       and any(b.label == "Start blocking" for b in at.button), "after reload the card shows the rule, ready to block")
@@ -236,6 +238,28 @@ check("39% of sessions" in t, "shown as 39% of 38 sessions")
 print("10. An old bookmark to the Trace Viewer tab doesn't break")
 at = dashboard("🔍  Trace Viewer")
 check(at.radio[0].value == "🔴  Failure Feed", "falls back to the Failure Feed")
+
+print("10b. Blocks are counted and can be marked wrong (Rules page)")
+assert client.post(f"/rules/{LOOP_RULE_ID}/promote", params={"agent_id": AGENT}, headers=H).status_code == 200
+for i in (3, 6):  # the agent hits the rule twice in real sessions
+    r = client.post("/guard", headers=H, json={"agent_id": AGENT, "tool": "refund_api", "args": {"amount": 2000},
+                                               "session_id": f"sess-{i:02d}"})
+    assert r.json()["decision"] == "DENY", r.text
+import streamlit as _st  # noqa: E402
+_st.cache_data.clear()  # promoted through the API, not the dashboard: what a refresh after 30s would show
+at = dashboard("🛡  Rules")
+t = texts(at)
+check("Blocked 2 calls so far" in t, "the rule card counts 2 blocked calls")
+check("too early to compare" in t, "honest: too early to compare before/after")
+check(any("Review blocks — 0 marked wrong, 2 not reviewed" in e.label for e in at.expander), "blocks can be reviewed")
+wrong = [b for b in at.button if b.label == "✗ Wrong"]
+check(len(wrong) == 2, "both blocks listed")
+run(wrong[0].click())
+rep = client.get(f"/agents/{AGENT}/impact", headers=H).json()
+check(rep["rules"][0]["marked_wrong"] == 1, "marking one wrong is saved")
+check("marked wrong" in texts(at), "and shows next to the block")
+at = dashboard("📊  Overview")
+check("Agent Overview" in texts(at), "Overview still renders with blocking dates on the trend")
 
 print("11. A brand-new account: welcome panel → sample agent → rule → blocking")
 import kalytera.judge as _judge  # noqa: E402
