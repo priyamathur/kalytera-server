@@ -141,3 +141,22 @@ def test_overall_failure_rate_before_and_after_blocking(env: SimpleNamespace) ->
     assert ba["comparable"] is True
     assert (ba["before_sessions"], ba["before_failed"]) == (50, 30)
     assert (ba["after_sessions"], ba["after_failed"]) == (5 + 10 + 30 + 1, 5 + 1)
+
+
+def test_delete_agent_data_removes_everything_and_frees_the_name(env: SimpleNamespace) -> None:  # noqa: F811
+    _seed(env)
+    env.client.post(f"/agents/{AGENT}/blocks/feedback", json={"session_id": "blk1", "rule_id": "refund_cap",
+                                                              "wrong": True})
+    env.org = SimpleNamespace(id="org-2")
+    assert env.client.delete(f"/agents/{AGENT}/data").status_code == 404  # not yours
+    env.org = SimpleNamespace(id="org-1")
+    r = env.client.delete(f"/agents/{AGENT}/data")
+    assert r.status_code == 200, r.text
+    d = r.json()["deleted"]
+    assert d["eval_results"] == 96 and d["guard_events"] == 41 and d["guard_rules"] == 2
+    assert d["block_feedback"] == 1 and d["agent_orgs"] == 1
+    db = env.session()
+    for model in (EvalResult, GuardEvent, GuardRule, AgentOrg):
+        assert db.query(model).filter(model.agent_id == AGENT).count() == 0
+    db.close()
+    assert env.client.get(f"/agents/{AGENT}/impact").status_code == 404  # no longer this org's agent

@@ -28,6 +28,7 @@ _queue: Queue[Dict[str, Any]] = Queue(maxsize=500)
 _worker: Optional[threading.Thread] = None
 _agent_id: str = ""
 _agent_id_explicit = False  # set by init(agent_id=...): then every agent reports under that one name
+_redact = False  # init(redact=True): mask emails, phone and card numbers before sending
 _api_endpoint: str = ""
 _api_key: str = ""
 _notified: Set[str] = set()
@@ -37,7 +38,7 @@ _DASHBOARD_URL = "https://app.kalytera.dev"
 
 
 def init(api_key: str = "", agent_id: str = "", api_endpoint: str = "", verify: bool = True,
-         instrument: bool = True) -> None:
+         instrument: bool = True, redact: bool = False) -> None:
     """
     Configure Kalytera. Call once at startup:
 
@@ -48,10 +49,14 @@ def init(api_key: str = "", agent_id: str = "", api_endpoint: str = "", verify: 
     scored, and every tool call is checked against your rules, with no other code.
     Each agent shows up under its own name; pass agent_id to report everything under one.
 
+    redact=True (or KALYTERA_REDACT=1) masks email addresses, phone numbers and card
+    numbers in everything sent to Kalytera; rules still see the real values.
+
     With verify=True (default) the API key is checked in a background thread and
     the result is printed — init() itself still returns immediately.
     """
-    global _agent_id, _agent_id_explicit, _api_key, _api_endpoint
+    global _agent_id, _agent_id_explicit, _api_key, _api_endpoint, _redact
+    _redact = redact or os.environ.get("KALYTERA_REDACT", "") in ("1", "true", "yes")
     _api_key = api_key or os.environ.get("KALYTERA_API_KEY", "")
     agent_id = agent_id or os.environ.get("KALYTERA_AGENT_ID", "")
     _agent_id_explicit = bool(agent_id)
@@ -193,6 +198,10 @@ def _build_payload(
 ) -> Dict[str, Any]:
     """Normalise trace() arguments into the POST /trace body. May raise on bad input."""
     meta = metadata if isinstance(metadata, dict) else {}
+    if _redact:
+        from .redact import mask
+
+        input, output, tool_calls, meta = mask(input), mask(output), mask(tool_calls), mask(meta)
     return {
         "id": str(uuid.uuid4()),
         "agent_id": agent_id or _agent_id,

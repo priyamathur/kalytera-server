@@ -967,3 +967,16 @@ def get_recent_session_results(agent_id: str, limit: int, db: Session) -> List[D
                                   "failure_reason": ev.failure_reason, "input": text or "",
                                   "evaluated_at": ev.evaluated_at}
     return list(out.values())[:limit]
+
+
+def delete_agent_data(agent_id: str, db: Session) -> Dict[str, int]:
+    """Delete everything stored for one agent, and release its name. Returns rows deleted per table."""
+    from db.models import BlockFeedback, GoldenLabel, GuardEvent, GuardRule
+
+    counts: Dict[str, int] = {}
+    for model in (AgentLog, EvalResult, LossPattern, GuardEvent, GuardRule, BlockFeedback, GoldenLabel,
+                  AgentQualityConfig, AgentOrg):
+        counts[model.__tablename__] = db.query(model).filter(model.agent_id == agent_id).delete(
+            synchronize_session=False)
+    db.commit()
+    return counts

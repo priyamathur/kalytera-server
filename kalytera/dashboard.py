@@ -1110,6 +1110,23 @@ def _show_overview(agent_id: str) -> None:
             _overview_data.clear()
             st.success("Saved. New weights apply to the next evaluation cycle.")
 
+    if agent_id != "demo-agent":
+        with st.expander("Delete this agent's data", expanded=False):
+            st.caption("Removes every session, score, problem, rule, guard decision and label Kalytera stores "
+                       "for this agent, and frees its name. This can't be undone.")
+            typed = st.text_input("Type the agent's name to confirm", key=f"del_confirm_{agent_id}",
+                                  placeholder=agent_id)
+            if st.button("Delete all data", key=f"del_agent_{agent_id}", disabled=typed != agent_id):
+                status, body = _rules_api("DELETE", f"/agents/{agent_id}/data")
+                if status == 200:
+                    _agents_for_key.clear()
+                    _overview_data.clear()
+                    st.session_state.pop("agent_id", None)
+                    st.success(f"Deleted {sum(body['deleted'].values())} records for {agent_id}.")
+                    st.rerun()
+                else:
+                    st.error(body.get("detail") if isinstance(body, dict) else str(body))
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # VIEW 2 — Failure Feed
@@ -1625,7 +1642,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                 db_lbl2.close()
             st.rerun()
     else:
-        if lc.button("👍 Mark passed", key="lbl_pass", help="Confirm this session passed — trains the judge"):
+        if lc.button("👍 Mark passed", key="lbl_pass", help="Your verdict. Compared with the judge's in Judge Accuracy on the Overview"):
             db_lbl2 = _db()
             try:
                 upsert_golden_label(agent_id, session_id, True, "", db_lbl2)
@@ -1633,7 +1650,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
             finally:
                 db_lbl2.close()
             st.rerun()
-        if mc.button("👎 Mark failed", key="lbl_fail", help="Override — this session actually failed"):
+        if mc.button("👎 Mark failed", key="lbl_fail", help="Your verdict. Compared with the judge's in Judge Accuracy on the Overview"):
             db_lbl2 = _db()
             try:
                 upsert_golden_label(agent_id, session_id, False, "", db_lbl2)

@@ -260,6 +260,8 @@ check(rep["rules"][0]["marked_wrong"] == 1, "marking one wrong is saved")
 check("marked wrong" in texts(at), "and shows next to the block")
 at = dashboard("📊  Overview")
 check("Agent Overview" in texts(at), "Overview still renders with blocking dates on the trend")
+delete = next(b for b in at.button if b.label == "Delete all data")
+check(delete.disabled, "deleting needs the agent's name typed first")
 
 print("11. A brand-new account: welcome panel → sample agent → rule → blocking")
 import kalytera.judge as _judge  # noqa: E402

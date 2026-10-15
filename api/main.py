@@ -461,6 +461,23 @@ async def list_agents(
     return get_agent_ids_for_org(org.id, db)
 
 
+@app.delete("/agents/{agent_id}/data")
+async def delete_agent(
+    agent_id: str,
+    org=Depends(_resolve_org),
+    db: Session = Depends(get_db),
+) -> Dict[str, Any]:
+    """Delete everything Kalytera stores for this agent: sessions, scores, problems, rules,
+    guard decisions and labels. The agent's name becomes free. Cannot be undone."""
+    from db.queries import DEMO_AGENT_IDS, delete_agent_data
+
+    if org is not None and agent_id not in get_agent_ids_for_org(org.id, db):
+        raise HTTPException(status_code=404, detail="agent not found")
+    if agent_id in DEMO_AGENT_IDS:
+        raise HTTPException(status_code=403, detail="the shared demo agent can't be deleted")
+    return {"agent_id": agent_id, "deleted": delete_agent_data(agent_id, db)}
+
+
 @app.get(
     "/agents/{agent_id}/patterns",
     response_model=List[PatternOut],
