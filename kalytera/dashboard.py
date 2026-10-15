@@ -2112,8 +2112,9 @@ def _follow_job(agent: str, box: Any, total_hint: int, verb: str,
         _, s_ = _rules_api("GET", f"/agents/{agent}/refresh")
         state = s_.get("state") if isinstance(s_, dict) else "error"
         if state == "error":
-            box.update(label="Couldn't finish", state="error")
-            st.error(s_.get("error") if isinstance(s_, dict) else "Something went wrong")
+            reason = (s_.get("error") if isinstance(s_, dict) else None) or "Something went wrong"
+            box.update(label=reason[:140], state="error", expanded=True)  # the reason, not a vague "failed"
+            st.error(reason)
             return None
         if state != "preparing":
             to_score = s_.get("to_score") or 0
