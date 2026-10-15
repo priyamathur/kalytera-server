@@ -57,10 +57,11 @@ def _apply_schema_additions() -> None:
         cur.execute("""
             SELECT table_name, column_name, data_type
             FROM information_schema.columns
-            WHERE table_name IN ('eval_results', 'agent_quality_configs')
+            WHERE table_name IN ('eval_results', 'agent_quality_configs', 'organizations')
               AND column_name IN (
                 'failure_step', 'helpfulness', 'factuality', 'custom_scores',
-                'weight_helpfulness', 'weight_factuality', 'custom_metrics', 'judge_passed'
+                'weight_helpfulness', 'weight_factuality', 'custom_metrics', 'judge_passed',
+                'retention_days'
               )
         """)
         cols: dict = {(r[0], r[1]): r[2] for r in cur.fetchall()}
@@ -86,6 +87,8 @@ def _apply_schema_additions() -> None:
             _ddl("ALTER TABLE eval_results ADD COLUMN factuality FLOAT")
         if ("eval_results", "custom_scores") not in cols:
             _ddl("ALTER TABLE eval_results ADD COLUMN custom_scores TEXT")
+        if ("organizations", "retention_days") not in cols:
+            _ddl("ALTER TABLE organizations ADD COLUMN retention_days INTEGER")
         if ("eval_results", "judge_passed") not in cols:
             _ddl("ALTER TABLE eval_results ADD COLUMN judge_passed BOOLEAN")
         if ("agent_quality_configs", "weight_helpfulness") not in cols:

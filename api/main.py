@@ -225,10 +225,12 @@ def _eval_steps(agent_ids: List[str], db: Any) -> None:
 
 def _analysis_batch() -> None:
     """Sync: run pattern detection across all agents."""
+    from db.queries import purge_expired_data
     from kalytera.analyzer import run_all
 
     db = SessionLocal()
     try:
+        purge_expired_data(db)  # accounts that chose a retention period; hourly is often enough
         run_all(db)
     except Exception as exc:
         logger.error("[analysis_batch] error: %s", exc)
@@ -459,6 +461,32 @@ async def list_agents(
         from db.queries import DEMO_AGENT_IDS
         return DEMO_AGENT_IDS
     return get_agent_ids_for_org(org.id, db)
+
+
+@app.get("/account/retention")
+async def get_retention(org=Depends(_resolve_org)) -> Dict[str, Any]:
+    """How long production data is kept: null = until you delete it."""
+    if org is None:
+        raise HTTPException(status_code=403, detail="an account API key is required")
+    return {"retention_days": getattr(org, "retention_days", None)}
+
+
+@app.put("/account/retention")
+async def set_retention(body: Dict[str, Any], org=Depends(_resolve_org),
+                        db: Session = Depends(get_db)) -> Dict[str, Any]:
+    """Delete production data older than retention_days (30, 90, 180 or 365), or null to keep it."""
+    from db.models import Organization
+    from db.queries import RETENTION_CHOICES
+
+    if org is None:
+        raise HTTPException(status_code=403, detail="an account API key is required")
+    days = body.get("retention_days")
+    if days is not None and days not in RETENTION_CHOICES:
+        raise HTTPException(status_code=422, detail=f"retention_days must be one of {list(RETENTION_CHOICES)} or null")
+    row = db.query(Organization).filter(Organization.id == org.id).one()
+    row.retention_days = days
+    db.commit()
+    return {"retention_days": days}
 
 
 @app.delete("/agents/{agent_id}/data")

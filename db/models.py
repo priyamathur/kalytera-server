@@ -130,6 +130,7 @@ class Organization(Base):
     stripe_subscription_id = Column(String, nullable=True)
     created_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
+    retention_days = Column(Integer, nullable=True)  # delete production data older than this; null = keep
 
 
 class User(Base):

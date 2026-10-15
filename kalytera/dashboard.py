@@ -1111,7 +1111,9 @@ def _show_overview(agent_id: str) -> None:
             st.success("Saved. New weights apply to the next evaluation cycle.")
 
     if agent_id != "demo-agent":
-        with st.expander("Delete this agent's data", expanded=False):
+        with st.expander("Data & retention", expanded=False):
+            _retention_setting()
+            st.markdown("**Delete this agent's data**")
             st.caption("Removes every session, score, problem, rule, guard decision and label Kalytera stores "
                        "for this agent, and frees its name. This can't be undone.")
             typed = st.text_input("Type the agent's name to confirm", key=f"del_confirm_{agent_id}",
@@ -1559,6 +1561,28 @@ def _score_bar(label: str, value: float, color: str) -> str:
         f'<div style="background:{color};width:{width}%;height:5px;border-radius:4px;transition:width 0.3s"></div>'
         f'</div></div>'
     )
+
+
+_RETENTION = {"Until I delete it": None, "30 days": 30, "90 days": 90, "180 days": 180, "365 days": 365}
+
+
+def _retention_setting() -> None:
+    status, body = _rules_api("GET", "/account/retention")
+    if status != 200:
+        return
+    current = body.get("retention_days")
+    names = list(_RETENTION)
+    choice = st.selectbox("Keep production data (all your agents)", names,
+                          index=[_RETENTION[n] for n in names].index(current) if current in _RETENTION.values() else 0,
+                          key="retention_choice",
+                          help="Older conversations, verdicts, rule checks and reviews are deleted every hour. "
+                               "Rules and settings are kept.")
+    if _RETENTION[choice] != current:
+        status, body = _rules_api("PUT", "/account/retention", {"retention_days": _RETENTION[choice]})
+        if status == 200:
+            st.success(f"Saved: {choice.lower()}.")
+        else:
+            st.error(body.get("detail") if isinstance(body, dict) else str(body))
 
 
 def _set_verdict(agent_id: str, session_id: str, passed: bool) -> None:

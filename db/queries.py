@@ -1012,3 +1012,31 @@ def delete_agent_data(agent_id: str, db: Session) -> Dict[str, int]:
             synchronize_session=False)
     db.commit()
     return counts
+
+
+RETENTION_CHOICES = (30, 90, 180, 365)
+
+
+def purge_expired_data(db: Session, now: Optional[datetime] = None) -> Dict[str, int]:
+    """
+    For accounts with a retention period, delete production data older than it:
+    steps, verdicts, problems, rule checks, block reviews and labels. Rules and
+    settings are kept. Returns rows deleted per table.
+    """
+    from db.models import BlockFeedback, GoldenLabel, GuardEvent
+
+    now = now or datetime.now(timezone.utc)
+    totals: Dict[str, int] = {}
+    for org_id, days in db.query(Organization.id, Organization.retention_days).filter(
+            Organization.retention_days.isnot(None)).all():
+        agents = [a for (a,) in db.query(AgentOrg.agent_id).filter(AgentOrg.org_id == org_id)]
+        if not agents:
+            continue
+        cutoff = now - timedelta(days=int(days))
+        for model, column in ((AgentLog, AgentLog.timestamp), (EvalResult, EvalResult.evaluated_at),
+                              (LossPattern, LossPattern.last_seen), (GuardEvent, GuardEvent.timestamp),
+                              (BlockFeedback, BlockFeedback.created_at), (GoldenLabel, GoldenLabel.created_at)):
+            n = db.query(model).filter(model.agent_id.in_(agents), column < cutoff).delete(synchronize_session=False)
+            totals[model.__tablename__] = totals.get(model.__tablename__, 0) + n
+    db.commit()
+    return totals

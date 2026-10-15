@@ -160,3 +160,27 @@ def test_delete_agent_data_removes_everything_and_frees_the_name(env: SimpleName
         assert db.query(model).filter(model.agent_id == AGENT).count() == 0
     db.close()
     assert env.client.get(f"/agents/{AGENT}/impact").status_code == 404  # no longer this org's agent
+
+
+def test_retention_deletes_old_production_data_but_keeps_rules(env: SimpleNamespace) -> None:  # noqa: F811
+    from db.models import Organization
+    from db.queries import purge_expired_data
+
+    _seed(env)  # 20 days of sessions and rule checks
+    db = env.session()
+    db.add(Organization(id="org-1", name="Acme"))
+    db.add(Organization(id="org-2", name="Other", retention_days=30))  # no agents: nothing to do
+    db.commit()
+    db.close()
+    assert env.client.put("/account/retention", json={"retention_days": 45}).status_code == 422
+    assert env.client.put("/account/retention", json={"retention_days": 30}).json() == {"retention_days": 30}
+    db = env.session()
+    assert purge_expired_data(db)["eval_results"] == 0  # nothing older than 30 days yet
+    db.query(Organization).filter(Organization.id == "org-1").one().retention_days = 30
+    db.commit()
+    deleted = purge_expired_data(db, now=NOW + timedelta(days=20))  # 20 days later: days 20..11 are now >30 days old
+    assert deleted["eval_results"] == 50 and deleted["guard_events"] == 30
+    assert db.query(EvalResult).filter(EvalResult.agent_id == AGENT).count() == 96 - 50
+    assert db.query(GuardRule).filter(GuardRule.agent_id == AGENT).count() == 2  # rules are kept
+    db.close()
+    assert env.client.put("/account/retention", json={"retention_days": None}).json() == {"retention_days": None}
