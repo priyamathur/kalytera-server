@@ -1561,6 +1561,22 @@ def _score_bar(label: str, value: float, color: str) -> str:
     )
 
 
+def _set_verdict(agent_id: str, session_id: str, passed: bool) -> None:
+    """A person's verdict replaces the judge's, then problems are regrouped so the feed agrees at once."""
+    from kalytera.analyzer import run_analysis
+    from kalytera.dashboard_rules import _fetch_suggestions
+
+    db = _db()
+    try:
+        upsert_golden_label(agent_id, session_id, passed, "", db)
+        run_analysis(agent_id, db)
+    finally:
+        db.close()
+    _overview_data.clear()
+    _fetch_suggestions.clear()
+    st.rerun()
+
+
 def _show_trace(agent_id: str, session_id: str) -> None:
     st.button(f"← Back to {view.split('  ', 1)[-1]}", key="trace_back",
               on_click=lambda: st.session_state.pop("open_session", None))
@@ -1626,41 +1642,24 @@ def _show_trace(agent_id: str, session_id: str) -> None:
         db_lbl.close()
 
     lc, mc, rc = st.columns([2, 2, 6])
+    help_text = "Your verdict replaces the judge's: problems, rule suggestions and counts follow it"
     if existing_label is not None:
-        verb = "✓ Labeled: PASSED" if existing_label.human_passed else "✗ Labeled: FAILED"
+        verb = "✓ You marked: passed" if existing_label.human_passed else "✗ You marked: failed"
         lbl_color = "#16a34a" if existing_label.human_passed else "#dc2626"
         lc.markdown(
             f'<div style="font-size:12px;font-weight:700;color:{lbl_color};padding-top:8px">{verb}</div>',
             unsafe_allow_html=True,
         )
-        if mc.button("Change label", key="change_lbl"):
-            db_lbl2 = _db()
-            try:
-                upsert_golden_label(agent_id, session_id, not existing_label.human_passed, "", db_lbl2)
-                _overview_data.clear()
-            finally:
-                db_lbl2.close()
-            st.rerun()
+        if mc.button("Change", key="change_lbl", help=help_text):
+            _set_verdict(agent_id, session_id, not existing_label.human_passed)
     else:
-        if lc.button("👍 Mark passed", key="lbl_pass", help="Your verdict. Compared with the judge's in Judge Accuracy on the Overview"):
-            db_lbl2 = _db()
-            try:
-                upsert_golden_label(agent_id, session_id, True, "", db_lbl2)
-                _overview_data.clear()
-            finally:
-                db_lbl2.close()
-            st.rerun()
-        if mc.button("👎 Mark failed", key="lbl_fail", help="Your verdict. Compared with the judge's in Judge Accuracy on the Overview"):
-            db_lbl2 = _db()
-            try:
-                upsert_golden_label(agent_id, session_id, False, "", db_lbl2)
-                _overview_data.clear()
-            finally:
-                db_lbl2.close()
-            st.rerun()
+        if lc.button("👍 Not a failure", key="lbl_pass", help=help_text):
+            _set_verdict(agent_id, session_id, True)
+        if mc.button("👎 This failed", key="lbl_fail", help=help_text):
+            _set_verdict(agent_id, session_id, False)
         rc.markdown(
             '<div style="font-size:11px;color:#94a3b8;padding-top:8px">'
-            'Label sessions to measure and calibrate judge accuracy.</div>',
+            'Disagree with the judge? Your verdict replaces it everywhere.</div>',
             unsafe_allow_html=True,
         )
 

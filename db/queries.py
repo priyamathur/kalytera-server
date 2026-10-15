@@ -892,6 +892,12 @@ def upsert_quality_config(agent_id: str, updates: Dict[str, Any], db: Session) -
 def upsert_golden_label(
     agent_id: str, session_id: str, human_passed: bool, note: str, db: Session
 ) -> None:
+    """
+    Record a person's verdict and make it the session's verdict: a session marked
+    "not a failure" stops counting toward problems, rule suggestions and failure
+    numbers (and the reverse). The judge's own verdict is kept in judge_passed, so
+    judge agreement still compares against what the judge said.
+    """
     row = db.query(GoldenLabel).filter(
         GoldenLabel.agent_id == agent_id,
         GoldenLabel.session_id == session_id,
@@ -901,6 +907,13 @@ def upsert_golden_label(
         row.note = note
     else:
         db.add(GoldenLabel(agent_id=agent_id, session_id=session_id, human_passed=human_passed, note=note))
+    for ev in db.query(EvalResult).filter(EvalResult.agent_id == agent_id, EvalResult.session_id == session_id,
+                                          EvalResult.eval_error == False):  # noqa: E712
+        if ev.judge_passed is None:
+            ev.judge_passed = ev.passed
+        ev.passed = human_passed
+        if not human_passed and ev.judge_passed and not ev.failure_reason:
+            ev.failure_reason = note or "Marked as a failure by a person."
     db.commit()
 
 
@@ -922,13 +935,13 @@ def get_calibration_stats(agent_id: str, db: Session) -> Dict[str, Any]:
 
     agreement = 0
     for label in labels:
-        any_fail = db.query(EvalResult).filter(
+        results = db.query(EvalResult).filter(
             EvalResult.agent_id == agent_id,
             EvalResult.session_id == label.session_id,
-            EvalResult.passed == False,  # noqa: E712
             EvalResult.eval_error == False,  # noqa: E712
-        ).first()
-        judge_passed = any_fail is None
+        ).all()
+        # The judge's own verdict, not the person's override of it.
+        judge_passed = all((r.passed if r.judge_passed is None else r.judge_passed) for r in results)
         if judge_passed == label.human_passed:
             agreement += 1
 

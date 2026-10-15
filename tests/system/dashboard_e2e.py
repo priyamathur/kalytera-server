@@ -263,6 +263,18 @@ check("Agent Overview" in texts(at), "Overview still renders with blocking dates
 delete = next(b for b in at.button if b.label == "Delete all data")
 check(delete.disabled, "deleting needs the agent's name typed first")
 
+print("10c. A person's verdict replaces the judge's")
+at = dashboard("🔴  Failure Feed")
+check("15 of 38 sessions failed" in texts(at), "before: 15 of 38 sessions failed")
+at.session_state["open_session"] = "sess-27"
+run(at)
+run(button(at, "👍 Not a failure").click())
+check("You marked: passed" in texts(at), "the trace shows the verdict")
+at = dashboard("🔴  Failure Feed")
+check("14 of 38 sessions failed" in texts(at), "after: 14 of 38 — the feed follows the person's verdict")
+labels = [b.label for b in at.button]
+check("▸ 9 sessions" in labels, f"and the refund problem now has 9 sessions, regrouped at once ({[l for l in labels if 'sessions' in l]})")
+
 print("11. A brand-new account: welcome panel → sample agent → rule → blocking")
 import kalytera.judge as _judge  # noqa: E402
 

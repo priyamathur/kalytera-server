@@ -66,6 +66,7 @@ class EvalResult(Base):
     eval_error = Column(Boolean, default=False, nullable=False)
     evaluated_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
     custom_scores = Column(Text, nullable=True)  # JSON: {"helpfulness": 0.85}
+    judge_passed = Column(Boolean, nullable=True)  # the judge's own verdict, kept when a person overrules it
 
 
 class LossPattern(Base):

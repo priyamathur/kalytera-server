@@ -183,3 +183,28 @@ def test_an_idle_session_is_judged_at_its_last_step(db: Session) -> None:
         assert judge.evaluate_session("abandoned", db) is not None
     row = db.query(EvalResult).filter(EvalResult.session_id == "abandoned").one()
     assert row.log_id == f"{AGENT}-abandoned-2" and row.failure_type == "incomplete"
+
+
+def test_a_persons_verdict_replaces_the_judges_everywhere(seeded: Session) -> None:
+    from db.queries import get_calibration_stats, get_pattern_sessions, upsert_golden_label
+
+    assert get_session_failure_counts(AGENT, seeded)["failed"] == 2
+    upsert_golden_label(AGENT, "s2", True, "", seeded)        # "not a failure"
+    counts = get_session_failure_counts(AGENT, seeded)
+    assert counts["failed"] == 1 and counts["failure_type"] == {"goal_drift": 1}
+    assert [r["session_id"] for r in get_pattern_sessions(AGENT, "failure_type", "goal_drift", 10, seeded)] == ["s1"]
+    cal = get_calibration_stats(AGENT, seeded)
+    assert (cal["total_labeled"], cal["agreement_count"]) == (1, 0)  # judge said failed, person said passed
+
+    upsert_golden_label(AGENT, "s3", False, "Promised a refund we don't offer", seeded)  # judge missed it
+    s3 = seeded.query(EvalResult).filter(EvalResult.session_id == "s3", EvalResult.agent_id == AGENT).all()
+    assert all(not r.passed and r.judge_passed for r in s3)
+    assert s3[0].failure_reason == "Promised a refund we don't offer"
+    assert get_session_failure_counts(AGENT, seeded)["failed"] == 2
+    assert get_calibration_stats(AGENT, seeded)["agreement_count"] == 0
+
+    upsert_golden_label(AGENT, "s2", False, "", seeded)       # changed their mind: back to the judge's verdict
+    assert get_session_failure_counts(AGENT, seeded)["failed"] == 3
+    assert get_calibration_stats(AGENT, seeded)["agreement_count"] == 1  # now agrees on s2
+    other = seeded.query(EvalResult).filter(EvalResult.agent_id == "other-bot").one()
+    assert other.passed is True and other.judge_passed is None  # another agent's s1 untouched
