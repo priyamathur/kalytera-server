@@ -91,13 +91,27 @@ If something is wrong you get a specific reason — a rejected key, the monthly 
 
 ## Add Kalytera to an agent in production
 
-Two changes to your code: wrap each conversation in a `session`, and mark the tools that can do damage with `@kalytera.tool`.
+```bash
+pip install kalytera
+export KALYTERA_API_KEY=kly_live_...
+```
 
 ```python
 import kalytera
+kalytera.init()          # first thing, before your agents run
+```
 
-kalytera.configure(api_key="kly_live_...", agent_id="support-bot")   # agent_id: any name unique to you
+That's all for the **OpenAI Agents SDK** and **LangChain / LangGraph** (including `create_agent`, `create_react_agent` and your own graphs). `init()` finds the frameworks you have installed and hooks into them:
 
+- **Every run is one session**, recorded with its tool calls and scored when it ends. Each agent shows up in the dashboard under its own name (`Agent(name="Refund bot")`, `create_agent(..., name="Refund bot")`), so several agents need nothing extra. Sub-agents, handoffs and subgraphs stay in the session of the run that started them.
+- **Every tool call is checked against your rules first**, using the framework's own hook (a tool input guardrail in the OpenAI Agents SDK, the tool runner in LangChain). MCP tools included.
+- **When a rule blocks a call**, the tool doesn't run and the model gets the reason as the tool result ("…blocked (rule refund_cap: Refunds over 500 need review). Do not retry it. Tell the user…"), so your agent explains instead of crashing or retrying.
+
+Want everything under one name? `kalytera.init(agent_id="support-system")`. Names Kalytera picks get a short suffix from your key (`refund-bot-3fa2c1`), so they never clash with another account's agent.
+
+**Your own agent loop, no framework?** Two changes: wrap each conversation in a `session`, and mark the tools that can do damage with `@kalytera.tool`.
+
+```python
 @kalytera.tool                          # checks your rules before every call, records it
 def refund_api(order_id: str, amount: float) -> str:
     ...
@@ -108,9 +122,7 @@ def handle(message: str, conversation_id: str) -> str:
         return s.output
 ```
 
-That's all. Every conversation is recorded with the tool calls made in it and scored when the `with` block ends — also when it raises. In the dashboard you get **Failure Feed** (what keeps going wrong, in how many sessions) and **Rules** (rules Kalytera drafted from those failures).
-
-**When a rule blocks a call.** New rules only watch. Once you click **Start blocking**, a matching call never runs: `@kalytera.tool` raises `kalytera.Blocked` (with `.decision.reason`). To let the agent tell the user instead, return a message:
+Here a blocked call raises `kalytera.Blocked` (with `.decision.reason`). To let the agent tell the user instead, return a message:
 
 ```python
 @kalytera.tool(on_block=lambda d: f"I can't do that automatically: {d.reason}. A person will follow up.")
@@ -119,13 +131,7 @@ def refund_api(order_id: str, amount: float) -> str: ...
 
 **Works with your stack.**
 - Async: `async def` tools and `async with kalytera.session(...)` work the same way.
-- Agent frameworks: put `@kalytera.tool` *under* the framework's decorator, so the framework still sees your function's signature:
-
-  ```python
-  @function_tool        # OpenAI Agents SDK, or LangChain's @tool
-  @kalytera.tool
-  def refund_api(order_id: str, amount: float) -> str: ...
-  ```
+- Already have `@kalytera.tool` on framework tools? Keep it; with `init()` each call is still checked and recorded once.
 - Many steps? Call `s.step("plan", input=..., output=...)` inside the session; tool calls attach to the step they happened in.
 - Not Python? Send steps to `POST /trace` and check calls with `POST /guard` ([below](#guard-rules--block-a-known-failure-before-it-happens)).
 

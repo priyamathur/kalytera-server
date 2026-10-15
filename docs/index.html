@@ -398,7 +398,7 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
     <button class="btn-p" onclick="openSignup('free')">Get started free</button>
     <button class="btn-s" onclick="go('docs')">See how it works →</button>
   </div>
-  <p class="note">One line to add. Works with LangChain, CrewAI, AutoGen, or any custom framework. Free for 10K sessions/month.</p>
+  <p class="note">One line for OpenAI Agents SDK and LangChain / LangGraph agents; two for your own agent loop. Free for 10K sessions/month.</p>
 
   <!-- EXPANDABLE PROMPT -->
   <div class="prompt-expand">
@@ -431,36 +431,23 @@ Wait for the user to confirm before continuing.
 
 pip install kalytera
 
-## Step 3: Add tracing
+## Step 3: Add Kalytera
 
-Add `kalytera.configure()` once at startup, then `kalytera.trace()` after each agent step:
+Find where the app starts (before any agent runs) and add:
 
-import kalytera, os
+import kalytera
+kalytera.init()   # reads KALYTERA_API_KEY
 
-kalytera.configure(
-    api_key=os.environ["KALYTERA_API_KEY"],
-    api_endpoint="https://api.kalytera.dev",
-    agent_id="my-agent",
-)
+If the agents use the OpenAI Agents SDK or LangChain / LangGraph, that is all: init() hooks into them, records every run and checks every tool call against the user's rules.
 
-kalytera.trace(
-    session_id=session_id,
-    step_number=1,
-    step_name="classify_intent",
-    input=user_message,
-    output=agent_response,
-)
-
-Or use the decorator for zero-config tracing:
-
-@kalytera.watch
-def my_agent_step(input: str) -> str:
-    ...
+If the agent is a custom loop with no framework, also:
+- put @kalytera.tool on each tool function that changes something (refunds, emails, writes)
+- wrap each conversation: with kalytera.session(conversation_id, input=message) as s: ... s.output = reply
 
 ## Rules
-- Add tracing only. Do not modify agent logic.
-- trace() returns in under 5ms and never raises.
-- Open https://app.kalytera.dev to see scores within 30 seconds.</div>
+- Do not change agent logic. Only add the lines above.
+- Kalytera never raises and never blocks the agent; if it is unreachable, tools still run.
+- Tell the user to open https://app.kalytera.dev — the agent appears under its own name after its first run.</div>
     </div>
   </div>
 </div>
@@ -775,27 +762,18 @@ def my_agent_step(input: str) -> str:
       <p class="docs-lead">From <span class="ic">pip install</span> to your first scored interaction in under two minutes.</p>
       <div class="docs-h3">1. Install</div>
       <div class="cb"><pre><span class="cm">$</span> pip install kalytera</pre></div>
-      <div class="docs-h3">2. Configure</div>
-      <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="kw">import</span> kalytera
+      <div class="docs-h3">2. Add one line</div>
+      <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="cm"># export KALYTERA_API_KEY=kly_live_...</span>
+<span class="kw">import</span> kalytera
+kalytera.<span class="fn">init</span>()  <span class="cm"># before your agents run</span></pre></div>
+      <p class="docs-lead" style="font-size:14px">That's all for the OpenAI Agents SDK and LangChain / LangGraph: every run is recorded and scored, every tool call is checked against your rules, and each agent appears under its own name.</p>
+      <div class="docs-h3">3. Your own agent loop? Two more lines</div>
+      <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="kw">@</span>kalytera.tool  <span class="cm"># checks your rules before each call</span>
+<span class="kw">def</span> <span class="fn">refund_api</span>(order_id, amount): ...
 
-kalytera.<span class="fn">configure</span>(
-  api_key=<span class="str">"kly_live_..."</span>,
-  api_endpoint=<span class="str">"https://api.kalytera.dev"</span>,
-  agent_id=<span class="str">"billing-agent"</span>,  <span class="cm"># optional</span>
-)</pre></div>
-      <div class="docs-h3">3. Watch your agent</div>
-      <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="kw">@</span>kalytera.watch
-<span class="kw">def</span> <span class="fn">support_agent</span>(user_input):
-    ...  <span class="cm"># nothing else changes</span></pre></div>
-      <div class="docs-h3">4. Or trace manually at each step</div>
-      <div class="cb"><div class="cb-lbl">agent.py</div><pre>kalytera.<span class="fn">trace</span>(
-  session_id=<span class="str">"session-001"</span>,
-  step_number=<span class="kw">1</span>,
-  step_name=<span class="str">"classify_intent"</span>,
-  input=user_message,
-  output=agent_reply,
-)</pre></div>
-      <div class="callout"><div class="callout-lbl">Never blocks, never raises</div><div class="callout-body">trace() returns immediately. If Kalytera is unreachable, your agent keeps running. Failed sends are retried automatically from a local queue.</div></div>
+<span class="kw">with</span> kalytera.<span class="fn">session</span>(conversation_id, input=message) <span class="kw">as</span> s:
+    s.output = run_my_agent(message)</pre></div>
+      <div class="callout"><div class="callout-lbl">Never blocks, never raises</div><div class="callout-body">Recording happens in the background and never raises. If Kalytera is unreachable, your agent keeps running and tools still run.</div></div>
       <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('intro')">Introduction</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('quality')">Quality scoring</a></div></div>
     </div>
 

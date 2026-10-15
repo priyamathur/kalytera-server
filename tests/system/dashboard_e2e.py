@@ -264,6 +264,7 @@ check("Stop your agent repeating the same mistakes" in t, "new account lands on 
 check(not at.radio and not at.selectbox, "nothing to pick or navigate yet: no agent picker, no nav")
 check(any(b.label == "▶ Run the sample agent" for b in at.button), "one primary action: run the sample agent")
 check(any(NEW_KEY in c.value for c in at.code), "the connect code has the account's key filled in")
+check(any(c.value.startswith("import kalytera\nkalytera.init()") for c in at.code), "connecting is one line: kalytera.init()")
 check("Waiting for your agent" in t, "and waits for the agent's first session")
 run(button(at, "▶ Run the sample agent").click())  # scores and switches to the sample agent
 run(at)

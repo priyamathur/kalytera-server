@@ -1263,13 +1263,6 @@ def _rule_in_place(agent_id: str, p: Any, option: Dict[str, Any]) -> Optional[Di
     return m if m and m["ok"] else None
 
 
-_OWN_AGENT_CODE = ('import kalytera\nkalytera.configure(api_key="kly_live_...", agent_id="support-bot")\n\n'
-                   '@kalytera.tool                    # checks your rules before each call\n'
-                   'def refund_api(order_id, amount): ...\n\n'
-                   'with kalytera.session(conversation_id, input=message) as s:\n'
-                   '    s.output = run_my_agent(message)')
-
-
 def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], total: int, opened: set) -> None:
     p = g["main"]
     m = _rule_in_place(agent_id, p, option)
@@ -1294,11 +1287,6 @@ def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], tota
             a1.button("Start blocking", key=f"block_{p.id}", type="primary", use_container_width=True,
                       on_click=_start_blocking, args=(agent_id, p.id),
                       help="From now on guard() stops matching calls before the tool runs")
-        elif m is not None:
-            with a1.popover("Use in my agent", use_container_width=True):
-                st.markdown("Two changes ([guide](https://github.com/priyamathur/kalytera-server"
-                            "#add-kalytera-to-an-agent-in-production)):")
-                st.code(_OWN_AGENT_CODE, language="python")
         is_open = p.id in opened
         a4.button(("▾ Hide sessions" if is_open else f"▸ {_n_sessions(g['sessions'])}"), key=f"see_{p.id}",
                   type="tertiary", use_container_width=True,
@@ -1380,7 +1368,7 @@ def _sample_finish() -> None:
     with st.container(border=True):
         st.markdown('<div class="ob-card-t">That\'s the whole loop — now point it at your agent</div>'
                     '<div class="ob-card-d">Kalytera found the problem on its own, wrote the rule from the '
-                    'sessions, and the next bad refund never ran. Your agent gets the same, with two changes:'
+                    'sessions, and the next bad refund never ran. Your agents get the same with one line:'
                     '</div>', unsafe_allow_html=True)
         _connect_steps()
         _wait_for_first_agent()
@@ -1883,21 +1871,22 @@ def _loop_html(stage: int = 0) -> str:
     return f'<div class="ob-loop">{"".join(out)}</div>'
 
 
-def _connect_code() -> str:
-    key = st.session_state.get("api_key") or "kly_live_..."
-    return (f'import kalytera\nkalytera.configure(api_key="{key}", agent_id="support-bot")\n\n'
-            '@kalytera.tool                    # checks your rules before each call\n'
-            'def refund_api(order_id, amount): ...\n\n'
-            'with kalytera.session(conversation_id, input=message) as s:\n'
-            '    s.output = run_my_agent(message)')
+_NO_FRAMEWORK_CODE = ('@kalytera.tool                    # checks your rules before each call\n'
+                      'def refund_api(order_id, amount): ...\n\n'
+                      'with kalytera.session(conversation_id, input=message) as s:\n'
+                      '    s.output = run_my_agent(message)')
 
 
 def _connect_steps() -> None:
-    st.code("pip install kalytera", language="bash")
-    st.code(_connect_code(), language="python")
-    st.caption("Your key is already filled in. Put `@kalytera.tool` on the tools your agent calls and wrap each "
-               "conversation in `kalytera.session()`. [Full guide](https://github.com/priyamathur/kalytera-server"
-               "#add-kalytera-to-an-agent-in-production)")
+    key = st.session_state.get("api_key") or "kly_live_..."
+    st.code(f'pip install kalytera\nexport KALYTERA_API_KEY="{key}"', language="bash")
+    st.code("import kalytera\nkalytera.init()   # first thing, before your agents run", language="python")
+    st.caption("That's all for the **OpenAI Agents SDK** and **LangChain / LangGraph**: each agent shows up "
+               "under its own name, every run is scored, and every tool call is checked against your rules. "
+               "Your key is already filled in.")
+    with st.expander("Your own agent loop, no framework?"):
+        st.code(_NO_FRAMEWORK_CODE, language="python")
+        st.caption("[Full guide](https://github.com/priyamathur/kalytera-server#add-kalytera-to-an-agent-in-production)")
 
 
 @st.fragment(run_every=5)
@@ -2011,7 +2000,7 @@ def _check_now(agent_id: str) -> None:
 
 def _connect_page() -> None:
     st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
-    _page_header("Connect an agent", "Two changes in your code. Works with any framework.")
+    _page_header("Connect an agent", "One line for OpenAI Agents SDK and LangChain / LangGraph agents.")
     _connect_steps()
     _wait_for_first_agent()
 
@@ -2034,7 +2023,7 @@ def _welcome_panel() -> None:
                   on_click=st.session_state.__setitem__, args=("_want_sample", True))
     with right.container(border=True):
         st.markdown('<div class="ob-card-t">Connect your agent</div>'
-                    '<div class="ob-card-d">Two changes in your code. Works with any framework.</div>',
+                    '<div class="ob-card-d">One line in your code for OpenAI Agents SDK and LangChain / LangGraph.</div>',
                     unsafe_allow_html=True)
         with st.expander("Show the code (your key is filled in)", expanded=False):
             _connect_steps()

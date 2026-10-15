@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "kalytera"
-version = "0.2.4"
+version = "0.3.0"
 description = "Real-time quality monitoring and failure detection for production AI agents"
 readme = "README.md"
 license = {text = "MIT"}
@@ -67,7 +67,7 @@ Repository = "https://github.com/priyamathur/kalytera-server"
 "Bug Tracker" = "https://github.com/priyamathur/kalytera-server/issues"
 
 [tool.hatch.build.targets.wheel]
-packages = ["kalytera"]
+packages = ["kalytera", "kalytera.integrations"]
 
 [tool.hatch.build.targets.sdist]
 include = ["kalytera/", "tests/test_tracer.py", "tests/test_checks.py", "README.md", "LICENSE", "pyproject.toml"]

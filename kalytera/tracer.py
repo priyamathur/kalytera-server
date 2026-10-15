@@ -27,6 +27,7 @@ from . import config as _cfg
 _queue: Queue[Dict[str, Any]] = Queue(maxsize=500)
 _worker: Optional[threading.Thread] = None
 _agent_id: str = ""
+_agent_id_explicit = False  # set by init(agent_id=...): then every agent reports under that one name
 _api_endpoint: str = ""
 _api_key: str = ""
 _notified: Set[str] = set()
@@ -35,31 +36,55 @@ _SIGNUP_URL = "https://kalytera.dev"
 _DASHBOARD_URL = "https://app.kalytera.dev"
 
 
-def init(api_key: str, agent_id: str = "", api_endpoint: str = "", verify: bool = True) -> None:
+def init(api_key: str = "", agent_id: str = "", api_endpoint: str = "", verify: bool = True,
+         instrument: bool = True) -> None:
     """
-    Configure Kalytera. Call once at startup before the first trace.
+    Configure Kalytera. Call once at startup:
+
+        kalytera.init()          # reads KALYTERA_API_KEY
+
+    With instrument=True (default) it also hooks into the agent frameworks you have
+    installed (OpenAI Agents SDK, LangChain / LangGraph): every run is recorded and
+    scored, and every tool call is checked against your rules, with no other code.
+    Each agent shows up under its own name; pass agent_id to report everything under one.
 
     With verify=True (default) the API key is checked in a background thread and
     the result is printed — init() itself still returns immediately.
     """
-    global _agent_id, _api_key, _api_endpoint
-    _auto_id = not agent_id
-    _agent_id = agent_id or str(uuid.uuid4())[:8]
-    _api_key = api_key
-    _api_endpoint = (api_endpoint or _cfg.DEFAULT_ENDPOINT).rstrip("/")
+    global _agent_id, _agent_id_explicit, _api_key, _api_endpoint
+    _api_key = api_key or os.environ.get("KALYTERA_API_KEY", "")
+    agent_id = agent_id or os.environ.get("KALYTERA_AGENT_ID", "")
+    _agent_id_explicit = bool(agent_id)
+    _agent_id = agent_id or key_scoped("agent")
+    _api_endpoint = (api_endpoint or os.environ.get("KALYTERA_API_ENDPOINT", "") or _cfg.DEFAULT_ENDPOINT).rstrip("/")
     _notified.clear()
     _ensure_worker()
-    id_note = f"  ⚠  agent_id auto-set to '{_agent_id}' — pass agent_id='..' to configure() to use a stable name\n" if _auto_id else ""
+    hooked: List[str] = []
+    if instrument:
+        from .integrations import instrument as _instrument
+
+        hooked = _instrument()
+    watching = f"  Watching: {', '.join(hooked)} (every run recorded, every tool call checked)\n" if hooked else ""
     print(
-        f"Kalytera configured  (agent_id='{_agent_id}')\n"
-        f"{id_note}"
+        f"Kalytera configured  (agent_id='{_agent_id}'"
+        f"{'' if _agent_id_explicit or not hooked else '; framework agents use their own names'})\n"
+        f"{watching}"
         f"  Sending to: {_api_endpoint}\n"
         f"  Run kalytera.check() to confirm traces are recorded and scored."
     )
-    if not api_key:
-        _notify("no_key", f"✗ Kalytera: no API key set — traces will NOT be recorded. Get a free key at {_SIGNUP_URL}")
+    if not _api_key:
+        _notify("no_key", f"✗ Kalytera: no API key set (KALYTERA_API_KEY) — traces will NOT be recorded. "
+                          f"Get a free key at {_SIGNUP_URL}")
     elif verify:
         threading.Thread(target=_verify_key_in_background, daemon=True).start()
+
+
+def key_scoped(name: str) -> str:
+    """'refund-bot' -> 'refund-bot-3f9a1c': agent_ids are owned by one account, so names
+    Kalytera picks for you carry a suffix derived from your key."""
+    import hashlib
+
+    return f"{name}-{hashlib.sha256(_api_key.encode()).hexdigest()[:6]}"
 
 
 def check(timeout: float = 90.0, wait_for_score: bool = True) -> bool:

@@ -58,6 +58,10 @@ class Session:
         self._pending: List[Dict[str, Any]] = []
         self._token: Optional[contextvars.Token] = None
         self._started = 0.0
+        # A framework hook (outer) and @kalytera.tool (inner) can both see one call:
+        # count it once. Keys are (tool, args) of calls the outer layer checked / the inner recorded.
+        self._outer_checked: Dict[str, int] = {}
+        self._inner_recorded: Dict[str, int] = {}
 
     # ── recording ────────────────────────────────────────────────────────────
     def step(self, name: str, input: Any = "", output: Any = "", ended: bool = False) -> None:
@@ -109,6 +113,78 @@ def current_session() -> Optional[Session]:
     return _current.get()
 
 
+def _key(tool_name: str, call_args: Dict[str, Any]) -> str:
+    """The same call as two layers see it: 40 and 40.0 (after type conversion) match."""
+    import json
+
+    def norm(v: Any) -> Any:
+        if isinstance(v, float) and v.is_integer():
+            return int(v)
+        if isinstance(v, dict):
+            return {str(k): norm(x) for k, x in v.items()}
+        if isinstance(v, (list, tuple)):
+            return [norm(x) for x in v]
+        return v
+
+    return f"{tool_name}:{json.dumps(norm(call_args), sort_keys=True, default=str)}"
+
+
+def _take(counts: Dict[str, int], key: str) -> bool:
+    if counts.get(key, 0) <= 0:
+        return False
+    counts[key] -= 1
+    return True
+
+
+def check_call(tool_name: str, call_args: Dict[str, Any], outer: bool = False) -> Optional[Decision]:
+    """
+    Run guard() for a tool call in the current session. Returns the Decision if it's
+    stopped, else None. outer=True is a framework hook; a @kalytera.tool inside it then
+    doesn't check the same call again (repeat-count rules would see it twice).
+    """
+    from .guard import guard
+
+    s = _current.get()
+    if s is not None and not outer and _take(s._outer_checked, _key(tool_name, call_args)):
+        return None
+    d = guard(tool_name, call_args, session_id=s.session_id if s else "", agent_id=s.agent_id if s else None)
+    if d.allowed:
+        if s is not None and outer:
+            key = _key(tool_name, call_args)
+            s._outer_checked[key] = s._outer_checked.get(key, 0) + 1
+        return None
+    if s:
+        s._record_call({"name": tool_name, "input": call_args, "success": False,
+                        "blocked": d.decision, "rule_id": d.rule_id, "error": d.reason})
+    return d
+
+
+def record_call(tool_name: str, call_args: Dict[str, Any], t0: float, error: Optional[BaseException],
+                outer: bool = False) -> None:
+    """Attach a finished tool call to the current session, if there is one (once, if two layers saw it)."""
+    s = _current.get()
+    if s is None:
+        return
+    key = _key(tool_name, call_args)
+    if outer and _take(s._inner_recorded, key):
+        return
+    if not outer:
+        _take(s._outer_checked, key)  # in case the inner layer never checked (it always does today)
+        s._inner_recorded[key] = s._inner_recorded.get(key, 0) + 1
+    call: Dict[str, Any] = {"name": tool_name, "input": call_args, "success": error is None,
+                            "latency_ms": int((time.monotonic() - t0) * 1000)}
+    if error is not None:
+        call["error"] = f"{type(error).__name__}: {error}"
+    s._record_call(call)
+
+
+def block_message(d: Decision) -> str:
+    """What the model is told when a rule stops a tool call, so it explains instead of retrying."""
+    what = "needs review by a person" if d.decision == "ESCALATE" else "was blocked"
+    return (f"This tool call {what} (rule {d.rule_id}: {d.reason}). Do not retry it. "
+            f"Tell the user it can't be done automatically.")
+
+
 def tool(fn: Optional[F] = None, *, name: Optional[str] = None,
          on_block: Optional[Callable[[Decision], Any]] = None) -> Any:
     """
@@ -138,27 +214,10 @@ def tool(fn: Optional[F] = None, *, name: Optional[str] = None,
                 return dict(kwargs)
 
         def check(call_args: Dict[str, Any]) -> Optional[Decision]:
-            from .guard import guard
-
-            s = _current.get()
-            d = guard(tool_name, call_args, session_id=s.session_id if s else "",
-                      agent_id=s.agent_id if s else None)
-            if d.allowed:
-                return None
-            if s:
-                s._record_call({"name": tool_name, "input": call_args, "success": False,
-                                "blocked": d.decision, "rule_id": d.rule_id, "error": d.reason})
-            return d
+            return check_call(tool_name, call_args)
 
         def done(call_args: Dict[str, Any], t0: float, error: Optional[BaseException]) -> None:
-            s = _current.get()
-            if s is None:
-                return
-            call: Dict[str, Any] = {"name": tool_name, "input": call_args, "success": error is None,
-                                    "latency_ms": int((time.monotonic() - t0) * 1000)}
-            if error is not None:
-                call["error"] = f"{type(error).__name__}: {error}"
-            s._record_call(call)
+            record_call(tool_name, call_args, t0, error)
 
         def blocked(d: Decision) -> Any:
             if on_block is not None:
