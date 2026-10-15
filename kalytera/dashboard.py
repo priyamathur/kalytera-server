@@ -1200,18 +1200,20 @@ _TEST_ICON = {"blocked": "✋", "watching": "👀", "allowed": "✓", "error": "
 
 
 def _rule_line(option: Dict[str, Any], m: Optional[Dict[str, Any]]) -> str:
-    """One line for the rule: its state, what it does, and the latest evidence."""
+    """One line for the rule: its state, what it does, and the evidence for it."""
     if m:
         mode = "block" if m["blocking"] else "watch"
         label = "Blocking" if m["blocking"] else "Watching"
         line = f'<span class="ff-pill {mode}">{label}</span>{sentence(m["rule"])}'
-        if m["test"]:
-            kind, text = m["test"]
-            note = f'<div class="ff-note {_TEST_NOTE.get(kind, "bad")}">{_TEST_ICON.get(kind, "")} {html.escape(text)}</div>'
+        if m["proof"]:
+            kind, text = m["proof"]
+            note = (f'<div class="ff-note {_TEST_NOTE.get(kind, "bad")}">{_TEST_ICON.get(kind, "")} '
+                    f'Live check — {html.escape(text)}</div>')
         elif m["blocking"]:
             note = '<div class="ff-note">Stops matching calls before the tool runs.</div>'
         else:
-            note = '<div class="ff-note">Counts matching calls, blocks nothing yet. Test it, then start blocking.</div>'
+            note = (_coverage_note(m.get("coverage") or {}) if m.get("coverage") else "") + \
+                '<div class="ff-note">Watching only: nothing is blocked until you start blocking.</div>'
         return f'<div class="ff-rule">{line}{note}</div>'
     if option.get("status") == "suggested":
         return (f'<div class="ff-rule"><span class="ff-pill sug">Suggested rule</span>{sentence(option["rule"])}'
@@ -1220,23 +1222,20 @@ def _rule_line(option: Dict[str, Any], m: Optional[Dict[str, Any]]) -> str:
             f'{html.escape(option.get("reason", ""))}</div></div>')
 
 
-def _make_rule(agent_id: str, pattern_id: str, rule: Dict[str, Any]) -> None:
+def _make_rule(agent_id: str, pattern_id: str, rule: Dict[str, Any], coverage: Dict[str, Any]) -> None:
     ok, msg, rid = create_rule(agent_id, rule)
     st.session_state.setdefault("_feed_made", {})[pattern_id] = {
-        "ok": ok, "msg": msg, "rule": {**rule, "id": rid or rule.get("id")}, "test": None, "blocking": False}
-
-
-def _test_rule(agent_id: str, pattern_id: str) -> None:
-    m = st.session_state["_feed_made"][pattern_id]
-    m["test"] = try_rule(agent_id, m["rule"])
+        "ok": ok, "msg": msg, "rule": {**rule, "id": rid or rule.get("id")}, "coverage": coverage,
+        "proof": None, "blocking": False}
 
 
 def _start_blocking(agent_id: str, pattern_id: str) -> None:
     m = st.session_state["_feed_made"][pattern_id]
     ok, msg = promote_rule(agent_id, m["rule"]["id"])
     m["blocking"] = ok
-    m["test"] = try_rule(agent_id, m["rule"]) if ok else ("error", msg)
-    if ok and m["test"][0] == "blocked":
+    # Proof it works: send the call the rule should stop through guard(), as the agent would.
+    m["proof"] = try_rule(agent_id, m["rule"]) if ok else ("error", msg)
+    if ok and m["proof"][0] == "blocked":
         st.session_state["_feed_toast"] = True
 
 
@@ -1245,7 +1244,8 @@ def _rule_in_place(agent_id: str, p: Any, option: Dict[str, Any]) -> Optional[Di
     made = st.session_state.setdefault("_feed_made", {})
     if p.id not in made and option.get("status") == "exists":
         made[p.id] = {"ok": True, "msg": "", "rule": {**option["rule"], "id": option["rule_id"]},
-                      "test": None, "blocking": option.get("mode") == "enforce"}
+                      "coverage": option.get("coverage"), "proof": None,
+                      "blocking": option.get("mode") == "enforce"}
     m = made.get(p.id)
     return m if m and m["ok"] else None
 
@@ -1272,26 +1272,20 @@ def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], tota
             st.error(failed_make["msg"])
 
         # One highlighted button: the next step.
-        a1, a2, _, a4 = st.columns([1.5, 1.5, 1.6, 1.4])
+        a1, _, a4 = st.columns([1.5, 3.1, 1.4])
         if m is None and option.get("status") == "suggested":
             a1.button("⚡ Make it a rule", key=f"make_{p.id}", type="primary", use_container_width=True,
-                      on_click=_make_rule, args=(agent_id, p.id, option["rule"]),
-                      help="Adds it in watch mode: it counts matching calls and blocks nothing yet")
+                      on_click=_make_rule, args=(agent_id, p.id, option["rule"], option.get("coverage") or {}),
+                      help="Adds it in watch mode first, so you can check it before it blocks anything")
+        elif m is not None and not m["blocking"]:
+            a1.button("Start blocking", key=f"block_{p.id}", type="primary", use_container_width=True,
+                      on_click=_start_blocking, args=(agent_id, p.id),
+                      help="From now on guard() stops matching calls before the tool runs")
         elif m is not None:
-            tested = m["test"] is not None
-            a1.button("▶ Test it", key=f"test_{p.id}", use_container_width=True,
-                      type="primary" if not tested and not m["blocking"] else "secondary",
-                      on_click=_test_rule, args=(agent_id, p.id),
-                      help="Sends the call this rule should stop through guard(), as your agent would")
-            if not m["blocking"]:
-                a2.button("Start blocking", key=f"block_{p.id}", use_container_width=True,
-                          type="primary" if tested else "secondary", on_click=_start_blocking, args=(agent_id, p.id),
-                          help="From now on guard() stops matching calls before the tool runs")
-            else:
-                with a2.popover("Use in my agent", use_container_width=True):
-                    st.markdown("Two changes ([guide](https://github.com/priyamathur/kalytera-server"
-                                "#add-kalytera-to-an-agent-in-production)):")
-                    st.code(_OWN_AGENT_CODE, language="python")
+            with a1.popover("Use in my agent", use_container_width=True):
+                st.markdown("Two changes ([guide](https://github.com/priyamathur/kalytera-server"
+                            "#add-kalytera-to-an-agent-in-production)):")
+                st.code(_OWN_AGENT_CODE, language="python")
         is_open = p.id in opened
         a4.button(("▾ Hide sessions" if is_open else f"▸ {_n_sessions(g['sessions'])}"), key=f"see_{p.id}",
                   type="tertiary", use_container_width=True,

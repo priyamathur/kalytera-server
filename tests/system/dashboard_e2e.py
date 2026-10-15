@@ -195,7 +195,8 @@ check(len(rules) == 1 and rules[0]["mode"] == "shadow", "rule saved in watch (sh
 check(rules[0]["match"]["tool"] == "refund_api", "it's the refund rule")
 at = dashboard("🔴  Failure Feed")
 check('Watching</span>Block <code>refund_api</code>' in texts(at)
-      and any(b.label == "▶ Test it" for b in at.button), "after reload the card shows the rule, ready to test")
+      and any(b.label == "Start blocking" for b in at.button), "after reload the card shows the rule, ready to block")
+check(not any(b.label == "▶ Test it" for b in at.button), "no separate test step")
 check(len([b for b in at.button if b.label == "⚡ Make it a rule"]) == 1, "only the loop rule is still offered")
 
 print("7. Rules page")
@@ -235,7 +236,7 @@ print("10. An old bookmark to the Trace Viewer tab doesn't break")
 at = dashboard("🔍  Trace Viewer")
 check(at.radio[0].value == "📊  Overview", "falls back to Overview")
 
-print("11. A brand-new account: welcome panel → sample agent → rule → test → blocking")
+print("11. A brand-new account: welcome panel → sample agent → rule → blocking")
 import kalytera.judge as _judge  # noqa: E402
 
 
@@ -266,12 +267,11 @@ check("Kalytera found this on its own" in t, "lands on the sample agent's Failur
 check('<span class="ff-chip">hallucination</span>' in t and "Suggested rule</span>Block <code>refund_api</code>" in t,
       "problem found and a rule is suggested")
 run(button(at, "⚡ Make it a rule").click())
-run(button(at, "▶ Test it").click())
-check("would have blocked it" in texts(at), "test while watching: allowed, but would have blocked")
-check("amount=900" in texts(at), "the test uses a clearly-too-large refund (900)")
+check("Would have caught 10 of 10 failed sessions" in texts(at), "watching shows the evidence for the rule")
 run(button(at, "Start blocking").click())
 t = texts(at)
-check("Blocked: refund_api(amount=900)" in t and "The tool never ran." in t, "after Start blocking: Blocked")
+check("Blocked: refund_api(amount=900)" in t and "The tool never ran." in t, "after Start blocking: a live check shows it blocked")
+check("Live check" in t and "amount=900" in t, "the check uses a clearly-too-large refund (900)")
 check(any("That's the loop" in str(x.value) for x in at.toast), "a toast celebrates the loop")
 check(any("kalytera.session(" in c.value for c in at.code), "and offers the code for your own agent")
 
