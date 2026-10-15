@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data &amp; security — Kalytera</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0d10;--white:#e8ecf0;--cyan:#00c8e8;--muted:#8a96a3;--border:rgba(255,255,255,0.08)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--white);font-family:'DM Mono',ui-monospace,Menlo,monospace;font-size:15px;line-height:1.75}
+main{max-width:760px;margin:0 auto;padding:48px 24px 80px}
+a{color:var(--cyan)}
+.back{font-size:13px;color:var(--muted);text-decoration:none}
+h1{font-family:'Space Grotesk',sans-serif;font-size:34px;letter-spacing:-.5px;margin:18px 0 6px}
+h2{font-family:'Space Grotesk',sans-serif;font-size:20px;margin:40px 0 8px}
+.lead{color:var(--muted);margin:0 0 8px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin:10px 0}
+td,th{border-top:1px solid var(--border);padding:10px 8px;text-align:left;vertical-align:top}
+th{color:var(--muted);font-weight:500}
+code{background:rgba(255,255,255,0.06);padding:1px 6px;border-radius:4px;font-size:13px}
+ul{padding-left:20px}
+.note{border-left:2px solid var(--cyan);padding:6px 14px;color:var(--muted);font-size:13.5px;margin:14px 0}
+</style>
+</head>
+<body>
+<main>
+<a class="back" href="/">← kalytera.dev</a>
+<h1>Data &amp; security</h1>
+<p class="lead">What Kalytera stores, where it goes, how to delete it, and what happens to your agent if Kalytera is down.</p>
+
+<h2>What we store</h2>
+<table>
+<tr><th>Data</th><th>Stored</th></tr>
+<tr><td>Each step your agent sends: input, output, tool calls (name, arguments, success, error, latency), metadata</td><td>Yes, until you delete it</td></tr>
+<tr><td>The judge's scores and failure reason for each session</td><td>Yes, until you delete it</td></tr>
+<tr><td>Rule checks (<code>guard()</code> decisions)</td><td>Tool name, decision, rule — <b>a hash of the arguments, not the arguments</b></td></tr>
+<tr><td>Your account</td><td>Email, organisation name. API keys are stored only as SHA-256 hashes.</td></tr>
+</table>
+
+<h2>Mask personal data before it leaves your servers</h2>
+<p><code>kalytera.init(redact=True)</code> (or <code>KALYTERA_REDACT=1</code>) replaces email addresses, phone numbers and card numbers with <code>[email]</code>, <code>[phone]</code>, <code>[card]</code> in everything the SDK sends. Rules are still checked on the real values inside your process, so blocking works the same.</p>
+<div class="note">This is pattern matching, not a guarantee: names, street addresses and unusual formats are not caught.</div>
+
+<h2>Who processes it</h2>
+<ul>
+<li><b>Kalytera's API and database</b>, hosted on Render. Every API call is scoped to your account; an agent name belongs to one account and other accounts can't read or write it.</li>
+<li><b>Anthropic (Claude)</b> scores each finished session: the session's steps and tool calls are sent to Anthropic's API for that one request. Nothing else is sent to an LLM; finding problems and drafting rules run on Kalytera's servers. See <a href="https://www.anthropic.com/legal/commercial-terms">Anthropic's commercial terms</a>.</li>
+</ul>
+
+<h2>Delete your data</h2>
+<ul>
+<li><b>One agent:</b> dashboard → Overview → <i>Delete this agent's data</i>, or <code>DELETE /agents/{agent_id}/data</code>. Removes its sessions, scores, problems, rules, rule checks and labels. Can't be undone.</li>
+<li><b>Your whole account:</b> email <a href="mailto:priya@kalytera.ai">priya@kalytera.ai</a>.</li>
+</ul>
+<p>There is no automatic expiry today: data is kept until you delete it.</p>
+
+<h2>Your agent if Kalytera is down</h2>
+<ul>
+<li>Recording runs on a background thread and never raises into your code.</li>
+<li>Rules are checked inside your process from a local cache, refreshed in the background — no network call per tool call.</li>
+<li>If Kalytera can't be reached, your tools still run: rule checks fail open.</li>
+<li>Only rules you turned on with <i>Start blocking</i> can stop a call; new rules only watch.</li>
+</ul>
+
+<h2>Keep everything on your own infrastructure</h2>
+<p>Kalytera's server is open source and runs with Docker: <a href="https://github.com/priyamathur/kalytera-server#self-host">self-host guide</a>. Then nothing leaves your network except the judge's calls to the LLM provider you configure.</p>
+
+<h2>Not in place yet</h2>
+<p>No SOC 2 report, no signed DPA template and no automatic retention period yet. If you need any of these for a pilot, email <a href="mailto:priya@kalytera.ai">priya@kalytera.ai</a>.</p>
+</main>
+</body>
+</html>
