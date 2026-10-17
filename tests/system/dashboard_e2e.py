@@ -300,9 +300,9 @@ _stripe.Subscription.retrieve = staticmethod(lambda sid, *a, **k: _stripe.Stripe
 _st.cache_data.clear()
 at = dashboard("📊  Overview")
 plans = [b.label for b in at.button if b.label.startswith(("Starter —", "Growth —"))]
-check(plans == ["Starter — $49/mo · 50,000 sessions", "Growth — $149/mo · 200,000 sessions"],
+check(plans == ["Starter — $49/mo · 25,000 sessions", "Growth — $149/mo · 100,000 sessions"],
       f"free account: Upgrade offers both plans with prices ({plans})")
-run(button(at, "Growth — $149/mo · 200,000 sessions").click())
+run(button(at, "Growth — $149/mo · 100,000 sessions").click())
 check(_checkouts and _checkouts[-1]["line_items"] == [{"price": "price_g", "quantity": 1}],
       "choosing Growth starts a Stripe checkout for Growth")
 org_id = client.get("/billing/usage", headers=H).json()["org_id"]

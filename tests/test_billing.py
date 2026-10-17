@@ -107,7 +107,7 @@ def test_free_signup_gives_a_working_key_and_current_next_steps(pay: SimpleNames
     body = _signup(pay)
     assert body["status"] == "active" and body["tier"] == "free"
     assert "kalytera.init()" in body["next_steps"] and "configure" not in body["next_steps"]
-    assert _usage(pay, body["api_key"])["sessions_limit"] == 10_000
+    assert _usage(pay, body["api_key"])["sessions_limit"] == 5_000
 
 
 def test_paid_signup_sends_to_checkout_and_upgrades_only_after_payment(pay: SimpleNamespace) -> None:
@@ -122,7 +122,7 @@ def test_paid_signup_sends_to_checkout_and_upgrades_only_after_payment(pay: Simp
     assert _paid(pay, body["org_id"]).status_code == 200
     org = _org(pay, body["org_id"])
     assert (org.tier, org.stripe_customer_id, org.stripe_subscription_id) == ("starter", "cus_1", "sub_1")
-    assert _usage(pay, body["api_key"])["sessions_limit"] == 50_000
+    assert _usage(pay, body["api_key"])["sessions_limit"] == 25_000
 
 
 def test_unpaid_checkout_waits_for_the_async_payment(pay: SimpleNamespace) -> None:
@@ -168,7 +168,7 @@ def test_cancelled_subscription_goes_back_to_free(pay: SimpleNamespace) -> None:
     assert _webhook(pay, "customer.subscription.deleted", {"id": "sub_1", "object": "subscription"}).status_code == 200
     org = _org(pay, body["org_id"])
     assert (org.tier, org.stripe_subscription_id) == ("free", None)
-    assert _usage(pay, body["api_key"])["sessions_limit"] == 10_000
+    assert _usage(pay, body["api_key"])["sessions_limit"] == 5_000
 
 
 def test_billing_portal_for_paying_customers_only(pay: SimpleNamespace) -> None:

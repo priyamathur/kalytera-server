@@ -55,9 +55,9 @@ logger = logging.getLogger("kalytera.billing")
 # ---------------------------------------------------------------------------
 
 TIERS: dict[str, dict] = {
-    "free":    {"sessions": 10_000,  "price_usd": 0,   "stripe_price_id": ""},
-    "starter": {"sessions": 50_000,  "price_usd": 49,  "stripe_price_id": os.getenv("STRIPE_STARTER_PRICE_ID", "")},
-    "growth":  {"sessions": 200_000, "price_usd": 149, "stripe_price_id": os.getenv("STRIPE_GROWTH_PRICE_ID", "")},
+    "free":    {"sessions": 5_000,   "price_usd": 0,   "stripe_price_id": ""},
+    "starter": {"sessions": 25_000,  "price_usd": 49,  "stripe_price_id": os.getenv("STRIPE_STARTER_PRICE_ID", "")},
+    "growth":  {"sessions": 100_000, "price_usd": 149, "stripe_price_id": os.getenv("STRIPE_GROWTH_PRICE_ID", "")},
     "scale":   {"sessions": None,    "price_usd": None, "stripe_price_id": ""},
 }
 

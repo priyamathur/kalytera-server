@@ -11,11 +11,11 @@ ERROR_LOG_PATH: str = os.path.expanduser("~/.kalytera/errors.log")
 # Eval mode — controls free vs paid tier cost profile
 # ---------------------------------------------------------------------------
 
-# "session" = one LLM call per complete session (free tier, ~$10/10K sessions)
+# "session" = one LLM call per complete session (the default; about $0.0003 per session on Haiku 5.5)
 # "step"    = one LLM call per step (paid tier, granular per-step scores)
 EVAL_MODE: str = os.getenv("KALYTERA_EVAL_MODE", "session")
 
-FREE_TIER_SESSION_LIMIT: int = int(os.getenv("FREE_TIER_SESSION_LIMIT", "10000"))
+FREE_TIER_SESSION_LIMIT: int = int(os.getenv("FREE_TIER_SESSION_LIMIT", "5000"))
 
 # ---------------------------------------------------------------------------
 # Judge provider — Kalytera is LLM-agnostic

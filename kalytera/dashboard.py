@@ -447,7 +447,7 @@ if not st.session_state.get("authenticated"):
                         "org_name": _usage.get("org_name", ""),
                         "tier": _usage.get("tier", "free"),
                         "sessions_used": _usage.get("sessions_used", 0),
-                        "sessions_limit": _usage.get("sessions_limit", 10000),
+                        "sessions_limit": _usage.get("sessions_limit", 5000),
                     })
                     st.rerun()
                 else:
@@ -572,7 +572,7 @@ with st.sidebar:
     _org = _acct.get("org_name") or st.session_state.get("org_name", "")
     _tier = _acct.get("tier") or st.session_state.get("tier", "free")
     _used = _acct.get("sessions_used", st.session_state.get("sessions_used", 0))
-    _limit = _acct.get("sessions_limit") or st.session_state.get("sessions_limit", 10000)
+    _limit = _acct.get("sessions_limit") or st.session_state.get("sessions_limit", 5000)
     _pct = min(round(_used / _limit * 100) if _limit else 0, 100)
     _bar_color = "#ef4444" if _pct >= 90 else "#6366f1"
     st.markdown(
