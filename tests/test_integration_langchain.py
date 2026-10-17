@@ -75,6 +75,7 @@ def test_a_graph_run_is_one_session_named_after_the_graph(setup_kalytera: Any) -
     assert (t["input"], t["output"], t["session_ended"]) == ("Refund my $40 order A1", "Result: refunded 40", True)
     call = t["tool_calls"][0]
     assert (call["name"], call["input"], call["success"]) == ("refund_api", {"order_id": "A1", "amount": 40}, True)
+    assert call["output"] == "refunded 40"
 
 
 def test_an_enforced_rule_stops_the_tool_and_the_model_hears_why(setup_kalytera: Any) -> None:

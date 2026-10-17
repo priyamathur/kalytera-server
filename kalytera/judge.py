@@ -35,10 +35,17 @@ from kalytera.prompts import (
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5-20251001"
+_DEFAULT_ANTHROPIC_MODEL = "claude-haiku-5-5"
 _DEFAULT_OPENAI_MODEL = "gpt-4o-mini"
 _DEFAULT_GEMINI_MODEL = "gemini-1.5-flash"
 _MAX_TOKENS = 512
+# Haiku 5.5 thinks before answering. Brief thinking caught 40/40 labelled mistakes (4.5: 34/40;
+# 5.5 without thinking: 37/40 with more false alarms) at ~$0.00025 a conversation. Thinking counts
+# toward max_tokens, so it gets more room.
+_THINKING_MODELS: Dict[str, Dict[str, Any]] = {
+    "claude-haiku-5-5": {"thinking": {"type": "adaptive"}, "output_config": {"effort": "low"}},
+}
+_THINKING_MAX_TOKENS = 1500
 _PASS_THRESHOLD = 0.7
 
 _DEFAULT_WEIGHTS: Dict[str, float] = {
@@ -256,9 +263,10 @@ def _call_anthropic(messages: List[Dict[str, str]]) -> str:
     model = os.getenv("KALYTERA_JUDGE_MODEL", "") or _DEFAULT_ANTHROPIC_MODEL
     key = os.getenv("BYOK_ANTHROPIC_API_KEY", "") or os.getenv("ANTHROPIC_API_KEY", "")
     client = anthropic.Anthropic(api_key=key)
+    extra = _THINKING_MODELS.get(model, {})
     response = client.messages.create(
         model=model,
-        max_tokens=_MAX_TOKENS,
+        max_tokens=_THINKING_MAX_TOKENS if extra else _MAX_TOKENS,
         system=[
             {
                 "type": "text",
@@ -267,8 +275,9 @@ def _call_anthropic(messages: List[Dict[str, str]]) -> str:
             }
         ],
         messages=messages,
+        **extra,
     )
-    return response.content[0].text
+    return "".join(b.text for b in response.content if b.type == "text")  # skip thinking blocks
 
 
 def _call_openai(messages: List[Dict[str, str]]) -> str:

@@ -51,6 +51,7 @@ def test_one_conversation_becomes_one_scored_session(traces: List[Dict[str, Any]
     call = t["tool_calls"][0]
     assert call["name"] == "refund_api" and call["success"] is True
     assert call["input"] == {"order_id": "A1", "amount": 40}
+    assert call["output"] == "refunded 40 USD"  # what came back, so the judge can check the reply against it
     assert "latency_ms" in call
 
 
@@ -126,6 +127,7 @@ def test_async_tools_and_sessions(traces: List[Dict[str, Any]]) -> None:
     asyncio.run(agent())
     assert traces[-1]["output"] == "found"
     assert traces[-1]["tool_calls"][0]["name"] == "lookup"
+    assert traces[-1]["tool_calls"][0]["output"] == "found"
 
 
 def test_concurrent_conversations_stay_separate(traces: List[Dict[str, Any]]) -> None:

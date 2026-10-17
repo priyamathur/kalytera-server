@@ -49,7 +49,7 @@ def _before(data: ToolInputGuardrailData) -> ToolGuardrailFunctionOutput:
 def _after(data: ToolOutputGuardrailData) -> ToolGuardrailFunctionOutput:
     ctx = data.context
     t0 = _started.pop(ctx.tool_call_id, time.monotonic())
-    record_call(ctx.tool_name, _args(ctx.tool_arguments), t0, None, outer=True)
+    record_call(ctx.tool_name, _args(ctx.tool_arguments), t0, None, outer=True, output=data.output)
     return ToolGuardrailFunctionOutput.allow()
 
 

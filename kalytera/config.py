@@ -26,7 +26,7 @@ FREE_TIER_SESSION_LIMIT: int = int(os.getenv("FREE_TIER_SESSION_LIMIT", "5000"))
 JUDGE_PROVIDER: str = os.getenv("KALYTERA_JUDGE_PROVIDER", "anthropic")
 
 # Override the specific model within the provider. Leave empty to use the default.
-# Anthropic default: claude-haiku-4-5-20251001
+# Anthropic default: claude-haiku-5-5
 # OpenAI default:    gpt-4o-mini
 # Gemini default:    gemini-1.5-flash
 JUDGE_MODEL: str = os.getenv("KALYTERA_JUDGE_MODEL", "")

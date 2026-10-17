@@ -90,6 +90,7 @@ def test_a_run_is_one_session_named_after_the_agent(setup_kalytera: Any) -> None
     assert t["session_ended"] is True
     call = t["tool_calls"][0]
     assert (call["name"], call["input"], call["success"]) == ("refund_api", {"order_id": "A1", "amount": 40}, True)
+    assert call["output"] == "refunded 40"
 
 
 def test_an_enforced_rule_stops_the_tool_and_the_model_hears_why(setup_kalytera: Any) -> None:

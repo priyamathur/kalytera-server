@@ -159,8 +159,11 @@ def check_call(tool_name: str, call_args: Dict[str, Any], outer: bool = False) -
     return d
 
 
+OUTPUT_CHARS = 2000  # what an action returned, kept so the judge can check the reply against it
+
+
 def record_call(tool_name: str, call_args: Dict[str, Any], t0: float, error: Optional[BaseException],
-                outer: bool = False) -> None:
+                outer: bool = False, output: Any = None) -> None:
     """Attach a finished tool call to the current session, if there is one (once, if two layers saw it)."""
     s = _current.get()
     if s is None:
@@ -175,6 +178,9 @@ def record_call(tool_name: str, call_args: Dict[str, Any], t0: float, error: Opt
                             "latency_ms": int((time.monotonic() - t0) * 1000)}
     if error is not None:
         call["error"] = f"{type(error).__name__}: {error}"
+    elif output is not None:
+        output = getattr(output, "content", output)  # LangChain hands back a ToolMessage
+        call["output"] = str(output)[:OUTPUT_CHARS]
     s._record_call(call)
 
 
@@ -216,8 +222,8 @@ def tool(fn: Optional[F] = None, *, name: Optional[str] = None,
         def check(call_args: Dict[str, Any]) -> Optional[Decision]:
             return check_call(tool_name, call_args)
 
-        def done(call_args: Dict[str, Any], t0: float, error: Optional[BaseException]) -> None:
-            record_call(tool_name, call_args, t0, error)
+        def done(call_args: Dict[str, Any], t0: float, error: Optional[BaseException], result: Any) -> None:
+            record_call(tool_name, call_args, t0, error, output=result)
 
         def blocked(d: Decision) -> Any:
             if on_block is not None:
@@ -231,14 +237,15 @@ def tool(fn: Optional[F] = None, *, name: Optional[str] = None,
                 d = check(call_args)
                 if d is not None:
                     return blocked(d)
-                t0, error = time.monotonic(), None
+                t0, error, result = time.monotonic(), None, None
                 try:
-                    return await func(*args, **kwargs)
+                    result = await func(*args, **kwargs)
+                    return result
                 except BaseException as exc:
                     error = exc
                     raise
                 finally:
-                    done(call_args, t0, error)
+                    done(call_args, t0, error, result)
             return async_wrapper  # type: ignore[return-value]
 
         @functools.wraps(func)
@@ -247,14 +254,15 @@ def tool(fn: Optional[F] = None, *, name: Optional[str] = None,
             d = check(call_args)
             if d is not None:
                 return blocked(d)
-            t0, error = time.monotonic(), None
+            t0, error, result = time.monotonic(), None, None
             try:
-                return func(*args, **kwargs)
+                result = func(*args, **kwargs)
+                return result
             except BaseException as exc:
                 error = exc
                 raise
             finally:
-                done(call_args, t0, error)
+                done(call_args, t0, error, result)
         return wrapper  # type: ignore[return-value]
 
     return wrap(fn) if fn is not None else wrap

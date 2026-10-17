@@ -364,7 +364,7 @@ def test_call_anthropic_uses_byok_key_first(monkeypatch: object) -> None:
 
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=_good_json())]
+    mock_response.content = [MagicMock(type="text", text=_good_json())]
     mock_client.messages.create.return_value = mock_response
 
     with patch("anthropic.Anthropic", return_value=mock_client) as mock_cls:
@@ -379,7 +379,7 @@ def test_call_anthropic_falls_back_to_env_key(monkeypatch: object) -> None:
 
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=_good_json())]
+    mock_response.content = [MagicMock(type="text", text=_good_json())]
     mock_client.messages.create.return_value = mock_response
 
     with patch("anthropic.Anthropic", return_value=mock_client) as mock_cls:
@@ -394,7 +394,7 @@ def test_call_anthropic_sends_system_with_cache_control(monkeypatch: object) -> 
 
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=_good_json())]
+    mock_response.content = [MagicMock(type="text", text=_good_json())]
     mock_client.messages.create.return_value = mock_response
 
     with patch("anthropic.Anthropic", return_value=mock_client):
@@ -542,7 +542,7 @@ def test_end_to_end_score_step_via_anthropic_provider(monkeypatch: object) -> No
 
     mock_client = MagicMock()
     mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=_good_json())]
+    mock_response.content = [MagicMock(type="text", text=_good_json())]
     mock_client.messages.create.return_value = mock_response
 
     with patch("anthropic.Anthropic", return_value=mock_client):
@@ -607,3 +607,29 @@ def test_long_sessions_share_a_text_budget() -> None:
     steps = [StepContext(step_number=i, step_name="s", input="x" * 5000, output="y" * 5000) for i in range(1, 41)]
     content = build_session_prompt(steps)[0]["content"]
     assert len(content) < SESSION_TEXT_BUDGET * 1.6 and "more characters]" in content
+
+
+def test_call_anthropic_thinks_briefly_and_returns_only_the_answer(monkeypatch: object) -> None:
+    monkeypatch.delenv("KALYTERA_JUDGE_MODEL", raising=False)
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.content = [MagicMock(type="thinking", text=None), MagicMock(type="text", text=_good_json())]
+    mock_client.messages.create.return_value = mock_response
+
+    with patch("anthropic.Anthropic", return_value=mock_client):
+        assert _call_anthropic([{"role": "user", "content": "test"}]) == _good_json()
+
+    kw = mock_client.messages.create.call_args.kwargs
+    assert kw["model"] == "claude-haiku-5-5"
+    assert kw["thinking"] == {"type": "adaptive"} and kw["output_config"] == {"effort": "low"}
+    assert kw["max_tokens"] > 512  # thinking counts toward the limit; 512 cut the answer off
+
+
+def test_call_anthropic_other_models_get_no_thinking_settings(monkeypatch: object) -> None:
+    monkeypatch.setenv("KALYTERA_JUDGE_MODEL", "claude-haiku-4-5-20251001")
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = MagicMock(content=[MagicMock(type="text", text="x")])
+    with patch("anthropic.Anthropic", return_value=mock_client):
+        _call_anthropic([{"role": "user", "content": "test"}])
+    kw = mock_client.messages.create.call_args.kwargs
+    assert "thinking" not in kw and kw["max_tokens"] == 512

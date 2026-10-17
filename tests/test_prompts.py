@@ -2,6 +2,7 @@
 import json
 
 from kalytera.prompts import (
+    build_session_prompt,
     EXPECTED_KEYS,
     FAILURE_TYPES,
     StepContext,
@@ -118,8 +119,25 @@ def test_build_prompt_tool_calls_formatted() -> None:
     )
     msgs = build_prompt(step, prior_steps=[])
     content = msgs[0]["content"]
-    assert "payment_api(ok)" in content
-    assert "billing_db(failed)" in content
+    assert "payment_api() ok" in content
+    assert "billing_db() FAILED: no detail" in content
+
+
+def test_session_prompt_shows_what_each_action_was_given_and_returned() -> None:
+    """Without these the judge can't see a $450 refund for a $45 request, or a reply the result contradicts."""
+    steps = [StepContext(1, "turn 1", "Refund the $45 fee on E5", "Refunded.", tool_calls=[
+        {"name": "refund_api", "input": {"order_id": "E5", "amount": 450}, "output": '{"refunded": 450}',
+         "success": True},
+        *[{"name": "check_stock", "input": {"sku": "551"}, "success": False, "error": "timeout"}] * 3,
+        {"name": "send_money", "input": {"amount": 900}, "success": False, "blocked": "DENY",
+         "rule_id": "cap", "error": "over limit"},
+    ])]
+    content = build_session_prompt(steps)[0]["content"]
+    assert 'refund_api({"order_id": "E5", "amount": 450}) ok -> {"refunded": 450}' in content
+    assert 'check_stock({"sku": "551"}) FAILED: timeout  [repeated 3 times]' in content
+    assert "BLOCKED by rule cap: over limit" in content
+    long = [StepContext(1, "t", "q", "a", tool_calls=[{"name": "x", "input": {"blob": "y" * 5000}, "success": True}])]
+    assert "more characters]" in build_session_prompt(long)[0]["content"]  # big payloads are clipped
 
 
 # --- retry prompt ---

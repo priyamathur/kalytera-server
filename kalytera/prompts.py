@@ -2,6 +2,7 @@
 agentiq/prompts.py — judge prompt construction. Core IP.
 Public API: build_prompt(), build_retry_prompt(), system_prompt().
 """
+import json
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -185,10 +186,12 @@ def build_session_prompt(steps: List[StepContext],
         f"Score the overall session quality on all dimensions (0.0 to 1.0):\n"
         f"1. accuracy: Were responses factually correct given available context?\n"
         f"2. goal_alignment: Did the agent serve what the user actually needed?\n"
-        f"3. decision_quality: Was reasoning sound and tool selection appropriate?\n"
+        f"3. decision_quality: Was reasoning sound, and was each action the right one, called with the "
+        f"values the user asked for (amount, record, recipient)?\n"
         f"4. completeness: Was the user's request fully resolved by the end?\n"
         f"5. helpfulness: Did the session practically help the user accomplish their goal?\n"
-        f"6. factuality: Were all claims verifiable and grounded — no hallucinations?\n"
+        f"6. factuality: Does every claim match what the actions returned? Saying something succeeded "
+        f"when its action failed, or stating facts an action contradicts, is a hallucination.\n"
         f"{extra_dims}\n"
         f"If the session failed, identify the failure type (a custom dimension's name if that is what failed):\n"
         f"{failure_list}\n\n"
@@ -214,12 +217,12 @@ def _format_all_steps(steps: List[StepContext]) -> str:
     limit = max(MIN_FIELD_CHARS, min(MAX_FIELD_CHARS, SESSION_TEXT_BUDGET // (2 * len(steps))))
     lines = []
     for s in steps:
-        tool_text = _format_tool_calls(s.tool_calls)
+        tool_text = _format_tool_calls(s.tool_calls, min(ACTION_FIELD_CHARS, limit))
         lines.append(
             f"  Step {s.step_number} ({s.step_name}):\n"
             f"    Input:  {_clip(s.input, limit)!r}\n"
             f"    Output: {_clip(s.output, limit)!r}\n"
-            f"    Tools:  {tool_text}"
+            f"    Actions: {tool_text}"
         )
     return "\n".join(lines)
 
@@ -236,12 +239,37 @@ def _format_prior_steps(steps: List[StepContext]) -> str:
     return "\n".join(lines)
 
 
-def _format_tool_calls(tool_calls: List[Dict[str, Any]]) -> str:
+ACTION_FIELD_CHARS = 400  # per action input and result; repeats of the same call are collapsed
+
+
+def _short(value: Any, limit: int) -> str:
+    if value is None or value == "" or value == {}:
+        return ""
+    text = value if isinstance(value, str) else json.dumps(value, default=str, ensure_ascii=False)
+    return _clip(text, limit)
+
+
+def _format_tool_calls(tool_calls: List[Dict[str, Any]], limit: int = ACTION_FIELD_CHARS) -> str:
+    """Each action with what it was given and what came back, so the judge can catch a wrong amount,
+    the wrong record, or a reply that contradicts the result, not just failed actions."""
     if not tool_calls:
         return "none"
-    parts = []
+    lines: List[str] = []
+    counts: List[int] = []
     for tc in tool_calls:
         name = tc.get("name", "unknown")
-        success = tc.get("success", True)
-        parts.append(f"{name}({'ok' if success else 'failed'})")
-    return ", ".join(parts)
+        args = _short(tc.get("input", tc.get("args")), limit)
+        if tc.get("blocked"):
+            result = f"BLOCKED by rule {tc.get('rule_id')}: {_short(tc.get('error'), limit)}"
+        elif tc.get("success", True):
+            out = _short(tc.get("output"), limit)
+            result = f"ok -> {out}" if out else "ok"
+        else:
+            result = f"FAILED: {_short(tc.get('error') or tc.get('output'), limit) or 'no detail'}"
+        line = f"{name}({args}) {result}"
+        if lines and lines[-1] == line:
+            counts[-1] += 1
+        else:
+            lines.append(line)
+            counts.append(1)
+    return "".join(f"\n      - {l}" + (f"  [repeated {n} times]" if n > 1 else "") for l, n in zip(lines, counts))

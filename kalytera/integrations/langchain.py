@@ -45,14 +45,15 @@ def _install_tools() -> None:
         d = check_call(self.name, call_args, outer=True)
         if d is not None:
             return _blocked(d, self, kwargs.get("tool_call_id"))
-        t0, error = time.monotonic(), None
+        t0, error, result = time.monotonic(), None, None
         try:
-            return orig_run(self, tool_input, *args, **kwargs)
+            result = orig_run(self, tool_input, *args, **kwargs)
+            return result
         except BaseException as exc:
             error = exc
             raise
         finally:
-            record_call(self.name, call_args, t0, error, outer=True)
+            record_call(self.name, call_args, t0, error, outer=True, output=result)
 
     @functools.wraps(orig_arun)
     async def arun(self: BaseTool, tool_input: Any, *args: Any, **kwargs: Any) -> Any:
@@ -60,14 +61,15 @@ def _install_tools() -> None:
         d = check_call(self.name, call_args, outer=True)
         if d is not None:
             return _blocked(d, self, kwargs.get("tool_call_id"))
-        t0, error = time.monotonic(), None
+        t0, error, result = time.monotonic(), None, None
         try:
-            return await orig_arun(self, tool_input, *args, **kwargs)
+            result = await orig_arun(self, tool_input, *args, **kwargs)
+            return result
         except BaseException as exc:
             error = exc
             raise
         finally:
-            record_call(self.name, call_args, t0, error, outer=True)
+            record_call(self.name, call_args, t0, error, outer=True, output=result)
 
     BaseTool.run = run  # type: ignore[method-assign]
     BaseTool.arun = arun  # type: ignore[method-assign]
