@@ -191,6 +191,8 @@ def _draft_for_pattern(db: Session, pattern: LossPattern) -> Dict[str, Any]:
     base = db.query(EvalResult.session_id).filter(EvalResult.agent_id == pattern.agent_id)
     if pattern.pattern_type == "workflow_step":
         failing_q = base.filter(EvalResult.passed.is_(False), EvalResult.failure_step == pattern.pattern_value)
+    elif pattern.pattern_type == "action":
+        failing_q = base.filter(EvalResult.passed.is_(False), EvalResult.failure_action == pattern.pattern_value)
     else:
         failing_q = base.filter(EvalResult.passed.is_(False), EvalResult.failure_type == pattern.pattern_value)
     failing = [r[0] for r in failing_q.distinct().limit(DRAFT_SESSION_LIMIT).all()]

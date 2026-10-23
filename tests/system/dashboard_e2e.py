@@ -352,7 +352,7 @@ t = texts(at)
 check(at.radio[0].value == "🔴  Failure Feed", "lands on the sample agent's Failure Feed")
 check('ob-step done"><span class="n">✓</span><span class="t">Find the problem' in t
       and 'ob-step now"><span class="n">2</span><span class="t">Make it a rule' in t, "stepper: found ✓, now make a rule")
-check('<span class="ff-chip">hallucination</span>' in t and "Suggested rule</span>Block <code>refund_api</code>" in t,
+check('<span class="ff-chip">refund api</span>' in t and "Suggested rule</span>Block <code>refund_api</code>" in t,
       "problem found and a rule is suggested")
 run(button(at, "⚡ Make it a rule").click())
 t = texts(at)

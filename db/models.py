@@ -67,6 +67,7 @@ class EvalResult(Base):
     evaluated_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
     custom_scores = Column(Text, nullable=True)  # JSON: {"helpfulness": 0.85}
     judge_passed = Column(Boolean, nullable=True)  # the judge's own verdict, kept when a person overrules it
+    failure_action = Column(String, nullable=True)  # the action the mistake was about (refund_api); problems group by it
 
 
 class LossPattern(Base):
@@ -74,7 +75,7 @@ class LossPattern(Base):
 
     id = Column(String, primary_key=True, default=_uuid)
     agent_id = Column(String, nullable=False, index=True)
-    pattern_type = Column(String, nullable=False)   # intent | workflow_step | tool_call
+    pattern_type = Column(String, nullable=False)   # action | failure_type | workflow_step
     pattern_value = Column(String, nullable=False)  # e.g. 'billing_dispute' or 'step_3'
     failure_count = Column(Integer, nullable=False)
     total_count = Column(Integer, nullable=False)

@@ -38,18 +38,21 @@ def run_analysis(agent_id: str, db: Any) -> int:
     total_failures = len(all_failures)
 
     if total_failures == 0:
+        _drop_stale_patterns(agent_id, set(), db)
         logger.info("[analyzer] done agent=%s failures=0 patterns=0", agent_id)
         return 0
 
     patterns_written = 0
+    found: set = set()
     for ptype, pvalue, group in _group_failures(all_failures):
         if len(group) < MIN_FAILURE_COUNT:
             continue
+        found.add((ptype, pvalue))
 
         total_for_group = _total_for_group(ptype, pvalue, agent_id, total_evals, db)
         failure_rate = len(group) / total_for_group if total_for_group > 0 else 0.0
         pct_of_all = len(group) / total_failures if total_failures > 0 else 0.0
-        root_cause = _most_common_reason(group)
+        root_cause = _existing_title(agent_id, ptype, pvalue, len(group), db) or _problem_title(group)
         is_worsening = _check_worsening(ptype, pvalue, agent_id, db)
 
         _upsert_pattern(
@@ -68,6 +71,7 @@ def run_analysis(agent_id: str, db: Any) -> int:
         )
         patterns_written += 1
 
+    _drop_stale_patterns(agent_id, found, db)
     elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
     logger.info(
         "[analyzer] done agent=%s failures=%d patterns=%d elapsed=%.2fs",
@@ -114,25 +118,75 @@ def _group_failures(
     failures: List[Any],
 ) -> Generator[Tuple[str, str, List[Any]], None, None]:
     """
-    Yield (pattern_type, pattern_value, group) for two pattern types:
-      - workflow_step: grouped by failure_step
-      - failure_type:  grouped by failure_type string
+    Yield (pattern_type, pattern_value, group):
+      - action:        failures about the same action (refund_api): one problem per thing that goes wrong
+      - failure_type:  failures with no single action, grouped by the judge's label
+      - workflow_step: failures at the same named step ('billing_dispute'); bare step numbers are skipped
+    The judge labels one mistake inconsistently (an overcharge is 'wrong_answer' one time, 'hallucination'
+    the next), so a failure tied to an action is grouped by the action only.
     """
     by_step: Dict[str, List[Any]] = {}
+    by_action: Dict[str, List[Any]] = {}
     by_type: Dict[str, List[Any]] = {}
 
     for row in failures:
-        if row.failure_step is not None:
+        if row.failure_step is not None and not _is_step_number(row.failure_step):
             key = str(row.failure_step)   # step name (text), e.g. 'billing_dispute'
             by_step.setdefault(key, []).append(row)
-        if row.failure_type:
+        action = getattr(row, "failure_action", None)
+        if isinstance(action, str) and action:
+            by_action.setdefault(action, []).append(row)
+        elif row.failure_type:
             by_type.setdefault(row.failure_type, []).append(row)
 
     for pvalue, group in by_step.items():
         yield "workflow_step", pvalue, group
 
+    for pvalue, group in by_action.items():
+        yield "action", pvalue, group
+
     for pvalue, group in by_type.items():
         yield "failure_type", pvalue, group
+
+
+def _is_step_number(step: Any) -> bool:
+    """1 or 'turn 3' (how imported conversations name turns): a position, not a named step like
+    'billing_dispute', so grouping by it says nothing."""
+    s = str(step).strip().lower()
+    return s.isdigit() or (s.startswith("turn ") and s[5:].isdigit())
+
+
+PROBLEM_TITLE_PROMPT = """You name a recurring problem in an AI agent's production conversations.
+You get the judge's explanations of several failed conversations that were grouped together.
+Write ONE short sentence (at most 16 words) saying what the agent keeps doing wrong, in plain words a
+support lead understands. Name the action involved (a refund, an order lookup) if there is one.
+Don't quote amounts, IDs or names from a single conversation. If the explanations describe different
+mistakes, name the most common one. Reply with the sentence only."""
+_TITLE_SAMPLE = 25      # explanations shown to the model
+_TITLE_MAX_CHARS = 160
+
+
+def _summarize_reasons(reasons: List[str]) -> Optional[str]:
+    """One plain sentence for a group of failure explanations, or None if the model can't be reached."""
+    from kalytera import judge
+
+    listed = "\n".join(f"- {r[:300]}" for r in reasons[:_TITLE_SAMPLE])
+    title = judge._call_judge([{"role": "user", "content": f"Explanations:\n{listed}"}],
+                              system=PROBLEM_TITLE_PROMPT).strip().strip('"').strip()
+    if not title or len(title) > _TITLE_MAX_CHARS or title.startswith("{"):
+        return None
+    return title
+
+
+def _problem_title(group: List[Any]) -> Optional[str]:
+    """What the problem is, in one sentence. One explanation alone describes one conversation, often with
+    its own amounts, so several distinct ones are summarized; the most common one is the fallback."""
+    reasons = [r.failure_reason for r in group if r.failure_reason]
+    if len(set(reasons)) > 1:
+        title = _summarize_reasons(sorted(set(reasons), key=reasons.count, reverse=True))
+        if title:
+            return title
+    return _most_common_reason(group)
 
 
 def _most_common_reason(group: List[Any]) -> Optional[str]:
@@ -141,6 +195,31 @@ def _most_common_reason(group: List[Any]) -> Optional[str]:
     if not reasons:
         return None
     return Counter(reasons).most_common(1)[0][0]
+
+
+def _drop_stale_patterns(agent_id: str, found: set, db: Any) -> None:
+    """Remove problems this run didn't find: fixed, below the threshold, or now grouped another way."""
+    from db.models import LossPattern
+
+    stale = [p for p in db.query(LossPattern).filter(LossPattern.agent_id == agent_id).all()
+             if (p.pattern_type, p.pattern_value) not in found]
+    for p in stale:
+        db.delete(p)
+    if stale:
+        db.commit()
+
+
+def _existing_title(agent_id: str, ptype: str, pvalue: str, count: int, db: Any) -> Optional[str]:
+    """The current name of this problem, if it hasn't changed size since it was named."""
+    from db.models import LossPattern
+
+    row = (db.query(LossPattern)
+           .filter(LossPattern.agent_id == agent_id, LossPattern.pattern_type == ptype,
+                   LossPattern.pattern_value == pvalue)
+           .first())
+    if row is None or row.failure_count != count or not isinstance(row.root_cause, str):
+        return None
+    return row.root_cause
 
 
 def _check_worsening(
@@ -200,8 +279,10 @@ def _count_group_in_window(
     )
     if pattern_type == "workflow_step":
         q = q.filter(EvalResult.failure_step == pattern_value)
+    elif pattern_type == "action":
+        q = q.filter(EvalResult.failure_action == pattern_value)
     elif pattern_type == "failure_type":
-        q = q.filter(EvalResult.failure_type == pattern_value)
+        q = q.filter(EvalResult.failure_type == pattern_value, EvalResult.failure_action.is_(None))
     return q.count()
 
 

@@ -118,17 +118,22 @@ def refresh_shared_facts(db: Session, now: Optional[datetime] = None) -> int:
                 continue  # no profile, nothing to compare with
             seg = (ao.industry, ao.agent_type, ao.system or "custom")
             for p in db.query(LossPattern).filter(LossPattern.agent_id == ao.agent_id,
-                                                  LossPattern.pattern_type == "failure_type"):
-                if p.pattern_value not in FAILURE_TYPES:
-                    continue  # custom dimension names can identify a company
-                sessions = [s for (s,) in db.query(EvalResult.session_id).filter(
+                                                  LossPattern.pattern_type.in_(("failure_type", "action"))):
+                failing = db.query(EvalResult.session_id, EvalResult.failure_type).filter(
                     EvalResult.agent_id == ao.agent_id, EvalResult.passed.is_(False),
-                    EvalResult.failure_type == p.pattern_value).distinct().limit(SAMPLE_SESSIONS)]
+                    (EvalResult.failure_action if p.pattern_type == "action" else EvalResult.failure_type)
+                    == p.pattern_value).limit(SAMPLE_SESSIONS * 4).all()
+                # an action problem is shared as its most common failure type; never the action's own name
+                ftype = p.pattern_value if p.pattern_type == "failure_type" else \
+                    (Counter(t for _, t in failing if t).most_common(1) or [("", 0)])[0][0]
+                if ftype not in FAILURE_TYPES:
+                    continue  # custom dimension names can identify a company
+                sessions = list(dict.fromkeys(sid for sid, _ in failing))[:SAMPLE_SESSIONS]
                 top = _failed_categories(db, ao.agent_id, sessions).most_common(1)
                 cat = top[0][0] if top else ""
-                fid = _fact_id(h, seg, "problem", p.pattern_value, cat, "")
+                fid = _fact_id(h, seg, "problem", ftype, cat, "")
                 facts[fid] = GlobalFact(id=fid, org_hash=h, industry=seg[0], agent_type=seg[1], system=seg[2],
-                                        kind="problem", failure_type=p.pattern_value, action_category=cat,
+                                        kind="problem", failure_type=ftype, action_category=cat,
                                         rule_shape="", last_seen=now)
             for row in _current_rows(db, org.id, ao.agent_id):
                 rule = _body(row)

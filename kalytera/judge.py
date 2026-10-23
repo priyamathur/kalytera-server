@@ -170,6 +170,7 @@ def evaluate_session(session_id: str, db: Any) -> Optional[Dict[str, Any]]:
         agent_id=ended_log.agent_id,
         evaluated_at=datetime.now(timezone.utc),
         custom_scores=custom_scores_json,
+        failure_action=failure_action(steps, result),
         **result_for_db,
     )
     db.add(row)
@@ -228,6 +229,7 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
         agent_id=log.agent_id,
         evaluated_at=datetime.now(timezone.utc),
         custom_scores=custom_scores_json,
+        failure_action=failure_action([step], result),
         **result_for_db,
     )
     db.add(row)
@@ -236,29 +238,56 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
     return result
 
 
+
+def failure_action(steps: List[StepContext], result: Dict[str, Any]) -> Optional[str]:
+    """
+    The action a failed conversation's mistake was about, so problems group by what went wrong
+    (refunds, order lookups) rather than by the judge's label, which varies for the same mistake.
+    One action in the conversation: that one. Several: the one the judge's explanation names, else the
+    one that failed. None when it can't tell; the problem then groups by failure type.
+    """
+    if result.get("passed") is not False:
+        return None
+    calls = [c for st in steps for c in (st.tool_calls or []) if isinstance(c, dict) and c.get("name")]
+    names = list(dict.fromkeys(str(c["name"]) for c in calls))
+    if len(names) <= 1:
+        return names[0] if names else None
+    reason = (result.get("failure_reason") or "").lower()
+
+    def named(name: str) -> bool:
+        words = [w for w in name.lower().replace("-", "_").split("_") if len(w) > 2 and w not in ("api", "tool", "get")]
+        return name.lower() in reason or any(w in reason for w in words)
+
+    for pick in ([n for n in names if named(n)],
+                 list(dict.fromkeys(str(c["name"]) for c in calls if c.get("success") is False or c.get("error")))):
+        if len(pick) == 1:
+            return pick[0]
+    return None
+
 # ---------------------------------------------------------------------------
 # Provider dispatch
 # ---------------------------------------------------------------------------
 
-def _call_judge(messages: List[Dict[str, str]]) -> str:
+def _call_judge(messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
     """
     Dispatch to the configured LLM judge provider. Never raises.
     Reads KALYTERA_JUDGE_PROVIDER at call time so env changes take effect immediately.
+    `system` replaces the judging instructions (e.g. to name a problem); default: judge a conversation.
     """
     provider = os.getenv("KALYTERA_JUDGE_PROVIDER", "anthropic").lower()
     try:
         if provider == "openai":
-            return _call_openai(messages)
+            return _call_openai(messages, system)
         elif provider in ("google", "gemini"):
-            return _call_gemini(messages)
+            return _call_gemini(messages, system)
         else:
-            return _call_anthropic(messages)
+            return _call_anthropic(messages, system)
     except Exception as exc:
         logger.error("Judge call failed [provider=%s]: %s", provider, exc)
         return ""
 
 
-def _call_anthropic(messages: List[Dict[str, str]]) -> str:
+def _call_anthropic(messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
     """Call Claude Haiku with prompt caching on the system prompt."""
     model = os.getenv("KALYTERA_JUDGE_MODEL", "") or _DEFAULT_ANTHROPIC_MODEL
     key = os.getenv("BYOK_ANTHROPIC_API_KEY", "") or os.getenv("ANTHROPIC_API_KEY", "")
@@ -270,7 +299,7 @@ def _call_anthropic(messages: List[Dict[str, str]]) -> str:
         system=[
             {
                 "type": "text",
-                "text": system_prompt(),
+                "text": system or system_prompt(),
                 "cache_control": {"type": "ephemeral"},
             }
         ],
@@ -280,14 +309,14 @@ def _call_anthropic(messages: List[Dict[str, str]]) -> str:
     return "".join(b.text for b in response.content if b.type == "text")  # skip thinking blocks
 
 
-def _call_openai(messages: List[Dict[str, str]]) -> str:
+def _call_openai(messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
     """Call OpenAI (gpt-4o-mini by default)."""
     import openai as openai_lib  # lazy — only required when provider=openai
     model = os.getenv("KALYTERA_JUDGE_MODEL", "") or _DEFAULT_OPENAI_MODEL
     key = os.getenv("BYOK_OPENAI_API_KEY", "") or os.getenv("OPENAI_API_KEY", "")
     client = openai_lib.OpenAI(api_key=key)
     full_messages: List[Dict[str, str]] = [
-        {"role": "system", "content": system_prompt()},
+        {"role": "system", "content": system or system_prompt()},
         *messages,
     ]
     resp = client.chat.completions.create(
@@ -299,13 +328,13 @@ def _call_openai(messages: List[Dict[str, str]]) -> str:
     return content if content is not None else ""
 
 
-def _call_gemini(messages: List[Dict[str, str]]) -> str:
+def _call_gemini(messages: List[Dict[str, str]], system: Optional[str] = None) -> str:
     """Call Google Gemini (gemini-1.5-flash by default)."""
     import google.generativeai as genai  # lazy — only required when provider=gemini
     model_name = os.getenv("KALYTERA_JUDGE_MODEL", "") or _DEFAULT_GEMINI_MODEL
     key = os.getenv("BYOK_GOOGLE_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
     genai.configure(api_key=key)
-    model = genai.GenerativeModel(model_name, system_instruction=system_prompt())
+    model = genai.GenerativeModel(model_name, system_instruction=system or system_prompt())
     user_text = messages[-1]["content"] if messages else ""
     response = model.generate_content(
         user_text,

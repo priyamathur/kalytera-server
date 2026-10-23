@@ -178,3 +178,35 @@ def test_turning_on_slack_doesnt_replay_old_problems(cx: SimpleNamespace) -> Non
     assert db.query(ProblemAlert).count() >= 1
     db.close()
     assert cx.client.delete("/alerts/slack").json() == {"slack": False}
+
+
+def test_slack_message_says_what_goes_wrong_how_often_and_where_to_look() -> None:
+    p = LossPattern(id="p1", agent_id="support-bot-org1", pattern_type="failure_type", pattern_value="hallucination",
+                    failure_count=6, total_count=29, failure_rate=0.2, pct_of_all_failures=0.4,
+                    root_cause="Says orders were delivered when tracking shows them in transit.", is_worsening=False,
+                    first_seen=datetime.now(timezone.utc), last_seen=datetime.now(timezone.utc))
+    msg = conn_api.slack_message([p], [], "org-1")
+    assert msg["blocks"][0]["text"]["text"] == ":rotating_light: *A new problem in support-bot*"  # its name, no suffix
+    problem = msg["blocks"][1]
+    assert problem["text"]["text"] == ("*Says orders were delivered when tracking shows them in transit*\n"
+                                       "6 of 29 conversations")
+    assert problem["accessory"]["text"]["text"] == "See conversations"
+    assert msg["text"] == ("A new problem in support-bot: Says orders were delivered when tracking shows them "
+                           "in transit (6 of 29 conversations)")
+
+
+def test_different_mistakes_become_different_problems(cx: SimpleNamespace) -> None:
+    """The judge gives one label ('hallucination') to overcharged refunds and false delivery claims alike;
+    grouped by the action involved, they're two problems, each named for what goes wrong."""
+    def tracking(i: int) -> Dict[str, Any]:
+        return {"id": f"tk{i}", "started_at": "2026-10-01T10:00:00+00:00",
+                "turns": [{"user": "Where's my order?", "assistant": "Delivered yesterday.",
+                           "actions": [{"name": "track_order", "input": {"order": i}, "success": False,
+                                        "error": "status: in transit"}]}]}
+    cx.convs += [tracking(i) for i in range(6)]
+    agent = _connect(cx)["agent_id"]
+    db = cx.session()
+    problems = {(p.pattern_type, p.pattern_value): p.failure_count
+                for p in db.query(LossPattern).filter(LossPattern.agent_id == agent)}
+    assert problems == {("action", "refund_api"): 5, ("action", "track_order"): 6}
+    db.close()

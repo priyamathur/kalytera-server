@@ -63,7 +63,7 @@ def _apply_schema_additions() -> None:
               AND column_name IN (
                 'failure_step', 'helpfulness', 'factuality', 'custom_scores',
                 'weight_helpfulness', 'weight_factuality', 'custom_metrics', 'judge_passed',
-                'retention_days', 'share_patterns', 'industry', 'agent_type', 'system'
+                'retention_days', 'share_patterns', 'industry', 'agent_type', 'system', 'failure_action'
               )
         """)
         cols: dict = {(r[0], r[1]): r[2] for r in cur.fetchall()}
@@ -98,6 +98,8 @@ def _apply_schema_additions() -> None:
             _ddl("ALTER TABLE organizations ADD COLUMN retention_days INTEGER")
         if ("eval_results", "judge_passed") not in cols:
             _ddl("ALTER TABLE eval_results ADD COLUMN judge_passed BOOLEAN")
+        if ("eval_results", "failure_action") not in cols:
+            _ddl("ALTER TABLE eval_results ADD COLUMN failure_action TEXT")
         if ("agent_quality_configs", "weight_helpfulness") not in cols:
             _ddl("ALTER TABLE agent_quality_configs ADD COLUMN weight_helpfulness FLOAT DEFAULT 0.1")
         if ("agent_quality_configs", "weight_factuality") not in cols:

@@ -129,24 +129,39 @@ def _problem_link(p: LossPattern) -> str:
     return f"{DASHBOARD}/?{urlencode({'agent': p.agent_id, 'problem': p.id})}"
 
 
-def _describe(p: LossPattern) -> str:
-    what = (p.root_cause or str(p.pattern_value).replace("_", " ")).rstrip(".")
-    sessions = f"{p.failure_count} conversation{'s' if p.failure_count != 1 else ''}"
-    pct = f" ({round(p.failure_rate * 100)}% of them)" if p.total_count else ""
-    return f"*{what}* — {sessions}{pct}"
+def _agent_name(agent_id: str, org_id: str) -> str:
+    """The name the customer gave the agent: 'support-bot', not 'support-bot-a3ead0'."""
+    return agent_id.removesuffix(f"-{org_id.replace('-', '')[:6]}") or agent_id
 
 
-def slack_message(new: List[LossPattern], worse: List[LossPattern]) -> Dict[str, Any]:
-    """One message per agent per analysis: new problems first, then ones getting worse."""
-    blocks: List[Dict[str, Any]] = []
-    agent = (new or worse)[0].agent_id
-    title = (f"{len(new)} new problem{'s' if len(new) != 1 else ''}" if new else "A problem is getting worse")
-    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{title}* in `{agent}`"}})
-    for p, label in [(p, "New") for p in new[:5]] + [(p, "Getting worse") for p in worse[:5]]:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"{label}: {_describe(p)}"},
-                       "accessory": {"type": "button", "text": {"type": "plain_text", "text": "Open"},
+def _what(p: LossPattern) -> str:
+    return (p.root_cause or str(p.pattern_value).replace("_", " ")).strip().rstrip(".")
+
+
+def _how_often(p: LossPattern) -> str:
+    n = f"{p.failure_count} conversation{'s' if p.failure_count != 1 else ''}"
+    return f"{p.failure_count} of {p.total_count} conversations" if p.total_count else n
+
+
+def slack_message(new: List[LossPattern], worse: List[LossPattern], org_id: str = "") -> Dict[str, Any]:
+    """One message per agent per analysis: new problems first, then ones getting worse. Each says what the
+    agent keeps doing wrong, how often, and links to the conversations, where it can be stopped with a rule."""
+    agent = _agent_name((new or worse)[0].agent_id, org_id)
+    if new:
+        title = f"{'A new problem' if len(new) == 1 else f'{len(new)} new problems'} in {agent}"
+    else:
+        title = f"A problem in {agent} is getting worse"
+    blocks: List[Dict[str, Any]] = [{"type": "section", "text": {"type": "mrkdwn", "text": f":rotating_light: *{title}*"}}]
+    for p, label in [(p, "") for p in new[:5]] + [(p, "Getting worse · ") for p in worse[:5]]:
+        blocks.append({"type": "section",
+                       "text": {"type": "mrkdwn", "text": f"*{_what(p)}*\n{label}{_how_often(p)}"},
+                       "accessory": {"type": "button", "text": {"type": "plain_text", "text": "See conversations"},
                                      "url": _problem_link(p)}})
-    text = f"{title} in {agent}: " + "; ".join(_describe(p).replace("*", "") for p in (new + worse)[:3])
+    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text":
+                   "Open a problem to read the conversations and add a rule that stops it."}]})
+    first = (new + worse)[0]
+    more = len(new + worse) - 1
+    text = f"{title}: {_what(first)} ({_how_often(first)})" + (f" and {more} more" if more else "")
     return {"text": text, "blocks": blocks}
 
 
@@ -184,7 +199,7 @@ def send_alerts(db: Session, now: Optional[datetime] = None, org_id: Optional[st
             if not new and not worse:
                 continue
             try:
-                _post_slack(url, slack_message(new, worse))
+                _post_slack(url, slack_message(new, worse, slack.org_id))
             except Exception as exc:
                 slack.status, slack.last_error = "error", str(exc)[:500]
                 db.commit()

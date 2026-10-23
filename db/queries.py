@@ -619,7 +619,8 @@ def get_pattern_sessions(
     Failed sessions in one loss pattern, newest first, one entry per session:
     {session_id, failed_at, failure_type, failure_step, overall_score, failure_reason}.
     """
-    column = EvalResult.failure_step if pattern_type == "workflow_step" else EvalResult.failure_type
+    column = {"workflow_step": EvalResult.failure_step,
+              "action": EvalResult.failure_action}.get(pattern_type, EvalResult.failure_type)
     rows = (
         db.query(EvalResult)
         .filter(

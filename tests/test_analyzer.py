@@ -338,3 +338,54 @@ def test_run_analysis_upserts_existing_pattern() -> None:
     db.add.assert_not_called()
     # The existing mock should have its attributes updated
     assert existing.failure_count == MIN_FAILURE_COUNT
+
+
+# ---------------------------------------------------------------------------
+# Naming problems
+# ---------------------------------------------------------------------------
+
+def test_bare_step_numbers_are_not_problems() -> None:
+    """In one-message conversations every failure is 'step 1': grouping by it would just repeat everything."""
+    rows = _make_failures(6, failure_step="1", failure_type="hallucination") + \
+        _make_failures(6, failure_step="turn 2", failure_type="hallucination") + \
+        _make_failures(6, failure_step="billing_dispute", failure_type="hallucination")
+    steps = {pv for pt, pv, _ in _group_failures(rows) if pt == "workflow_step"}
+    assert steps == {"billing_dispute"}
+
+
+def test_a_problem_is_named_from_all_its_conversations(monkeypatch: pytest.MonkeyPatch) -> None:
+    import kalytera.analyzer as analyzer
+    seen: List[List[str]] = []
+    monkeypatch.setattr(analyzer, "_summarize_reasons",
+                        lambda reasons: seen.append(reasons) or "Refunds ten times what the customer paid")
+    group = [_eval(failure_reason="Refunded 600 instead of 60."), _eval(failure_reason="Refunded 450 not 45."),
+             _eval(failure_reason="Refunded 600 instead of 60.")]
+    assert analyzer._problem_title(group) == "Refunds ten times what the customer paid"
+    assert seen == [["Refunded 600 instead of 60.", "Refunded 450 not 45."]]  # most common first, no repeats
+
+
+def test_problem_name_falls_back_to_the_most_common_explanation(monkeypatch: pytest.MonkeyPatch) -> None:
+    import kalytera.analyzer as analyzer
+    group = [_eval(failure_reason="A."), _eval(failure_reason="B."), _eval(failure_reason="B.")]
+    assert analyzer._problem_title(group) == "B."  # model unreachable (stubbed to None)
+    monkeypatch.setattr(analyzer, "_summarize_reasons", lambda reasons: 1 / 0)
+    assert analyzer._problem_title([_eval(failure_reason="Same.")] * 3) == "Same."  # one explanation: no call
+
+
+def test_a_problem_keeps_its_name_until_it_changes_size(monkeypatch: pytest.MonkeyPatch) -> None:
+    import kalytera.analyzer as analyzer
+    existing = MagicMock(failure_count=6, root_cause="Says orders arrived when tracking shows in transit")
+    db = MagicMock()
+    db.query.return_value.filter.return_value.first.return_value = existing
+    assert analyzer._existing_title("a", "failure_type", "hallucination", 6, db) == existing.root_cause
+    assert analyzer._existing_title("a", "failure_type", "hallucination", 7, db) is None
+
+
+def test_summary_rejects_answers_that_are_not_a_sentence(monkeypatch: pytest.MonkeyPatch) -> None:
+    import kalytera.analyzer as analyzer
+    import kalytera.judge as judge
+    monkeypatch.undo()  # the real _summarize_reasons, with the model call faked
+    for reply, expected in [('"Refunds the wrong amount."', "Refunds the wrong amount."),
+                            ('{"passed": false}', None), ("", None), ("x" * 200, None)]:
+        monkeypatch.setattr(judge, "_call_judge", lambda messages, system=None, r=reply: r)
+        assert analyzer._summarize_reasons(["a", "b"]) == expected

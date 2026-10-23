@@ -3,7 +3,7 @@ Tests for kalytera/judge.py — scoring logic, JSON parsing, error handling,
 provider dispatch, BYOK key resolution, and session-level evaluation.
 """
 import json
-from typing import List
+from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
 from kalytera.judge import (
@@ -633,3 +633,28 @@ def test_call_anthropic_other_models_get_no_thinking_settings(monkeypatch: objec
         _call_anthropic([{"role": "user", "content": "test"}])
     kw = mock_client.messages.create.call_args.kwargs
     assert "thinking" not in kw and kw["max_tokens"] == 512
+
+
+# ---------------------------------------------------------------------------
+# failure_action: which action a mistake was about
+# ---------------------------------------------------------------------------
+
+def _st(*calls: Any) -> Any:
+    from kalytera.prompts import StepContext
+    return StepContext(step_number=1, step_name="turn 1", input="", output="", tool_calls=list(calls))
+
+
+def test_failure_action_one_action_is_the_one() -> None:
+    from kalytera.judge import failure_action
+    steps = [_st({"name": "refund_api", "input": {"amount": 450}})]
+    assert failure_action(steps, {"passed": False, "failure_reason": "Overrefunded."}) == "refund_api"
+    assert failure_action(steps, {"passed": True}) is None
+
+
+def test_failure_action_several_actions_uses_the_explanation_then_the_failed_one() -> None:
+    from kalytera.judge import failure_action
+    steps = [_st({"name": "lookup_order"}, {"name": "refund_api"}, {"name": "send_email", "success": False})]
+    assert failure_action(steps, {"passed": False, "failure_reason": "Refund called with 450 not 45."}) == "refund_api"
+    assert failure_action(steps, {"passed": False, "failure_reason": "Told the user it was done."}) == "send_email"
+    assert failure_action([_st({"name": "a_x"}, {"name": "b_y"})], {"passed": False, "failure_reason": "?"}) is None
+    assert failure_action([_st()], {"passed": False, "failure_reason": "Rude."}) is None
