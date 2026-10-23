@@ -117,6 +117,13 @@ def test_to_steps_ends_the_session_and_keeps_the_original_time() -> None:
     assert steps[0]["tool_calls"] == [{"name": "x", "input": {"k": 1}, "success": False, "error": "e"}]
 
 
+def test_to_steps_keeps_what_each_action_returned_so_the_judge_can_check_it() -> None:
+    conv = {"id": "tr2", "started_at": None, "turns": [
+        {"user": "Where's order 7?", "assistant": "It was delivered yesterday.",
+         "actions": [{"name": "track", "input": {"order": 7}, "output": "status: in transit", "success": True}]}]}
+    assert to_steps(conv, "bot", "langfuse")[0]["tool_calls"][0]["output"] == "status: in transit"
+
+
 class _Resp:
     def __init__(self, status: int, body: Any) -> None:
         self.status_code, self._body = status, body

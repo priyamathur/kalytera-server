@@ -315,6 +315,7 @@ def to_steps(conv: Conversation, agent_id: str, source: str) -> List[Dict[str, A
         "step_number": i + 1, "step_name": f"turn {i + 1}", "input": t["user"][:20_000], "output": t["assistant"][:20_000],
         "tool_calls": [{"name": a.get("name", "action"), "input": a.get("input") or {},
                         "success": a.get("success", True) is not False,
+                        **({"output": str(a["output"])[:2000]} if a.get("output") else {}),
                         **({"error": a["error"]} if a.get("error") else {})} for a in t.get("actions") or []],
         "session_ended": i == len(turns) - 1, "timestamp": started, "metadata": {"source": source},
     } for i, t in enumerate(turns)]
