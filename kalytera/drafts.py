@@ -214,8 +214,39 @@ def draft_rule(
             warnings.append(f"No passing session called `{tool}`, so there is nothing to compare against.")
         warnings.append(f"No argument separates failing calls from passing ones. As drafted, the rule matches "
                         f"every call to `{tool}` — narrow it before promoting.")
+    rule["reason"] = rule_reason(rule)
     return {"rule": rule, "evidence": evidence, "warnings": warnings,
             "coverage": coverage(rule, failing_sessions, passing_sessions)}
+
+
+_OP_WORDS = {">": "is over", ">=": "is at least", "<": "is under", "<=": "is at most", "==": "is", "!=": "isn't"}
+
+
+def _value(v: Any) -> str:
+    if isinstance(v, float) and v.is_integer():
+        return str(int(v))
+    if isinstance(v, list):
+        return " or ".join(_value(x) for x in v)
+    return str(v)
+
+
+def rule_reason(rule: Dict[str, Any]) -> str:
+    """What the rule does, in words an end customer can read: an agent passes it on when an action is
+    stopped ("I can't do that automatically: <reason>"). Never one conversation's details."""
+    tool = str((rule.get("match") or {}).get("tool") or "This action")
+    words = [w for w in re.split(r"[_\-\s]+", tool) if w and w.lower() not in ("api", "tool", "fn")] or [tool]
+    action = " ".join(words).capitalize()
+    conds = []
+    for p in (rule.get("match") or {}).get("args") or []:
+        field = str(p.get("field", "")).replace("_", " ").split(".")[-1]
+        verb = "is" if p.get("op") == "in" else _OP_WORDS.get(str(p.get("op")), str(p.get("op")))
+        conds.append(f"the {field} {verb} {_value(p.get('value'))}")
+    for c in rule.get("session_conditions") or []:
+        if c.get("type") == "count_in_window":
+            conds.append(f"it's tried {_value(c.get('value'))} times within {int(c.get('window_seconds', 0)) // 60 or 1} "
+                         f"minutes")
+    when = f" when {' and '.join(conds)}" if conds else ""
+    return f"{action} needs a person to approve it{when}"
 
 
 def _session_matches(rule: Any, calls: List[Call]) -> bool:

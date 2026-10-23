@@ -14,7 +14,8 @@ def test_numeric_threshold_separates_failing_from_passing():
     d = draft_rule("billing", "failure_type", "tool_failure", failing, passing, root_cause="Large refunds fail")
     rule = d["rule"]
     assert rule["match"] == {"tool": "refund_api", "args": [{"field": "amount", "op": ">", "value": 480}]}
-    assert rule["reason"] == "Large refunds fail" and rule["agent_id"] == "billing"
+    assert rule["reason"] == "Refund needs a person to approve it when the amount is over 480"
+    assert rule["agent_id"] == "billing"
     assert d["warnings"] == []
     assert any("amount" in e and "480" in e for e in d["evidence"])
     parse_rule(rule)  # the draft is a valid rule

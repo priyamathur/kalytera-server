@@ -299,7 +299,7 @@ def test_draft_from_pattern_is_valid_and_not_saved(env: SimpleNamespace) -> None
     assert resp.status_code == 200, resp.text
     rule = resp.json()["rule"]
     assert rule["match"] == {"tool": "refund_api", "args": [{"field": "amount", "op": ">", "value": 300}]}
-    assert rule["reason"] == "Refunds above the limit fail"
+    assert rule["reason"] == "Refund needs a person to approve it when the amount is over 300"  # the rule, not one conversation
     assert env.client.get("/rules", params={"agent_id": AGENT}).json()["rules"] == []  # nothing saved
     assert env.client.post("/rules", json=rule).status_code == 201  # and it can be created as-is
 
