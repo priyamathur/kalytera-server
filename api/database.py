@@ -50,7 +50,9 @@ def _apply_schema_additions() -> None:
 
     raw = engine.raw_connection()
     try:
-        raw.autocommit = True  # each DDL commits immediately
+        # each DDL commits immediately; set it on psycopg2's connection, not the pool's wrapper
+        # (setting it on the wrapper does nothing and every change is rolled back on close)
+        raw.driver_connection.autocommit = True
         cur = raw.cursor()
 
         # ── 1. Snapshot current column state (read-only, no locks) ──────────
