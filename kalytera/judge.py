@@ -121,34 +121,30 @@ def score_session(
     return _build_result(parsed, w, pass_threshold, steps[-1].step_number, custom_metrics)
 
 
-def evaluate_session(session_id: str, db: Any) -> Optional[Dict[str, Any]]:
+def evaluate_session(session_id: str, db: Any, agent_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
     """
     Fetch all AgentLog rows for a session, score it with one LLM call,
     write one EvalResult linked to the session_ended log (or the last step, for a
     session that went idle without being marked ended). None if the session has no steps.
+    Pass agent_id: session IDs are only unique within an agent, and another account's
+    steps must never be judged (or shown to the judge) as part of this conversation.
     """
     from db.models import AgentLog, EvalResult, AgentQualityConfig
 
+    def steps_q() -> Any:
+        q = db.query(AgentLog).filter(AgentLog.session_id == session_id)
+        return q.filter(AgentLog.agent_id == agent_id) if agent_id is not None else q
+
     ended_log: Optional[Any] = (
-        db.query(AgentLog)
-        .filter(AgentLog.session_id == session_id, AgentLog.session_ended == True)  # noqa: E712
-        .first()
+        steps_q().filter(AgentLog.session_ended == True).first()  # noqa: E712
     ) or (  # a session that went idle without being marked ended: judge it at its last step
-        db.query(AgentLog)
-        .filter(AgentLog.session_id == session_id)
-        .order_by(AgentLog.step_number.desc(), AgentLog.timestamp.desc())
-        .first()
+        steps_q().order_by(AgentLog.step_number.desc(), AgentLog.timestamp.desc()).first()
     )
     if ended_log is None:
         logger.warning("No steps for session %s", session_id)
         return None
 
-    all_logs = (
-        db.query(AgentLog)
-        .filter(AgentLog.session_id == session_id)
-        .order_by(AgentLog.step_number)
-        .all()
-    )
+    all_logs = steps_q().filter(AgentLog.agent_id == ended_log.agent_id).order_by(AgentLog.step_number).all()
     steps = [_log_to_step(log) for log in all_logs]
 
     config: Optional[Any] = (
@@ -201,6 +197,7 @@ def evaluate_log(log_id: str, db: Any) -> Optional[Dict[str, Any]]:
     prior_logs = (
         db.query(AgentLog)
         .filter(
+            AgentLog.agent_id == log.agent_id,
             AgentLog.session_id == log.session_id,
             AgentLog.step_number < log.step_number,
         )

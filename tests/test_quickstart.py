@@ -99,8 +99,8 @@ def test_session_is_scored_once(qs: SimpleNamespace) -> None:
     qs.client.post("/trace", json={"id": "y1", "agent_id": "mine", "session_id": "once", "step_number": 1,
                                    "step_name": "a", "input": "", "output": "", "session_ended": True,
                                    "timestamp": "2026-01-01T00:00:00+00:00"})
-    assert refresh_api.score_session_once("once") is True
-    assert refresh_api.score_session_once("once") is False   # already scored
+    assert refresh_api.score_session_once("once", "mine") is True
+    assert refresh_api.score_session_once("once", "mine") is False   # already scored
     db = qs.session()
     assert db.query(EvalResult).filter(EvalResult.session_id == "once").count() == 1
     db.close()
@@ -172,3 +172,32 @@ def test_sample_agent_is_created_once_per_account(qs: SimpleNamespace) -> None:
     qs.org = SimpleNamespace(id="org-2", name="Other", tier="free")
     assert agent not in qs.client.get("/agents").json()                # not visible to other accounts
     assert qs.client.post("/agents/sample").json()["agent_id"] != agent
+
+
+def test_two_accounts_with_the_same_session_id_are_judged_apart(qs: SimpleNamespace) -> None:
+    """Session IDs are the customer's own (a ticket number): two accounts can both send '1001'.
+    Each is judged on its own steps only, and judging one never counts as judging the other."""
+    from db.models import EvalResult
+    seen: List[List[str]] = []
+
+    def judge_sees(steps: List[Any], **kw: Any) -> Dict[str, Any]:
+        seen.append([s.input for s in steps])
+        return _fake_score_session(steps, **kw)
+
+    def send(agent: str, text: str) -> None:
+        r = qs.client.post("/trace", json={"id": f"{agent}-1", "agent_id": agent, "session_id": "1001",
+                                           "step_number": 1, "step_name": "a", "input": text, "output": "",
+                                           "session_ended": True, "timestamp": "2026-01-01T00:00:00+00:00"})
+        assert r.status_code == 201, r.text
+
+    send("acme-bot", "Acme's private question")
+    qs.org = SimpleNamespace(id="org-2", name="Other", tier="free")
+    send("globex-bot", "Globex's private question")
+    with patch.object(judge, "score_session", judge_sees):
+        assert refresh_api.score_session_once("1001", "acme-bot") is True
+        assert refresh_api.score_session_once("1001", "globex-bot") is True  # not "already scored"
+    assert seen == [["Acme's private question"], ["Globex's private question"]]
+    db = qs.session()
+    assert sorted(a for (a,) in db.query(EvalResult.agent_id).filter(EvalResult.session_id == "1001")) == \
+        ["acme-bot", "globex-bot"]
+    db.close()

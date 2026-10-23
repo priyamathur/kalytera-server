@@ -30,27 +30,30 @@ _in_flight: set = set()
 _jobs: Dict[str, Dict[str, Any]] = {}
 
 
-def score_session_once(session_id: str) -> bool:
-    """Score one ended session unless it is already scored or being scored. True if scored now."""
+def score_session_once(session_id: str, agent_id: str) -> bool:
+    """Score one ended session unless it is already scored or being scored. True if scored now.
+    A session is one agent's: another agent (or account) can use the same session ID."""
     from db.models import EvalResult
     from kalytera.judge import evaluate_session
 
+    key = (agent_id, session_id)
     with _lock:
-        if session_id in _in_flight:
+        if key in _in_flight:
             return False
-        _in_flight.add(session_id)
+        _in_flight.add(key)
     db = SessionLocal()
     try:
-        if db.query(EvalResult.id).filter(EvalResult.session_id == session_id).first():
+        if db.query(EvalResult.id).filter(EvalResult.agent_id == agent_id,
+                                          EvalResult.session_id == session_id).first():
             return False
-        return evaluate_session(session_id, db) is not None
+        return evaluate_session(session_id, db, agent_id=agent_id) is not None
     except Exception:
         db.rollback()
         raise
     finally:
         db.close()
         with _lock:
-            _in_flight.discard(session_id)
+            _in_flight.discard(key)
 
 
 def _run(job: Dict[str, Any], agent_id: str) -> None:
@@ -67,7 +70,7 @@ def _run(job: Dict[str, Any], agent_id: str) -> None:
 
         def one(sid: str) -> None:
             try:
-                score_session_once(sid)
+                score_session_once(sid, agent_id)
             except Exception:
                 with _lock:
                     job["judge_errors"] += 1

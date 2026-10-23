@@ -684,11 +684,14 @@ def search_sessions(agent_ids: List[str], text: str, limit: int, db: Session) ->
         found.setdefault(sid, {"session_id": sid, "agent_id": aid, "last_seen": ts})
     if not found:
         return []
-    fails = (
-        db.query(EvalResult.session_id, EvalResult.failure_reason)
-        .filter(EvalResult.session_id.in_(list(found)), EvalResult.passed == False)  # noqa: E712
+    fails = [
+        (sid, reason)
+        for sid, aid, reason in db.query(EvalResult.session_id, EvalResult.agent_id, EvalResult.failure_reason)
+        .filter(EvalResult.agent_id.in_(agent_ids), EvalResult.session_id.in_(list(found)),
+                EvalResult.passed == False)  # noqa: E712
         .all()
-    )
+        if found[sid]["agent_id"] == aid
+    ]
     for item in found.values():
         item["failed"] = False
         item["failure_reason"] = None

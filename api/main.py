@@ -201,7 +201,7 @@ def _eval_sessions(agent_ids: List[str], db: Any) -> None:
             continue
         for session_id in session_ids:
             try:
-                score_session_once(session_id)  # skips sessions a refresh is already scoring
+                score_session_once(session_id, agent_id)  # skips sessions a refresh is already scoring
             except Exception as exc:
                 logger.error("[eval] session=%s error: %s", session_id, exc)
 
