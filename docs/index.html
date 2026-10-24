@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kalytera — Catch your AI agents' mistakes</title>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<title>Kalytera — Make sure your AI agents only do what they should</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -13,7 +13,7 @@
   --cyan-bg:rgba(0,200,232,0.06);--red-bg:rgba(232,85,85,0.06);--green-bg:rgba(168,224,96,0.06);
 }
 html{scroll-behavior:smooth;overflow-x:hidden}
-body{background:var(--bg);color:var(--white);font-family:'DM Mono',monospace;font-weight:400;font-size:15px;line-height:1.75;min-height:100vh}
+body{background:var(--bg);color:var(--white);font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;font-weight:400;font-size:16px;line-height:1.6;min-height:100vh}
 
 /* NAV */
 nav{position:sticky;top:0;z-index:100;border-bottom:1px solid var(--border);background:rgba(10,13,16,0.95);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:space-between;padding:18px 56px}
@@ -312,6 +312,41 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
   .footer-top{flex-direction:column;gap:8px;text-align:center}
   .modal{margin:20px;padding:28px}
 }
+
+/* HOME (readable in a minute) */
+code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
+.k-hero{max-width:860px;margin:0 auto;padding:96px 24px 40px;text-align:center}
+.k-eyebrow{display:inline-block;font-size:13px;font-weight:600;color:var(--green);padding:6px 14px;border:1px solid rgba(168,224,96,0.3);border-radius:100px;background:rgba(168,224,96,0.07);margin-bottom:24px}
+.k-h1{font-family:'Inter',sans-serif;font-weight:800;font-size:clamp(34px,5.2vw,56px);line-height:1.08;letter-spacing:-1.2px;margin-bottom:22px}
+.k-h1 span{color:var(--cyan)}
+.k-sub{font-size:clamp(17px,2vw,20px);line-height:1.55;color:rgba(232,236,240,0.82);max-width:700px;margin:0 auto 32px}
+.k-ctas{display:flex;gap:20px;justify-content:center;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+.k-link{color:var(--white);font-weight:600;text-decoration:none;font-size:15px}
+.k-small{font-size:14px;color:rgba(232,236,240,0.6);margin-bottom:20px}
+.k-sec{max-width:1060px;margin:0 auto;padding:56px 24px;border-top:1px solid var(--border)}
+.k-h2{font-family:'Inter',sans-serif;font-weight:800;font-size:clamp(24px,3vw,32px);letter-spacing:-.6px;margin-bottom:28px;text-align:center}
+.k-grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.k-grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.k-card,.k-step{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:24px}
+.k-card p,.k-step p{font-size:15px;line-height:1.55;color:rgba(232,236,240,0.75)}
+.k-card a{color:rgba(232,236,240,0.55)}
+.k-card-t{font-weight:700;font-size:17px;margin-bottom:8px;color:var(--white)}
+.k-num{width:32px;height:32px;border-radius:50%;background:var(--cyan);color:#0a0d10;font-weight:800;display:flex;align-items:center;justify-content:center;margin-bottom:14px}
+.k-ex{display:grid;grid-template-columns:1fr auto 1.2fr;gap:24px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px}
+.k-ex-lbl{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:rgba(232,236,240,0.5);margin-bottom:12px}
+.k-msg{border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:15px}
+.k-msg span{display:block;font-size:12px;color:rgba(232,236,240,0.5);margin-bottom:2px}
+.k-bad{border-color:rgba(232,85,85,0.5);background:var(--red-bg)}
+.k-bad b{color:var(--red)}
+.k-ex-arrow{font-size:28px;color:var(--cyan)}
+.k-list{list-style:none;display:flex;flex-direction:column;gap:12px}
+.k-list li{font-size:15px;line-height:1.5;color:rgba(232,236,240,0.8);padding-left:22px;position:relative}
+.k-list li:before{content:"✓";position:absolute;left:0;color:var(--green);font-weight:700}
+.k-list b{color:var(--white)}
+.k-final{max-width:760px;margin:0 auto;padding:64px 24px 72px;text-align:center;border-top:1px solid var(--border)}
+.k-final .btn-p{margin-bottom:36px}
+.k-dev{text-align:left}
+@media(max-width:860px){.k-grid3,.k-grid4{grid-template-columns:1fr}.k-ex{grid-template-columns:1fr}.k-ex-arrow{transform:rotate(90deg);justify-self:center}.k-hero{padding-top:56px}}
 </style>
 </head>
 <body>
@@ -321,6 +356,7 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
   <div class="nav-links">
     <span class="nav-link" onclick="go('docs')" id="nl-docs">Docs</span>
     <span class="nav-link" onclick="go('pricing')" id="nl-pricing">Pricing</span>
+    <a class="nav-link" href="https://app.kalytera.dev" style="text-decoration:none">Sign in</a>
     <span class="nav-cta" onclick="openSignup('free')">Get started free →</span>
   </div>
 </nav>
@@ -390,27 +426,76 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
 
 <!-- ===== HOME ===== -->
 <div class="page on" id="pg-home">
-<div class="hero">
-  <div class="badge"><div class="badge-dot"></div>For AI agents in production</div>
-  <h1>Catch your AI agents' mistakes.<br><em>Stop the costly ones.</em></h1>
-  <p class="lead">Connect Langfuse or LangSmith, with no code. Kalytera reads every conversation, finds the mistakes that keep happening, tells you in Slack, and turns each one into a rule that stops the next bad refund, booking or email before it happens.</p>
-  <div class="btn-row">
-    <button class="btn-p" onclick="openSignup('free')">Get started free</button>
-    <button class="btn-s" onclick="go('docs')">See how it works →</button>
-  </div>
-  <p class="note">Free for 5,000 conversations a month. No credit card.</p>
 
-  <!-- EXPANDABLE PROMPT -->
-  <div class="prompt-expand">
-    <button class="prompt-trigger" onclick="togglePrompt()">
-      <span>Not on Langfuse or LangSmith? Add one line to your agent</span>
-      <span class="prompt-chevron" id="prompt-chevron">▾</span>
-    </button>
+<section class="k-hero">
+  <div class="k-eyebrow">Safety for AI agents in production</div>
+  <h1 class="k-h1">Know your AI agents are doing <span>only what they should.</span></h1>
+  <p class="k-sub">Kalytera checks every conversation your agents have with customers, tells you as soon as something goes wrong, and blocks risky actions, like a wrong refund, before they happen.</p>
+  <div class="k-ctas">
+    <button class="btn-p" onclick="openSignup('free')">Get started free</button>
+    <a class="k-link" href="#example">See an example ↓</a>
+  </div>
+  <p class="k-small">Works with Langfuse, LangSmith, the OpenAI Agents SDK and LangChain. Free for 5,000 conversations a month.</p>
+</section>
+
+<section class="k-sec">
+  <h2 class="k-h2">Why it matters</h2>
+  <div class="k-grid3">
+    <div class="k-card"><div class="k-card-t">Agents act on their own</div><p>They issue refunds, make bookings, send emails and change records, and nobody checks each one.</p></div>
+    <div class="k-card"><div class="k-card-t">Mistakes look fine</div><p>The reply says "$45 refunded." The refund the agent actually issued was $450.</p></div>
+    <div class="k-card"><div class="k-card-t">Customers find out first</div><p><b>74%</b> of enterprises have rolled back a customer-facing AI agent after a governance failure. <a href="https://sinch.com/news/sinch-releases-ai-production-paradox/" target="_blank" rel="noopener">Sinch, 2026</a></p></div>
+  </div>
+</section>
+
+<section class="k-sec">
+  <h2 class="k-h2">How Kalytera keeps your agents safe</h2>
+  <div class="k-grid3">
+    <div class="k-step"><div class="k-num">1</div><div class="k-card-t">Every conversation checked</div><p>Connect Langfuse or LangSmith in two minutes, with no code. Kalytera reads every conversation, including what each action really did.</p></div>
+    <div class="k-step"><div class="k-num">2</div><div class="k-card-t">You hear about it in Slack</div><p>When a mistake keeps happening, you get one plain sentence saying what went wrong, how often, and a link to the conversations.</p></div>
+    <div class="k-step"><div class="k-num">3</div><div class="k-card-t">Risky actions blocked</div><p>One click turns a problem into a rule. With one line of code, your agent can't take that action again, and it tells the customer why.</p></div>
+  </div>
+</section>
+
+<section class="k-sec" id="example">
+  <h2 class="k-h2">An example from a support agent</h2>
+  <div class="k-ex">
+    <div class="k-ex-col">
+      <div class="k-ex-lbl">What happened</div>
+      <div class="k-msg"><span>Customer</span>My order arrived damaged. Please refund the $45 I paid.</div>
+      <div class="k-msg k-bad"><span>Agent's action</span>refund(amount = <b>450</b>)</div>
+      <div class="k-msg"><span>Agent's reply</span>All done! I've refunded $45.00.</div>
+    </div>
+    <div class="k-ex-arrow">→</div>
+    <div class="k-ex-col">
+      <div class="k-ex-lbl">What Kalytera did</div>
+      <ul class="k-list">
+        <li><b>Found it 12 times</b> in 29 conversations: refunds ten times too big</li>
+        <li><b>Told the team in Slack</b>, with links to all 12 conversations</li>
+        <li><b>Suggested a rule:</b> refunds over $70 need a person. In past conversations it would have stopped all 12 and none of the good ones.</li>
+        <li><b>Blocked the next one.</b> The $450 refund never went out.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section class="k-sec">
+  <h2 class="k-h2">Built so you can trust it</h2>
+  <div class="k-grid4">
+    <div class="k-card"><div class="k-card-t">Read-only to start</div><p>Connecting only reads conversations. Your keys are stored encrypted.</p></div>
+    <div class="k-card"><div class="k-card-t">Safe to try</div><p>A new rule only watches at first, and shows what it would have blocked.</p></div>
+    <div class="k-card"><div class="k-card-t">Never breaks your agent</div><p>If Kalytera is unreachable, your agent keeps working as before.</p></div>
+    <div class="k-card"><div class="k-card-t">Learns as you go</div><p>A rule that protects one agent is offered to your others.</p></div>
+  </div>
+</section>
+
+<section class="k-final">
+  <h2 class="k-h2">See what your agents did this week.</h2>
+  <p class="k-small">Two minutes to connect. Free for 5,000 conversations a month. No credit card.</p>
+  <button class="btn-p" onclick="openSignup('free')">Get started free</button>
+  <div class="k-dev">
+    <button class="prompt-trigger" onclick="togglePrompt()"><span>Developers: add one line to your agent instead</span><span class="prompt-chevron" id="prompt-chevron">▾</span></button>
     <div id="prompt-body" class="prompt-body-wrap" style="display:none">
-      <div class="prompt-bar">
-        <span class="prompt-bar-label">Paste into Claude Code, Cursor, or Copilot</span>
-        <span class="prompt-copy-btn" onclick="copyPrompt()">Copy</span>
-      </div>
+      <div class="prompt-bar"><span class="prompt-bar-label">Paste into Claude Code, Cursor, or Copilot</span><span class="prompt-copy-btn" onclick="copyPrompt()">Copy</span></div>
       <div class="prompt-text" id="prompt-text"># Add Kalytera to this AI agent
 
 Set up Kalytera in this working directory. Follow these steps in order.
@@ -450,159 +535,7 @@ If the agent is a custom loop with no framework, also:
 - Tell the user to open https://app.kalytera.dev — the agent appears under its own name after its first run.</div>
     </div>
   </div>
-</div>
-
-<!-- HERO MOCKUP: a real problem from our own test agent -->
-<div class="mockup">
-  <div class="mock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="mock-label">Kalytera — a problem in support-bot</span></div>
-  <div class="mock-body">
-    <div>
-      <div class="mock-head"><span>One of the 12 conversations &nbsp;<span class="fail-tag">FAILED</span></span><span style="font-size:11px;color:var(--muted)">2d ago</span></div>
-      <div class="mock-steps">
-        <div class="st"><div class="si p">✓</div><div><div class="sn">Customer</div><div class="sd">"My order A-2001 arrived damaged. Please refund the $45 I paid."</div></div></div>
-        <div class="st bad"><div class="si f">✗</div><div><div class="sn">Action — refund_api(order_id=A-2001, amount=450)</div><div class="sd">The refund went through: $450, ten times what the customer paid.</div></div></div>
-        <div class="st"><div class="si f">✗</div><div><div class="sn">Agent</div><div class="sd">"All done! I've refunded $45.00 for order A-2001."</div><div class="sr">↳ the reply looks right; only the action shows the mistake</div></div></div>
-      </div>
-    </div>
-    <div class="verdict">
-      <div class="v-label">The problem</div>
-      <div class="v-score">12<span style="font-size:18px;opacity:.4"> of 29</span></div>
-      <div class="v-dims">conversations in the last 30 days</div>
-      <div class="v-body">The agent keeps issuing refunds at ten times the correct amount.</div>
-      <div class="v-fix-label">Suggested rule</div>
-      <div class="v-fix">A refund over $70 needs a person to approve it. Would have caught 12 of 12 bad refunds and none of the 11 good ones.</div>
-    </div>
-  </div>
-</div>
-
-<!-- IN PRODUCTION TODAY -->
-<div class="sec" style="border-top:1px solid var(--border)">
-  <div class="sh"><h2>In production today</h2><div class="sh-line"></div></div>
-  <div class="context-wrap">
-    <div class="incidents">
-      <div class="inc">
-        <div class="inc-lbl">// <a href="https://sinch.com/news/sinch-releases-ai-production-paradox/" target="_blank" rel="noopener" style="color:inherit">Sinch, The AI Production Paradox · May 2026</a> · survey of 2,527 senior decision makers across 10 countries</div>
-        <div class="inc-txt">74% of enterprises have rolled back or shut down a live AI customer-communications agent after a governance failure. The rate climbs to <strong>81% among organizations with fully mature guardrails.</strong></div>
-      </div>
-      <div class="inc">
-        <div class="inc-lbl">// what that looks like</div>
-        <div class="inc-txt">The agent's reply reads fine. The refund it issued was ten times too big. <strong>Nobody finds out until the customer, or finance, does.</strong> Checking replies alone misses it; Kalytera reads what every action did.</div>
-      </div>
-    </div>
-    <div class="vstats">
-      <div class="vstat"><div class="vstat-n">62%</div><div class="vstat-l">Of enterprises have AI customer-communications agents live in production — <a href="https://sinch.com/news/sinch-releases-ai-production-paradox/" target="_blank" rel="noopener" style="color:inherit">Sinch 2026</a></div></div>
-      <div class="vstat"><div class="vstat-n">74%</div><div class="vstat-l">Have rolled back a live customer-communications agent after a governance failure — <a href="https://sinch.com/news/sinch-releases-ai-production-paradox/" target="_blank" rel="noopener" style="color:inherit">Sinch 2026</a></div></div>
-    </div>
-  </div>
-</div>
-
-<!-- HOW IT WORKS -->
-<div class="sec" style="border-top:1px solid var(--border)">
-  <div class="sh"><h2>How it works</h2><div class="sh-line"></div></div>
-  <div class="feat-list">
-
-    <div class="feat-item">
-      <div>
-        <div class="feat-problem">Your agent's conversations are already in Langfuse or LangSmith. Nobody has time to read them.</div>
-        <div class="feat-tag">1 · connect once</div>
-        <div class="feat-title">Paste two keys. Kalytera reads every conversation.</div>
-        <div class="feat-body">Kalytera reads the last 30 days right away, then new conversations every 15 minutes. It reads every conversation, not a sample. Your keys are stored encrypted, only ever used to read, and deleted when you remove the connection.</div>
-      </div>
-      <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Connect</span></div>
-        <div class="fmock-body">
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Langfuse → support-bot</span><span class="fmock-score" style="color:var(--green)">read 3m ago</span></div>
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">LangSmith → booking-agent</span><span class="fmock-score" style="color:var(--green)">read 9m ago</span></div>
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Slack → #agent-alerts</span><span class="fmock-score" style="color:var(--green)">on</span></div>
-          <div class="fmock-hint">Reading new conversations every 15 minutes</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="feat-item">
-      <div>
-        <div class="feat-problem">One bad conversation is noise. Twelve of the same mistake is a problem, but only if something notices.</div>
-        <div class="feat-tag">2 · problems, in Slack</div>
-        <div class="feat-title">Mistakes that keep happening, named in plain English.</div>
-        <div class="feat-body">A judge model reads each whole conversation: what the customer asked, what the agent did, and what each action returned. Failures are grouped by the action that went wrong. When a new problem appears or one gets worse, you get a Slack message that links straight to the conversations.</div>
-      </div>
-      <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Slack · #agent-alerts</span></div>
-        <div class="fmock-body">
-          <div class="fmock-hdg">🚨 2 new problems in support-bot</div>
-          <div class="fmock-verdict">The agent keeps issuing refunds at ten times the correct amount.<br><span style="opacity:.6">12 of 29 conversations</span></div>
-          <div class="fmock-verdict">The agent tells customers their order was delivered when the lookup shows it's still in transit.<br><span style="opacity:.6">6 of 29 conversations</span></div>
-          <div class="fmock-fix">See conversations →</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="feat-item">
-      <div>
-        <div class="feat-problem">Knowing about a mistake doesn't stop the next one. A prompt change might, or might not.</div>
-        <div class="feat-tag">3 · stop the costly ones</div>
-        <div class="feat-title">One click turns a problem into a rule. One line enforces it.</div>
-        <div class="feat-body">Kalytera suggests a rule for the problem and shows what it would have caught in your past conversations. New rules start out only watching. When you switch one to blocking, <code>kalytera.init()</code> checks each action before it runs: a blocked refund never happens, and your agent gets a reason it can tell the customer.</div>
-      </div>
-      <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Rules · support-bot</span></div>
-        <div class="fmock-body">
-          <div class="fmock-hdg">Suggested rule</div>
-          <div class="fmock-verdict">Block refund_api when amount is more than 70</div>
-          <div class="fmock-fix">Would have caught 12 of 12 failed conversations · touches 0 of 11 good ones</div>
-          <div class="fmock-div"></div>
-          <div class="fmock-row bad"><span class="fmock-fail">✗</span><span class="fmock-lbl hi">refund_api(amount=450)</span><span class="fmock-score" style="color:var(--red)">blocked</span></div>
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">refund_api(amount=40)</span><span class="fmock-score" style="color:var(--green)">allowed</span></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="feat-item">
-      <div>
-        <div class="feat-problem">Your other agents, and other companies' agents, have made this mistake before.</div>
-        <div class="feat-tag">4 · memory</div>
-        <div class="feat-title">What one agent learns, the others get.</div>
-        <div class="feat-body">A rule that works for one of your agents is offered to the others, along with what it would have caught there. Kalytera also shares anonymous patterns between companies: the kinds of mistakes and the shapes of the rules that stopped them, never conversations, names or your limits. A pattern only appears once at least 5 companies have it. Sharing is on by default, and you can turn it off at any time.</div>
-      </div>
-      <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Rules · support-bot-v2</span></div>
-        <div class="fmock-body">
-          <div class="fmock-hdg">From your other agents</div>
-          <div class="fmock-verdict">Block refund_api when amount is more than 250</div>
-          <div class="fmock-fix">From support-bot · here it would have caught 10 of 18 failed conversations and touched 0 of 11 good ones</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="feat-item">
-      <div>
-        <div class="feat-problem">"Did the fix work?" usually gets answered with a feeling.</div>
-        <div class="feat-tag">5 · proof</div>
-        <div class="feat-title">Before and after, in numbers.</div>
-        <div class="feat-body">Once a rule has been blocking for a week, Kalytera compares failed conversations before and after it started, and counts every block your team marked as wrong.</div>
-      </div>
-      <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Overview · support-bot</span></div>
-        <div class="fmock-body">
-          <div class="fmock-hdg">Since blocking started</div>
-          <div class="fmock-verdict">Failed conversations: 41% → 9%</div>
-          <div class="fmock-fix">2 blocks marked wrong by your team</div>
-          <div class="fmock-hint">Illustration: your numbers appear after a week of blocking</div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<div class="cta-wrap">
-  <h2>Find out what your agents got wrong this week.</h2>
-  <p>Connect in two minutes. Free for 5,000 conversations a month.</p>
-  <div class="cta-btns">
-    <button class="btn-p" onclick="openSignup('free')">Get started free</button>
-    <button class="btn-s" onclick="go('docs')">Read the docs →</button>
-  </div>
-</div>
+</section>
 
 <footer>
   <div class="footer-top">
