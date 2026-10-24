@@ -757,6 +757,36 @@ def get_user_by_email(email: str, db: Session) -> Optional[User]:
     return db.query(User).filter(User.email == email, User.is_active == True).first()  # noqa: E712
 
 
+DASHBOARD_KEY_NAME = "dashboard (Google sign-in)"
+
+
+def dashboard_key_for_email(email: str, secret: str, db: Session) -> Optional[str]:
+    """Google sign-in: the API key the dashboard uses for the person with this (Google-verified)
+    email, or None if no active account has it. Derived from `secret`, so each person always gets
+    the same key (no new key per sign-in) and it is never stored raw; created on first use."""
+    import base64
+    import hashlib
+    import hmac
+
+    user = (db.query(User)
+            .filter(func.lower(User.email) == email.strip().lower(), User.is_active == True)  # noqa: E712
+            .first())
+    if user is None or not secret:
+        return None
+    org = db.query(Organization).filter(Organization.id == user.org_id).first()
+    if org is None or not org.is_active:
+        return None
+    digest = hmac.new(secret.encode(), f"dashboard:{user.id}".encode(), hashlib.sha256).digest()
+    raw = "kly_live_" + base64.urlsafe_b64encode(digest).decode().rstrip("=")
+    key_hash = hashlib.sha256(raw.encode()).hexdigest()
+    row = db.query(ApiKey).filter(ApiKey.key_hash == key_hash).first()
+    if row is None:
+        create_api_key(key_hash, raw[:16], DASHBOARD_KEY_NAME, org.id, user.id, db)
+    elif not row.is_active:
+        return None  # revoked: signing in again must not bring it back
+    return raw
+
+
 def list_users_for_org(org_id: str, db: Session) -> List[User]:
     return db.query(User).filter(User.org_id == org_id, User.is_active == True).all()  # noqa: E712
 

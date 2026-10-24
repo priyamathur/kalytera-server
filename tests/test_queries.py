@@ -222,3 +222,21 @@ def test_failed_sessions_show_when_the_conversation_happened(db: Session) -> Non
                 get_recent_failing_sessions(AGENT, 10, db)[0]):
         ended = row["failed_at"].replace(tzinfo=timezone.utc)
         assert timedelta(days=2) < datetime.now(timezone.utc) - ended < timedelta(days=4)
+
+
+def test_google_sign_in_finds_the_account_by_email(db: Session) -> None:
+    from api.billing import hash_key
+    from db.models import ApiKey, Organization, User
+    from db.queries import dashboard_key_for_email
+    db.add_all([Organization(id="o1", name="Acme"), User(id="u1", email="Priya@Acme.com", org_id="o1")])
+    db.commit()
+    key = dashboard_key_for_email("priya@acme.com ", "s3cret", db)       # Google's casing may differ
+    assert key and key.startswith("kly_live_")
+    assert dashboard_key_for_email("PRIYA@acme.com", "s3cret", db) == key  # same person, same key
+    rows = db.query(ApiKey).filter(ApiKey.org_id == "o1").all()
+    assert len(rows) == 1 and rows[0].key_hash == hash_key(key) and key not in rows[0].key_hash
+    assert dashboard_key_for_email("someone@else.com", "s3cret", db) is None
+    assert dashboard_key_for_email("priya@acme.com", "", db) is None
+    rows[0].is_active = False
+    db.commit()
+    assert dashboard_key_for_email("priya@acme.com", "s3cret", db) is None  # a revoked key stays revoked

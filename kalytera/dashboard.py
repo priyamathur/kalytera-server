@@ -326,6 +326,60 @@ def _check_key(key: str) -> Tuple[Optional[Dict[str, Any]], str]:
     return None, "Kalytera couldn't check the key just now. Wait a moment and try again."
 
 
+# ── Google sign-in ────────────────────────────────────────────────────────────
+# Streamlit's st.login reads its settings from secrets.toml; on Render they come from env vars.
+_GOOGLE_ON = all(os.environ.get(k) for k in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "AUTH_COOKIE_SECRET"))
+
+
+def _write_auth_secrets() -> None:
+    """Write ~/.streamlit/secrets.toml from the env vars (only if it changed). Streamlit re-reads
+    the file on each sign-in request until it exists, so writing it on the first page load works."""
+    if not _GOOGLE_ON:
+        return
+    q = json.dumps  # a JSON string is a valid TOML basic string
+    body = (
+        "[auth]\n"
+        f"redirect_uri = {q(os.environ.get('DASHBOARD_URL', 'https://app.kalytera.dev').rstrip('/') + '/oauth2callback')}\n"
+        f"cookie_secret = {q(os.environ['AUTH_COOKIE_SECRET'])}\n"
+        "[auth.google]\n"
+        f"client_id = {q(os.environ['GOOGLE_CLIENT_ID'])}\n"
+        f"client_secret = {q(os.environ['GOOGLE_CLIENT_SECRET'])}\n"
+        'server_metadata_url = "https://accounts.google.com/.well-known/openid-configuration"\n'
+    )
+    path = os.path.expanduser("~/.streamlit/secrets.toml")
+    try:
+        if os.path.exists(path) and open(path).read() == body:
+            return
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), "w") as f:
+            f.write(body)
+    except OSError as exc:
+        print(f"Google sign-in is off: can't write {path}: {exc}")
+
+
+_write_auth_secrets()
+
+
+def _google_user() -> Optional[Dict[str, Any]]:
+    """The Google account signed in to this browser, if any."""
+    try:
+        return dict(st.user) if _GOOGLE_ON and st.user.is_logged_in else None
+    except Exception:
+        return None
+
+
+def _sign_in(key: str, usage: Dict[str, Any]) -> None:
+    st.session_state.update({
+        "authenticated": True,
+        "api_key": key,
+        "org_id": usage.get("org_id", ""),
+        "org_name": usage.get("org_name", ""),
+        "tier": usage.get("tier", "free"),
+        "sessions_used": usage.get("sessions_used", 0),
+        "sessions_limit": usage.get("sessions_limit", 5000),
+    })
+
+
 @st.cache_data(ttl=60, show_spinner=False)
 def _account(key: str) -> Dict[str, Any]:
     """Plan and usage (GET /billing/usage), refreshed every minute."""
@@ -392,11 +446,36 @@ if not st.session_state.get("authenticated"):
           </div>
           <div style="font-size:22px;font-weight:800;color:#0f172a;margin-bottom:6px">Welcome back</div>
           <div style="font-size:14px;color:#64748b;line-height:1.5">
-            Paste your API key to access your dashboard.<br/>
-            <span style="font-size:12px">No password needed — your key is your login.</span>
+            Sign in to see what your agents did.
           </div>
         </div>
         """, unsafe_allow_html=True)
+
+        _guser = _google_user()
+        if _guser and _guser.get("email") and _guser.get("email_verified", True):
+            _db_g = _db()
+            try:
+                from db.queries import dashboard_key_for_email
+                _gkey = dashboard_key_for_email(_guser["email"], os.environ["AUTH_COOKIE_SECRET"], _db_g)
+            finally:
+                _db_g.close()
+            if _gkey:
+                with st.spinner("Signing you in… (up to a minute if Kalytera was asleep)"):
+                    _usage, _why = _check_key(_gkey)
+                if _usage:
+                    _sign_in(_gkey, _usage)
+                    st.rerun()
+                st.error(_why)
+            else:
+                st.warning(f"There's no Kalytera account for **{_guser['email']}**. Create one free at "
+                           "kalytera.dev with this email, or sign in with your API key below.")
+            st.button("Use a different Google account", on_click=st.logout, use_container_width=True)
+        elif _GOOGLE_ON:
+            st.button("Continue with Google", type="primary", use_container_width=True,
+                      on_click=st.login, args=("google",))
+        if _GOOGLE_ON:
+            st.markdown('<div style="text-align:center;font-size:12px;color:#94a3b8;margin:14px 0 6px">'
+                        'or paste your API key</div>', unsafe_allow_html=True)
 
         with st.form("login_form"):
             _key_input = st.text_input(
@@ -415,15 +494,7 @@ if not st.session_state.get("authenticated"):
                 with st.spinner("Checking your key… (up to a minute if Kalytera was asleep)"):
                     _usage, _why = _check_key(_key_input)
                 if _usage:
-                    st.session_state.update({
-                        "authenticated": True,
-                        "api_key": _key_input,
-                        "org_id": _usage.get("org_id", ""),
-                        "org_name": _usage.get("org_name", ""),
-                        "tier": _usage.get("tier", "free"),
-                        "sessions_used": _usage.get("sessions_used", 0),
-                        "sessions_limit": _usage.get("sessions_limit", 5000),
-                    })
+                    _sign_in(_key_input, _usage)
                     st.rerun()
                 else:
                     st.error(_why)
@@ -574,6 +645,8 @@ with st.sidebar:
     if st.button("Sign out", use_container_width=True, key="signout_btn"):
         for _k in ["authenticated", "api_key", "org_name", "tier", "sessions_used", "sessions_limit"]:
             st.session_state.pop(_k, None)
+        if _google_user():
+            st.logout()  # otherwise the Google cookie signs this browser straight back in
         st.rerun()
 
     st.markdown(
