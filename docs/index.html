@@ -359,6 +359,13 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 .k-trust{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px}
 .k-trust-t{font-weight:800;font-size:clamp(20px,2.2vw,24px);line-height:1.25;letter-spacing:-.4px;color:var(--white);margin-bottom:10px}
 .k-trust p{font-size:16px;line-height:1.5;color:rgba(232,236,240,0.72)}
+.k-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.k-stat{background:var(--card);border:1px solid rgba(0,200,232,0.25);border-radius:14px;padding:26px}
+.k-stat-n{font-weight:800;font-size:clamp(34px,4vw,46px);letter-spacing:-1px;color:var(--cyan);line-height:1;margin-bottom:10px}
+.k-stat-l{font-size:15px;line-height:1.5;color:rgba(232,236,240,0.78)}
+.k-trust a{color:var(--cyan)}
+.k-foot{font-size:12.5px;color:rgba(232,236,240,0.45);margin-top:16px;text-align:center}
+@media(max-width:860px){.k-stats{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -517,12 +524,18 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 
 <section class="k-sec">
   <h2 class="k-h2">Why you can trust it</h2>
-  <div class="k-grid2">
-    <div class="k-trust"><div class="k-trust-t">Nothing gets blocked by surprise.</div><p>Every rule watches first. Before you turn it on, you see exactly what it would have stopped.</p></div>
-    <div class="k-trust"><div class="k-trust-t">12 bad refunds caught. 0 good ones touched.</div><p>That's what a rule Kalytera wrote for our test agent would have done. You get numbers like these for every rule.</p></div>
-    <div class="k-trust"><div class="k-trust-t">If Kalytera goes down, your agent doesn't.</div><p>Your agent keeps working either way.</p></div>
+  <div class="k-stats">
+    <div class="k-stat"><div class="k-stat-n">0.03 ms</div><div class="k-stat-l">to check an action, inside your own app. No network call, so your agent doesn't slow down.</div></div>
+    <div class="k-stat"><div class="k-stat-n">18 of 18</div><div class="k-stat-l">planted mistakes caught in our test agent, with 0 of 11 good conversations flagged.<sup>*</sup></div></div>
+    <div class="k-stat"><div class="k-stat-n">100%</div><div class="k-stat-l">of conversations checked, not a sample. The rare, costly mistake is the one sampling misses.</div></div>
+  </div>
+  <div class="k-grid2" style="margin-top:18px">
+    <div class="k-trust"><div class="k-trust-t">Rules are code, not another AI.</div><p>Meta's agent was talked into handing over accounts. A rule like "account changes need a person" can't be talked out of anything. Keeping that decision outside the AI is what <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/" target="_blank" rel="noopener">OWASP</a> recommends.</p></div>
+    <div class="k-trust"><div class="k-trust-t">If Kalytera goes down, your rules don't.</div><p>Rules run inside your app from the last copy it loaded. Your agent stays protected, and keeps working.</p></div>
+    <div class="k-trust"><div class="k-trust-t">Nothing gets blocked by surprise.</div><p>Every rule watches first and shows you what it would have stopped. You decide when it starts blocking.</p></div>
     <div class="k-trust"><div class="k-trust-t">Your customers' data stays yours.</div><p>Kalytera only reads. Card numbers and emails can be masked before they leave your servers, and you can delete everything at any time.</p></div>
   </div>
+  <p class="k-foot">* Our latest test: 29 support conversations with 18 planted mistakes. An earlier run caught 17 of 18. The 0.03 ms is the median of 20,000 checks.</p>
 </section>
 
 <section class="k-final">
