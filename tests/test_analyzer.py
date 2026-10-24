@@ -199,6 +199,21 @@ def test_check_worsening_false_when_no_prior_data() -> None:
     assert _check_worsening("failure_type", "tool_failure", "agent-1", db) is False
 
 
+def test_a_just_connected_agent_is_not_getting_worse() -> None:
+    # all its history was judged this week (read from Langfuse on connect): 10/50 now, nothing before
+    counts = iter([50, 10, 0])
+    db = MagicMock()
+
+    def query_side(*args: Any) -> MagicMock:
+        q = MagicMock()
+        q.filter.return_value = q
+        q.count.return_value = next(counts)
+        return q
+
+    db.query.side_effect = query_side
+    assert _check_worsening("action", "refund_api", "agent-1", db) is False
+
+
 # ---------------------------------------------------------------------------
 # run_analysis — end-to-end with mock DB
 # ---------------------------------------------------------------------------

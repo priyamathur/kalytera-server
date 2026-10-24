@@ -11,6 +11,7 @@ from db.models import AgentLog, Base, EvalResult
 from db.queries import (
     get_failures_by_step,
     get_pattern_sessions,
+    get_recent_failing_sessions,
     get_recent_session_results,
     get_session_failure_counts,
     get_session_steps,
@@ -208,3 +209,16 @@ def test_a_persons_verdict_replaces_the_judges_everywhere(seeded: Session) -> No
     assert get_calibration_stats(AGENT, seeded)["agreement_count"] == 1  # now agrees on s2
     other = seeded.query(EvalResult).filter(EvalResult.agent_id == "other-bot").one()
     assert other.passed is True and other.judge_passed is None  # another agent's s1 untouched
+
+
+
+def test_failed_sessions_show_when_the_conversation_happened(db: Session) -> None:
+    """History read from Langfuse is judged on connect: show when it happened, not when it was judged."""
+    _step(db, "old", 1, "plan", False, "goal_drift", "Wandered off topic")
+    db.query(AgentLog).filter(AgentLog.session_id == "old").update(
+        {AgentLog.timestamp: datetime.now(timezone.utc) - timedelta(days=3)})
+    db.commit()
+    for row in (get_pattern_sessions(AGENT, "failure_type", "goal_drift", 10, db)[0],
+                get_recent_failing_sessions(AGENT, 10, db)[0]):
+        ended = row["failed_at"].replace(tzinfo=timezone.utc)
+        assert timedelta(days=2) < datetime.now(timezone.utc) - ended < timedelta(days=4)

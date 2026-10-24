@@ -426,6 +426,7 @@ def get_recent_failing_sessions(
         if len(result) >= limit * 2:
             break
 
+    _when_it_happened(agent_id, result, db)
     if sort_by == "score_asc":
         result.sort(key=lambda s: s["overall_score"])
     elif sort_by == "failure_type":
@@ -649,7 +650,21 @@ def get_pattern_sessions(
         })
         if len(out) >= limit:
             break
+    _when_it_happened(agent_id, out, db)
     return out
+
+
+def _when_it_happened(agent_id: str, sessions: List[Dict[str, Any]], db: Session) -> None:
+    """failed_at = when the conversation ended, not when it was judged: history read from
+    Langfuse/LangSmith is judged on connect, and last week's mistakes shouldn't say '4m ago'."""
+    ids = [s["session_id"] for s in sessions]
+    if not ids:
+        return
+    ended = dict(db.query(AgentLog.session_id, func.max(AgentLog.timestamp))
+                 .filter(AgentLog.agent_id == agent_id, AgentLog.session_id.in_(ids))
+                 .group_by(AgentLog.session_id).all())
+    for s in sessions:
+        s["failed_at"] = ended.get(s["session_id"]) or s["failed_at"]
 
 
 def search_sessions(agent_ids: List[str], text: str, limit: int, db: Session) -> List[Dict[str, Any]]:

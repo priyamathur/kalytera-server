@@ -37,36 +37,6 @@ PALETTE: Dict[str, Tuple[str, str]] = {
     "loop":          ("#475569", "#f8fafc"),
 }
 
-_FIXES: Dict[str, str] = {
-    "tool_failure":  "Add exit-code checks after every bash/tool call — retry once, then report the failure explicitly.",
-    "wrong_answer":  "Verify the agent reads the actual file before writing a fix — wrong outputs usually mean unread context.",
-    "goal_drift":    "Re-inject the original task description at each step so the agent cannot drift to unrelated issues.",
-    "hallucination": "Require the agent to look up imports and API signatures in the codebase before using them.",
-    "context_loss":  "Pass the full file path, line numbers, and prior diffs into every step — don't rely on short-term memory.",
-    "incomplete":    "Add a completion checklist: tests passing, changes committed, PR opened — verify all three before closing.",
-    "loop":          "Track executed commands in a set per session — halt and surface an error after the same command runs 3×.",
-}
-
-_FIX_STEP: Dict[str, str] = {
-    "tool_failure":  "Check exit code and retry at **{step}**.",
-    "wrong_answer":  "Read the target file before writing at **{step}**.",
-    "goal_drift":    "Re-inject original task spec before **{step}**.",
-    "hallucination": "Verify import/API exists in repo before **{step}**.",
-    "context_loss":  "Pass file path and prior diff into **{step}**.",
-    "incomplete":    "Add commit + PR check after **{step}**.",
-    "loop":          "Add command dedup guard before **{step}**.",
-}
-
-_FIX_TRACE: Dict[str, str] = {
-    "tool_failure":  "Check the exit code from **{s}** — add a retry and surface the stderr if it fails again.",
-    "wrong_answer":  "Review what the agent read before **{s}** — the output contradicts what is in the file.",
-    "goal_drift":    "Prepend the original issue/task spec to **{s}** — the agent lost its objective.",
-    "hallucination": "Grep the codebase for the import used at **{s}** — the agent invented a nonexistent API.",
-    "context_loss":  "Confirm the file path and prior changes are passed into **{s}** — agent has no context.",
-    "incomplete":    "Add a post-step check after **{s}**: verify commit hash exists and PR is open.",
-    "loop":          "Log commands executed before **{s}** — break if the same command has already run this session.",
-}
-
 ALL_FT = [
     "tool_failure", "wrong_answer", "goal_drift",
     "incomplete", "hallucination", "context_loss", "loop",
@@ -114,16 +84,6 @@ def _fmt_ts(ts: Optional[datetime]) -> str:
     if ts.tzinfo is None:
         ts = ts.replace(tzinfo=timezone.utc)
     return ts.strftime("%b %d %H:%M")
-
-
-def _fix_step(ft: Optional[str], step: str) -> str:
-    return _FIX_STEP.get(ft or "", "Review logic at **{step}**.").format(step=step)
-
-
-def _fix_trace(ft: Optional[str], step: str) -> str:
-    """HTML: the trace view renders this inside HTML, where **bold** would show literally."""
-    text = _FIX_TRACE.get(ft or "", "Review agent logic at **{s}**.").format(s=html.escape(step))
-    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)
 
 
 def _short_reason(reason: Optional[str], ft: Optional[str], step_name: str) -> str:
@@ -602,11 +562,6 @@ with st.sidebar:
         st.rerun()
 
     st.markdown(
-        '<p style="font-size:11px;color:#94a3b8;padding:4px 4px 0;line-height:1.7">'
-        'Evals every 30s&nbsp;·&nbsp;Patterns hourly</p>',
-        unsafe_allow_html=True,
-    )
-    st.markdown(
         '<a href="https://api.kalytera.dev/docs" target="_blank" '
         'style="font-size:11px;color:#94a3b8;text-decoration:none;padding:0 4px">'
         '→ API docs</a>',
@@ -724,9 +679,10 @@ def _show_overview(agent_id: str) -> None:
     k1, k2, k3, k4, k5, k6 = st.columns(6)
     k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), f"distinct sessions, {sel_label}"), unsafe_allow_html=True)
     k2.markdown(_kpi_card("Pass Rate", f"{pass_pct:.0f}%", "score ≥ 70", color=pass_color), unsafe_allow_html=True)
-    k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "weighted 4 dims"), unsafe_allow_html=True)
+    k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "the judge's weighted score"), unsafe_allow_html=True)
     k4.markdown(_kpi_card("Failed sessions", str(failures_n), f"{_pct(failures_n, stats['total'])} of sessions, {sel_label}", color=fail_color), unsafe_allow_html=True)
-    k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms", "mean per step"), unsafe_allow_html=True)
+    k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms" if extra["avg_latency_ms"] else "—",
+                          "mean per step" if extra["avg_latency_ms"] else "not recorded"), unsafe_allow_html=True)
     _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#6366f1"}
     _CALIB_LABEL = {"excellent": "Calibrated ✓", "good": "Good", "needs_calibration": "Review weights", "unlabeled": "Not yet labeled"}
     calib_status = calib["status"]
@@ -754,7 +710,7 @@ def _show_overview(agent_id: str) -> None:
             fig.add_trace(go.Scatter(
                 x=df_t["date"], y=(df_t["avg_score"] * 100).round(1),
                 name="Avg Score",
-                mode="lines",
+                mode="lines+markers",  # a dot even when there is only one day so far
                 fill="tozeroy",
                 fillcolor="rgba(99,102,241,0.10)",
                 line=dict(color="#6366f1", width=2.5),
@@ -778,7 +734,8 @@ def _show_overview(agent_id: str) -> None:
                           annotation_position="bottom right",
                           annotation_font_size=10, annotation_font_color="#ef4444")
             _plotly_defaults(fig, 230).update_layout(
-                xaxis=dict(title="Date", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                xaxis=dict(title="Date", gridcolor="#f1f5f9", linecolor="#e2e8f0",
+                           type="date", tickformat="%b %d", dtick=86400000),
                 yaxis=dict(title="Score / Pass %", range=[0, 108],
                            gridcolor="#f1f5f9", linecolor="#e2e8f0"),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02,
@@ -1636,7 +1593,32 @@ def _build_diagnosis(
             f"{primary_log.step_number} ({step_name}): {primary_ev.failure_reason or ft}. "
             f"Also failed at {', '.join(others)}."
         )
-    return {"what": what, "fix": _fix_trace(ft, step_name)}
+    return {"what": html.escape(what)}
+
+
+def _actions_html(calls: List[Dict[str, Any]]) -> str:
+    """What the agent did in this step: each action, what it was given and what came back.
+    Often the mistake is only visible here (a refund of 450 behind a reply that says 45)."""
+    rows = []
+    for c in calls:
+        if not isinstance(c, dict):
+            continue
+        args = c.get("input") or c.get("args") or {}
+        given = (", ".join(f"{k}={v}" for k, v in args.items()) if isinstance(args, dict) else str(args))[:400]
+        failed = c.get("success") is False
+        back = str(c.get("error") or c.get("output") or "")[:400]
+        rows.append(
+            f'<div style="font-size:12.5px;line-height:1.6;padding:6px 0;border-top:1px solid #f1f5f9">'
+            f'<span style="color:{"#dc2626" if failed else "#16a34a"}">{"✗" if failed else "✓"}</span> '
+            f'<b style="font-family:monospace">{html.escape(str(c.get("name") or "action"))}</b>'
+            f'<span style="font-family:monospace;color:#334155">({html.escape(given)})</span>'
+            + (f'<div style="color:#64748b;margin-left:18px">→ {html.escape(back)}</div>' if back else "")
+            + '</div>')
+    if not rows:
+        return ""
+    return ('<div style="margin-top:10px;background:white;border:1px solid #e2e8f0;border-radius:10px;padding:8px 14px">'
+            '<p style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;'
+            'letter-spacing:0.08em;margin:0 0 2px">Actions</p>' + "".join(rows) + '</div>')
 
 
 def _score_bar(label: str, value: float, color: str) -> str:
@@ -1811,12 +1793,8 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                              letter-spacing:0.06em">Root Cause</span>
                 {_badge(primary_ft, "11px")}
               </div>
-              <div style="font-size:14px;font-weight:600;color:#1e293b;margin-bottom:10px;line-height:1.6">
+              <div style="font-size:14px;font-weight:600;color:#1e293b;line-height:1.6">
                 {diag['what']}
-              </div>
-              <div style="display:flex;align-items:flex-start;gap:8px;font-size:13px;color:#0369a1">
-                <span style="font-weight:700;flex-shrink:0">→ Fix:</span>
-                <span>{diag['fix']}</span>
               </div>
             </div>
             """,
@@ -1840,10 +1818,11 @@ def _show_trace(agent_id: str, session_id: str) -> None:
         status_icon = "✗" if is_step_failed else ("✓" if ev else "·")
 
         # Expander label: the step_name IS the summary — no extra words needed
+        took = f"  ·  {log.latency_ms:,} ms" if log.latency_ms else ""  # imported conversations may have no timings
         if score is not None:
-            label = f"{status_icon}  Step {log.step_number} · {log.step_name}  ·  {log.latency_ms:,} ms  ·  {score}/100"
+            label = f"{status_icon}  Step {log.step_number} · {log.step_name}{took}  ·  {score}/100"
         else:
-            label = f"·  Step {log.step_number} · {log.step_name}  ·  {log.latency_ms:,} ms  ·  pending"
+            label = f"·  Step {log.step_number} · {log.step_name}{took}  ·  pending"
 
         # Failed steps open automatically so failures are never hidden
         with st.expander(label, expanded=is_step_failed):
@@ -1859,7 +1838,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                 st.markdown(
                     f'<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;'
                     f'padding:12px 14px;font-size:13px;color:#1e293b;line-height:1.6;min-height:52px">'
-                    f'{log.input[:800]}{"…" if len(log.input) > 800 else ""}'
+                    f'{html.escape(log.input[:800])}{"…" if len(log.input) > 800 else ""}'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -1872,7 +1851,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                 st.markdown(
                     f'<div style="background:white;border:1px solid #e2e8f0;border-radius:10px;'
                     f'padding:12px 14px;font-size:13px;color:#1e293b;line-height:1.6;min-height:52px">'
-                    f'{log.output[:800]}{"…" if len(log.output) > 800 else ""}'
+                    f'{html.escape(log.output[:800])}{"…" if len(log.output) > 800 else ""}'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
@@ -1881,7 +1860,6 @@ def _show_trace(agent_id: str, session_id: str) -> None:
             if is_step_failed and ev:
                 ft = ev.failure_type or "unknown"
                 fg, bg = _ft_color(ft)
-                fix = _fix_trace(ft, log.step_name)
                 bars = (
                     _score_bar("Accuracy", ev.accuracy, "#6366f1")
                     + _score_bar("Goal alignment", ev.goal_alignment, "#8b5cf6")
@@ -1898,11 +1876,9 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                       <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start">
                         <div style="flex:1;min-width:200px">
                           <div style="margin-bottom:8px">{_badge(ft)}</div>
-                          <div style="font-size:13px;font-weight:600;color:#1e293b;
-                                      line-height:1.5;margin-bottom:8px">
-                            {ev.failure_reason or ft}
+                          <div style="font-size:13px;font-weight:600;color:#1e293b;line-height:1.5">
+                            {html.escape(ev.failure_reason or ft)}
                           </div>
-                          <div style="font-size:12px;color:#0369a1">→ {fix}</div>
                         </div>
                         <div style="width:190px;flex-shrink:0">{bars}</div>
                       </div>
@@ -1920,8 +1896,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
                         else log.tool_calls
                     )
                     if tools:
-                        st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
-                        st.json(tools, expanded=False)
+                        st.markdown(_actions_html(tools), unsafe_allow_html=True)
                 except (json.JSONDecodeError, TypeError):
                     pass
 

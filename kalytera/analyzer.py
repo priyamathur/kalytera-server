@@ -238,7 +238,7 @@ def _check_worsening(
     current_start = now - timedelta(days=WORSENING_WINDOW_DAYS)
     prior_start = current_start - timedelta(days=WORSENING_WINDOW_DAYS)
 
-    def failure_rate_in_window(start: datetime, end: datetime) -> float:
+    def failure_rate_in_window(start: datetime, end: datetime) -> Optional[float]:
         total = (
             db.query(EvalResult)
             .filter(
@@ -249,13 +249,15 @@ def _check_worsening(
             .count()
         )
         if total == 0:
-            return 0.0
+            return None
         failed = _count_group_in_window(pattern_type, pattern_value, agent_id, start, end, db)
         return failed / total
 
     current_rate = failure_rate_in_window(current_start, now)
     prior_rate = failure_rate_in_window(prior_start, current_start)
-    return current_rate > prior_rate
+    if prior_rate is None:
+        return False  # nothing judged the week before (e.g. just connected): nothing to be worse than
+    return current_rate is not None and current_rate > prior_rate
 
 
 def _count_group_in_window(
