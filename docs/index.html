@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kalytera — Find where your agent fails</title>
+<title>Kalytera — Catch your AI agents' mistakes</title>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -321,7 +321,6 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
   <div class="nav-links">
     <span class="nav-link" onclick="go('docs')" id="nl-docs">Docs</span>
     <span class="nav-link" onclick="go('pricing')" id="nl-pricing">Pricing</span>
-    <span class="nav-link" onclick="go('research')" id="nl-research">Research</span>
     <span class="nav-cta" onclick="openSignup('free')">Get started free →</span>
   </div>
 </nav>
@@ -333,7 +332,7 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
     <div id="modal-form-view">
       <div class="plan-tag free" id="modal-plan-tag">Free plan</div>
       <div class="modal-title">Create your account</div>
-      <div class="modal-sub" id="modal-plan-desc">5,000 sessions/month, free forever. No credit card required.</div>
+      <div class="modal-sub" id="modal-plan-desc">5,000 conversations a month, free forever. No credit card required.</div>
       <div class="form-row">
         <label class="form-label">Name or company</label>
         <input class="form-input" id="signup-name" type="text" placeholder="Acme Corp or Jane Smith" />
@@ -355,15 +354,15 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
         <div class="key-val" id="key-display">kly_live_...</div>
         <span class="key-copy" onclick="copyKey()">Copy</span>
       </div>
-      <div class="key-warn"><strong>Store this securely.</strong> It authenticates your agent to Kalytera. If you lose it, email <strong style="color:var(--white)">priya@kalytera.ai</strong> for a replacement.</div>
+      <div class="key-warn"><strong>Store this securely.</strong> It's your login to the dashboard, and it connects your agent to Kalytera. If you lose it, email <strong style="color:var(--white)">priya@kalytera.ai</strong> for a replacement.</div>
       <button class="btn-full" style="margin-top:20px" onclick="showSuccessView()">Done — show me next steps →</button>
     </div>
 
     <!-- SUCCESS VIEW -->
     <div id="modal-success-view" style="display:none;text-align:center">
       <div style="width:60px;height:60px;border-radius:50%;background:rgba(168,224,96,0.12);border:1.5px solid rgba(168,224,96,0.35);display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:26px;color:var(--green)">✓</div>
-      <div class="modal-title" style="margin-bottom:8px">You're in. See it work in 2 minutes:</div>
-      <div class="modal-sub" style="margin-bottom:24px">No code. A sample agent fails, Kalytera finds why, writes the rule, and blocks the next bad call.</div>
+      <div class="modal-title" style="margin-bottom:8px">You're in. Next:</div>
+      <div class="modal-sub" style="margin-bottom:24px">No code needed to see your agent's problems.</div>
       <div style="text-align:left;display:flex;flex-direction:column;gap:14px;margin-bottom:24px">
         <div style="display:flex;gap:14px;align-items:flex-start">
           <div style="width:24px;height:24px;border-radius:50%;background:var(--cyan-bg);border:1px solid rgba(0,200,232,0.25);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--cyan);flex-shrink:0;margin-top:1px">1</div>
@@ -371,11 +370,11 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
         </div>
         <div style="display:flex;gap:14px;align-items:flex-start">
           <div style="width:24px;height:24px;border-radius:50%;background:var(--cyan-bg);border:1px solid rgba(0,200,232,0.25);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--cyan);flex-shrink:0;margin-top:1px">2</div>
-          <div style="font-size:13px;color:rgba(232,236,240,0.82);line-height:1.6">Click <b>▶ Run the sample agent</b></div>
+          <div style="font-size:13px;color:rgba(232,236,240,0.82);line-height:1.6">Click <b>＋ Connect an agent</b> and paste your Langfuse or LangSmith keys. No agent yet? Click <b>▶ Try the sample agent</b>.</div>
         </div>
         <div style="display:flex;gap:14px;align-items:flex-start">
           <div style="width:24px;height:24px;border-radius:50%;background:var(--cyan-bg);border:1px solid rgba(0,200,232,0.25);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--cyan);flex-shrink:0;margin-top:1px">3</div>
-          <div style="font-size:13px;color:rgba(232,236,240,0.82);line-height:1.6"><b>⚡ Make it a rule</b> → <b>Start blocking</b></div>
+          <div style="font-size:13px;color:rgba(232,236,240,0.82);line-height:1.6">Turn on <b>Alerts in Slack</b> on the same page, so new problems come to you</div>
         </div>
       </div>
       <a href="https://app.kalytera.dev" target="_blank" onclick="copyKeySilently()" class="btn-full" style="text-decoration:none;display:block;text-align:center;padding:14px;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:13px;background:var(--cyan);color:#0a0d10;border-radius:7px;border:none;cursor:pointer">Copy key &amp; open dashboard →</a>
@@ -392,19 +391,19 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
 <!-- ===== HOME ===== -->
 <div class="page on" id="pg-home">
 <div class="hero">
-  <div class="badge"><div class="badge-dot"></div>LLM evaluation for production agents</div>
-  <h1>Catch agent failures<br><em>before your users do.</em></h1>
-  <p class="lead">Evaluate every step automatically, surface the patterns behind failures, and get a plain-English root cause — without digging through traces.</p>
+  <div class="badge"><div class="badge-dot"></div>For AI agents in production</div>
+  <h1>Catch your AI agents' mistakes.<br><em>Stop the costly ones.</em></h1>
+  <p class="lead">Connect Langfuse or LangSmith, with no code. Kalytera reads every conversation, finds the mistakes that keep happening, tells you in Slack, and turns each one into a rule that stops the next bad refund, booking or email before it happens.</p>
   <div class="btn-row">
     <button class="btn-p" onclick="openSignup('free')">Get started free</button>
     <button class="btn-s" onclick="go('docs')">See how it works →</button>
   </div>
-  <p class="note">One line for OpenAI Agents SDK and LangChain / LangGraph agents; two for your own agent loop. Free for 5K sessions/month.</p>
+  <p class="note">Free for 5,000 conversations a month. No credit card.</p>
 
   <!-- EXPANDABLE PROMPT -->
   <div class="prompt-expand">
     <button class="prompt-trigger" onclick="togglePrompt()">
-      <span>Add Kalytera to your agent</span>
+      <span>Not on Langfuse or LangSmith? Add one line to your agent</span>
       <span class="prompt-chevron" id="prompt-chevron">▾</span>
     </button>
     <div id="prompt-body" class="prompt-body-wrap" style="display:none">
@@ -412,9 +411,9 @@ footer{border-top:1px solid var(--border);padding:32px 56px}
         <span class="prompt-bar-label">Paste into Claude Code, Cursor, or Copilot</span>
         <span class="prompt-copy-btn" onclick="copyPrompt()">Copy</span>
       </div>
-      <div class="prompt-text" id="prompt-text"># Add Kalytera monitoring to this AI agent
+      <div class="prompt-text" id="prompt-text"># Add Kalytera to this AI agent
 
-Set up Kalytera evaluation in this working directory. Follow these steps in order.
+Set up Kalytera in this working directory. Follow these steps in order.
 
 ## Step 1: Set up Kalytera access
 
@@ -447,44 +446,32 @@ If the agent is a custom loop with no framework, also:
 
 ## Rules
 - Do not change agent logic. Only add the lines above.
-- Kalytera never raises and never blocks the agent; if it is unreachable, tools still run.
+- Kalytera never raises because of itself; if it is unreachable, tools still run.
 - Tell the user to open https://app.kalytera.dev — the agent appears under its own name after its first run.</div>
     </div>
   </div>
 </div>
 
-<!-- HERO MOCKUP -->
+<!-- HERO MOCKUP: a real problem from our own test agent -->
 <div class="mockup">
-  <div class="mock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="mock-label">Kalytera — Interaction Detail · support_agent · retail</span></div>
+  <div class="mock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="mock-label">Kalytera — a problem in support-bot</span></div>
   <div class="mock-body">
     <div>
-      <div class="mock-head"><span>Interaction 1143 &nbsp;<span class="fail-tag">FAILED</span></span><span style="font-size:11px;color:var(--muted)">just now</span></div>
+      <div class="mock-head"><span>One of the 12 conversations &nbsp;<span class="fail-tag">FAILED</span></span><span style="font-size:11px;color:var(--muted)">2d ago</span></div>
       <div class="mock-steps">
-        <div class="st"><div class="si p">✓</div><div><div class="sn">Step 1 — User asked about a refund</div><div class="sd">Agent acknowledged correctly, requested order number.</div></div></div>
-        <div class="st"><div class="si p">✓</div><div><div class="sn">Step 2 — Agent retrieved order history</div><div class="sd">Correct tool call. Order found, eligible for refund.</div></div></div>
-        <div class="st bad"><div class="si f">✗</div><div><div class="sn">Step 3 — Payment policy API timed out</div><div class="sd">Tool call to payment_policy_api timed out after 8s. Agent continued without a response.</div><div class="sr">↳ tool_failure — payment policy API did not return in time</div></div></div>
-        <div class="st"><div class="si f">✗</div><div><div class="sn">Step 4 — Agent answered anyway</div><div class="sd">Told the customer the refund was approved without confirming eligibility.</div><div class="sr">↳ wrong_answer — claim not grounded in tool output</div></div></div>
+        <div class="st"><div class="si p">✓</div><div><div class="sn">Customer</div><div class="sd">"My order A-2001 arrived damaged. Please refund the $45 I paid."</div></div></div>
+        <div class="st bad"><div class="si f">✗</div><div><div class="sn">Action — refund_api(order_id=A-2001, amount=450)</div><div class="sd">The refund went through: $450, ten times what the customer paid.</div></div></div>
+        <div class="st"><div class="si f">✗</div><div><div class="sn">Agent</div><div class="sd">"All done! I've refunded $45.00 for order A-2001."</div><div class="sr">↳ the reply looks right; only the action shows the mistake</div></div></div>
       </div>
     </div>
     <div class="verdict">
-      <div class="v-label">Kalytera verdict</div>
-      <div class="v-score">34<span style="font-size:18px;opacity:.4">/100</span></div>
-      <div class="v-dims">accuracy 0.2 · goal_alignment 0.6<br>decision_quality 0.3 · completeness 0.7</div>
-      <div class="v-body">Payment policy API timed out at step 3. Instead of retrying or escalating, the agent told the customer the refund was approved — a claim it had no basis for.</div>
-      <div class="v-fix-label">Suggested fix</div>
-      <div class="v-fix">Add a timeout fallback at step 3: retry once, then escalate to a human instead of guessing the policy outcome.</div>
+      <div class="v-label">The problem</div>
+      <div class="v-score">12<span style="font-size:18px;opacity:.4"> of 29</span></div>
+      <div class="v-dims">conversations in the last 30 days</div>
+      <div class="v-body">The agent keeps issuing refunds at ten times the correct amount.</div>
+      <div class="v-fix-label">Suggested rule</div>
+      <div class="v-fix">A refund over $70 needs a person to approve it. Would have caught 12 of 12 bad refunds and none of the 11 good ones.</div>
     </div>
-  </div>
-</div>
-
-<!-- PROBLEM -->
-<div class="sec" style="border-top:1px solid var(--border)">
-  <div class="sh"><h2>AI adoption in enterprises</h2><div class="sh-line"></div></div>
-  <div class="prob-grid">
-    <div class="prob-card"><svg class="prob-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10 2.5L1.5 17.5h17L10 2.5z" stroke="#e85555" stroke-width="1.5" stroke-linejoin="round"/><line x1="10" y1="8.5" x2="10" y2="12.5" stroke="#e85555" stroke-width="1.5" stroke-linecap="round"/><circle cx="10" cy="15" r="1" fill="#e85555"/></svg><div class="prob-title">No quality layer means failures compound silently</div><div class="prob-body">Existing tools sample traffic and check only the final output. <strong>Failures that start mid-workflow leave no trace at the end.</strong> Developers find out from customer complaints, then spend hours in traces to find which step caused it.</div></div>
-    <div class="prob-card"><svg class="prob-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><polyline points="2,16 6,10 11,13 18,4" stroke="#e8a840" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><polyline points="14,4 18,4 18,8" stroke="#e8a840" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="prob-title">Enterprises can measure ROI — but not what's driving it</div><div class="prob-body">Experiment frameworks can show whether agent deployment improved outcomes. But without a quality layer, nobody knows which failure patterns dragged performance down. <strong>The overall return is visible. The causes are not.</strong></div></div>
-    <div class="prob-card"><svg class="prob-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><line x1="2" y1="5" x2="18" y2="5" stroke="#00c8e8" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="10" x2="18" y2="10" stroke="#00c8e8" stroke-width="1.5" stroke-linecap="round"/><line x1="2" y1="15" x2="18" y2="15" stroke="#00c8e8" stroke-width="1.5" stroke-linecap="round"/><circle cx="6" cy="5" r="2.5" fill="#0a0d10" stroke="#00c8e8" stroke-width="1.5"/><circle cx="13" cy="10" r="2.5" fill="#0a0d10" stroke="#00c8e8" stroke-width="1.5"/><circle cx="9" cy="15" r="2.5" fill="#0a0d10" stroke="#00c8e8" stroke-width="1.5"/></svg><div class="prob-title">Generic pass/fail scores don't match what your agent is actually for</div><div class="prob-body">A healthcare agent and a marketing agent should not be graded the same way. <strong>Most eval tools give you one generic score with no way to configure what quality actually means for your use case.</strong></div></div>
-    <div class="prob-card"><svg class="prob-icon" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M3 10a7 7 0 0 1 7-7h4.5" stroke="#a8e060" stroke-width="1.5" stroke-linecap="round"/><polyline points="12,1 14.5,3 12,5" stroke="#a8e060" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 10a7 7 0 0 1-7 7H5.5" stroke="#a8e060" stroke-width="1.5" stroke-linecap="round"/><polyline points="8,19 5.5,17 8,15" stroke="#a8e060" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="prob-title">Your agent repeats the same mistake next interaction <span class="np">Next phase</span></div><div class="prob-body">There's no mechanism to warn an agent about a failure before it hits the same step again. Fixing it requires retraining — <strong>which needs labeled data you don't have yet.</strong></div></div>
   </div>
 </div>
 
@@ -498,8 +485,8 @@ If the agent is a custom loop with no framework, also:
         <div class="inc-txt">74% of enterprises have rolled back or shut down a live AI customer-communications agent after a governance failure. The rate climbs to <strong>81% among organizations with fully mature guardrails.</strong></div>
       </div>
       <div class="inc">
-        <div class="inc-lbl">// Palantir CEO Alex Karp · CNBC Squawk Box · July 1, 2026 · <a href="https://siliconangle.com/?p=774570" target="_blank" rel="noopener" style="color:inherit">via SiliconANGLE</a></div>
-        <div class="inc-txt">Palantir CEO Alex Karp told CNBC that enterprise customers are <strong>"paying for tokens that create no value."</strong> Experiment frameworks can measure the overall return. But without a quality layer, nobody knows what failure patterns are dragging that return down — or what to fix to make it better.</div>
+        <div class="inc-lbl">// what that looks like</div>
+        <div class="inc-txt">The agent's reply reads fine. The refund it issued was ten times too big. <strong>Nobody finds out until the customer, or finance, does.</strong> Checking replies alone misses it; Kalytera reads what every action did.</div>
       </div>
     </div>
     <div class="vstats">
@@ -509,122 +496,108 @@ If the agent is a custom loop with no framework, also:
   </div>
 </div>
 
-<!-- FEATURES -->
+<!-- HOW IT WORKS -->
 <div class="sec" style="border-top:1px solid var(--border)">
-  <div class="sh"><h2>How Kalytera fixes it</h2><div class="sh-line"></div></div>
-  <p class="feat-lead">AI agents fail differently than normal software. You need a different kind of observability to catch it — one that watches every step, not just the final output.</p>
+  <div class="sh"><h2>How it works</h2><div class="sh-line"></div></div>
   <div class="feat-list">
 
     <div class="feat-item">
       <div>
-        <div class="feat-problem">Sampling-based tools only look at part of your traffic. Rare, high-cost failures — infinite loops, cascading tool errors — never appear in the sample.</div>
-        <div class="feat-tag">trace everything</div>
-        <div class="feat-title">100% coverage. Every step of every session.</div>
-        <div class="feat-body">One line to add. <code>kalytera.trace()</code> is fire-and-forget — under 5ms, never raises, never blocks. Nothing is sampled. If a failure mode exists in your traffic, you will see it.</div>
+        <div class="feat-problem">Your agent's conversations are already in Langfuse or LangSmith. Nobody has time to read them.</div>
+        <div class="feat-tag">1 · connect once</div>
+        <div class="feat-title">Paste two keys. Kalytera reads every conversation.</div>
+        <div class="feat-body">Kalytera reads the last 30 days right away, then new conversations every 15 minutes. It reads every conversation, not a sample. Your keys are stored encrypted, only ever used to read, and deleted when you remove the connection.</div>
       </div>
       <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Session Feed · support_agent</span><span class="fmock-live">live</span></div>
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Connect</span></div>
         <div class="fmock-body">
-          <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:12px;font-family:'DM Mono',monospace"><span style="color:rgba(232,236,240,0.35)">1,247 sessions today</span><span style="color:var(--cyan)">100% evaluated</span></div>
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Session 1249 · classify_intent · 4 steps</span><span class="fmock-score" style="color:var(--green)">91/100</span></div>
-          <div class="fmock-row bad"><span class="fmock-fail">✗</span><span class="fmock-lbl hi">Session 1248 · billing_dispute · 4 steps</span><span class="fmock-score" style="color:var(--red)">34/100</span></div>
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Session 1247 · account_lookup · 3 steps</span><span class="fmock-score" style="color:var(--green)">94/100</span></div>
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Session 1246 · password_reset · 2 steps</span><span class="fmock-score" style="color:var(--green)">88/100</span></div>
-          <div class="fmock-row bad"><span class="fmock-fail">✗</span><span class="fmock-lbl hi">Session 1244 · payment_update · 5 steps</span><span class="fmock-score" style="color:var(--red)">28/100</span></div>
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Session 1243 · order_status · 3 steps</span><span class="fmock-score" style="color:var(--green)">89/100</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Langfuse → support-bot</span><span class="fmock-score" style="color:var(--green)">read 3m ago</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">LangSmith → booking-agent</span><span class="fmock-score" style="color:var(--green)">read 9m ago</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">Slack → #agent-alerts</span><span class="fmock-score" style="color:var(--green)">on</span></div>
+          <div class="fmock-hint">Reading new conversations every 15 minutes</div>
         </div>
       </div>
     </div>
 
     <div class="feat-item">
       <div>
-        <div class="feat-problem">Mid-workflow failures produce plausible-looking final outputs. By the time the output is checked, the signal is gone. Developers spend hours in traces trying to find which step caused it.</div>
-        <div class="feat-tag">step-level scoring</div>
-        <div class="feat-title">Scored at every step, not just the final answer.</div>
-        <div class="feat-body">Kalytera evaluates each step independently across six dimensions: accuracy, goal alignment, decision quality, completeness, helpfulness, and factuality. The failure shows up where it originated — not where it ended up.</div>
+        <div class="feat-problem">One bad conversation is noise. Twelve of the same mistake is a problem, but only if something notices.</div>
+        <div class="feat-tag">2 · problems, in Slack</div>
+        <div class="feat-title">Mistakes that keep happening, named in plain English.</div>
+        <div class="feat-body">A judge model reads each whole conversation: what the customer asked, what the agent did, and what each action returned. Failures are grouped by the action that went wrong. When a new problem appears or one gets worse, you get a Slack message that links straight to the conversations.</div>
       </div>
       <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Session 1248 · billing_dispute · FAILED</span></div>
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Slack · #agent-alerts</span></div>
         <div class="fmock-body">
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl" style="flex:1">Step 1 — classify_intent</span><span class="fmock-score" style="color:var(--green)">96/100</span></div>
-          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl" style="flex:1">Step 2 — retrieve_order</span><span class="fmock-score" style="color:var(--green)">91/100</span></div>
-          <div class="fmock-row bad"><span class="fmock-fail">✗</span><span class="fmock-lbl hi" style="flex:1">Step 3 — payment_policy_api</span><span class="fmock-score" style="color:var(--red)">12/100</span></div>
-          <div class="fmock-row warn"><span class="fmock-fail">✗</span><span class="fmock-lbl" style="flex:1">Step 4 — generate_response</span><span class="fmock-score" style="color:var(--red)">34/100</span></div>
-          <div class="fmock-hint">Failure originated at step 3 — not step 4</div>
+          <div class="fmock-hdg">🚨 2 new problems in support-bot</div>
+          <div class="fmock-verdict">The agent keeps issuing refunds at ten times the correct amount.<br><span style="opacity:.6">12 of 29 conversations</span></div>
+          <div class="fmock-verdict">The agent tells customers their order was delivered when the lookup shows it's still in transit.<br><span style="opacity:.6">6 of 29 conversations</span></div>
+          <div class="fmock-fix">See conversations →</div>
         </div>
       </div>
     </div>
 
     <div class="feat-item">
       <div>
-        <div class="feat-problem">A 23% failure rate tells you something is wrong. It doesn't tell you which sessions, which step, or what to change. Most eval tools stop at the score.</div>
-        <div class="feat-tag">root cause</div>
-        <div class="feat-title">A sentence you can put in a ticket, not a number.</div>
-        <div class="feat-body">Every failure surfaces with a plain-English root cause: which step, why it failed, how many sessions this week. Not a score — a sentence your team can act on today.</div>
+        <div class="feat-problem">Knowing about a mistake doesn't stop the next one. A prompt change might, or might not.</div>
+        <div class="feat-tag">3 · stop the costly ones</div>
+        <div class="feat-title">One click turns a problem into a rule. One line enforces it.</div>
+        <div class="feat-body">Kalytera suggests a rule for the problem and shows what it would have caught in your past conversations. New rules start out only watching. When you switch one to blocking, <code>kalytera.init()</code> checks each action before it runs: a blocked refund never happens, and your agent gets a reason it can tell the customer.</div>
       </div>
       <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Kalytera verdict · Session 1248</span></div>
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Rules · support-bot</span></div>
         <div class="fmock-body">
-          <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:14px"><span style="font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:28px;color:var(--red);letter-spacing:-1px">34</span><span style="font-size:11px;color:rgba(232,236,240,0.30);font-family:'DM Mono',monospace">/100 · FAILED</span></div>
-          <div class="fmock-hdg">Root cause</div>
-          <div class="fmock-verdict">Payment API timed out at step 3. Instead of escalating, the agent told the customer the refund was approved — a claim it had no basis for.</div>
-          <div class="fmock-hdg">Suggested fix</div>
-          <div class="fmock-fix">Add a timeout fallback at step 3: retry once, then escalate to a human instead of guessing the policy outcome.</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="feat-item">
-      <div>
-        <div class="feat-problem">One failure is noise. Twenty-three identical failures is a pattern — but only if something groups them. Without automatic detection, recurring issues stay invisible until a customer escalates.</div>
-        <div class="feat-tag">loss patterns</div>
-        <div class="feat-title">Recurring failures cluster automatically, ranked by impact.</div>
-        <div class="feat-body">Kalytera runs pattern detection hourly. Failures that share a root cause group into named patterns — ranked by frequency, tagged with first seen, flagged if worsening week over week.</div>
-      </div>
-      <div class="fmock">
-        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Loss Patterns · billing_agent · last 7d</span></div>
-        <div class="fmock-body">
-          <div class="fmock-bar-wrap">
-            <div class="fmock-bar-hd"><span style="color:var(--white)">tool_failure</span><span style="color:var(--red)">47 sessions ↑ worsening</span></div>
-            <div class="fmock-bar-track"><div class="fmock-bar-fill" style="width:67%;background:var(--red);opacity:.65"></div></div>
-            <div class="fmock-bar-note">↳ payment_policy_api timeout at step 3</div>
-          </div>
+          <div class="fmock-hdg">Suggested rule</div>
+          <div class="fmock-verdict">Block refund_api when amount is more than 70</div>
+          <div class="fmock-fix">Would have caught 12 of 12 failed conversations · touches 0 of 11 good ones</div>
           <div class="fmock-div"></div>
-          <div class="fmock-bar-wrap">
-            <div class="fmock-bar-hd"><span style="color:var(--white)">wrong_answer</span><span style="color:rgba(232,236,240,0.45)">31 sessions</span></div>
-            <div class="fmock-bar-track"><div class="fmock-bar-fill" style="width:44%;background:var(--muted)"></div></div>
-            <div class="fmock-bar-note">↳ refund eligibility incorrectly stated</div>
-          </div>
-          <div class="fmock-div"></div>
-          <div class="fmock-bar-wrap">
-            <div class="fmock-bar-hd"><span style="color:var(--white)">incomplete</span><span style="color:rgba(232,236,240,0.45)">16 sessions</span></div>
-            <div class="fmock-bar-track"><div class="fmock-bar-fill" style="width:23%;background:var(--muted);opacity:.5"></div></div>
-            <div class="fmock-bar-note">↳ no confirmation before closing ticket</div>
-          </div>
+          <div class="fmock-row bad"><span class="fmock-fail">✗</span><span class="fmock-lbl hi">refund_api(amount=450)</span><span class="fmock-score" style="color:var(--red)">blocked</span></div>
+          <div class="fmock-row"><span class="fmock-pass">✓</span><span class="fmock-lbl">refund_api(amount=40)</span><span class="fmock-score" style="color:var(--green)">allowed</span></div>
         </div>
       </div>
     </div>
 
-  </div>
-</div>
+    <div class="feat-item">
+      <div>
+        <div class="feat-problem">Your other agents, and other companies' agents, have made this mistake before.</div>
+        <div class="feat-tag">4 · memory</div>
+        <div class="feat-title">What one agent learns, the others get.</div>
+        <div class="feat-body">A rule that works for one of your agents is offered to the others, along with what it would have caught there. Kalytera also shares anonymous patterns between companies: the kinds of mistakes and the shapes of the rules that stopped them, never conversations, names or your limits. A pattern only appears once at least 5 companies have it. Sharing is on by default, and you can turn it off at any time.</div>
+      </div>
+      <div class="fmock">
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Rules · support-bot-v2</span></div>
+        <div class="fmock-body">
+          <div class="fmock-hdg">From your other agents</div>
+          <div class="fmock-verdict">Block refund_api when amount is more than 250</div>
+          <div class="fmock-fix">From support-bot · here it would have caught 10 of 18 failed conversations and touched 0 of 11 good ones</div>
+        </div>
+      </div>
+    </div>
 
-<!-- WHAT YOU SEE AFTER 30 DAYS -->
-<div class="sec" style="border-top:1px solid var(--border)">
-  <div class="sh"><h2>What you see after 30 days</h2><div class="sh-line"></div></div>
-  <p style="font-size:13px;color:rgba(232,236,240,0.48);max-width:620px;margin-bottom:28px;line-height:1.8">
-    Most teams connect Kalytera and find failures within the first hour that had been running silently for days.
-    After 30 days the picture gets sharper — not because the tool changed, but because the loss patterns have had time to emerge.
-  </p>
-  <div class="moat-grid">
-    <div class="moat-card"><div class="moat-title">Day 1 — failures you didn't know existed</div><div class="moat-body">The first dashboard view typically surfaces 2–4 active loss patterns in agents teams thought were healthy. One-off catastrophic failures that had no monitoring. Silent mid-workflow failures producing plausible-looking outputs.</div></div>
-    <div class="moat-card"><div class="moat-title">Day 7 — patterns you can act on</div><div class="moat-body">By the end of the first week, recurring failure patterns are named and ranked by frequency. Root cause is surfaced in plain English for each one. The team knows which failure types account for most quality issues and has a specific fix to ship.</div></div>
-    <div class="moat-card"><div class="moat-title">Day 30 — a feedback loop that runs itself</div><div class="moat-body">Every confirmed failure has fed the quality loop. Loss pattern frequency is tracked week over week. Quality scores are improving. The team can show exactly which failure types dropped, by how much, and when.</div></div>
+    <div class="feat-item">
+      <div>
+        <div class="feat-problem">"Did the fix work?" usually gets answered with a feeling.</div>
+        <div class="feat-tag">5 · proof</div>
+        <div class="feat-title">Before and after, in numbers.</div>
+        <div class="feat-body">Once a rule has been blocking for a week, Kalytera compares failed conversations before and after it started, and counts every block your team marked as wrong.</div>
+      </div>
+      <div class="fmock">
+        <div class="fmock-bar"><div class="d dr"></div><div class="d dy"></div><div class="d dg"></div><span class="fmock-title">Overview · support-bot</span></div>
+        <div class="fmock-body">
+          <div class="fmock-hdg">Since blocking started</div>
+          <div class="fmock-verdict">Failed conversations: 41% → 9%</div>
+          <div class="fmock-fix">2 blocks marked wrong by your team</div>
+          <div class="fmock-hint">Illustration: your numbers appear after a week of blocking</div>
+        </div>
+      </div>
+    </div>
+
   </div>
 </div>
 
 <div class="cta-wrap">
-  <h2>Stop finding out from your users.</h2>
-  <p>One line to add. Failure patterns surface in 30 seconds. Free for 5,000 sessions per month.</p>
+  <h2>Find out what your agents got wrong this week.</h2>
+  <p>Connect in two minutes. Free for 5,000 conversations a month.</p>
   <div class="cta-btns">
     <button class="btn-p" onclick="openSignup('free')">Get started free</button>
     <button class="btn-s" onclick="go('docs')">Read the docs →</button>
@@ -634,10 +607,10 @@ If the agent is a custom loop with no framework, also:
 <footer>
   <div class="footer-top">
     <div class="footer-logo"><div class="nav-dot"></div>Kalytera</div>
-    <div class="footer-note">kalytera.dev · priya@kalytera.ai · Find where your agent fails. Know why. Fix it.</div>
+    <div class="footer-note">kalytera.dev · priya@kalytera.ai</div>
   </div>
   <div class="footer-security">
-    <strong>Security:</strong> API keys are hashed before storage. Every query is scoped to your <code style="font-family:'DM Mono',monospace;font-size:11px;color:rgba(232,236,240,0.50)">agent_id</code> — no cross-tenant data access. Enterprise plan includes SSO, dedicated infrastructure, and a security review. <a href="security.html" style="color:var(--cyan)">Data &amp; security →</a>
+    <strong>Security:</strong> Kalytera API keys are stored hashed. Langfuse and LangSmith keys and Slack webhooks are stored encrypted. Every query is scoped to your account. <a href="security.html" style="color:var(--cyan)">Data &amp; security →</a>
   </div>
 </footer>
 </div>
@@ -647,18 +620,18 @@ If the agent is a custom loop with no framework, also:
 <div class="sec">
   <div style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:rgba(232,236,240,0.45);margin-bottom:8px">Pricing</div>
   <div class="docs-h1">Simple, usage-based pricing.</div>
-  <p class="docs-lead">Pay for sessions evaluated. No seat licenses. No surprise bills. Free tier works forever — upgrade when you need more.</p>
+  <p class="docs-lead">Pay for the conversations Kalytera checks. No seat licenses. The free plan works forever; upgrade when you need more.</p>
   <div class="price-grid">
     <div class="price-card">
       <div class="price-name">Free</div>
       <div class="price-amt">$0</div>
       <div class="price-unit">/ month, forever</div>
-      <div class="price-desc">For individual developers and early exploration.</div>
+      <div class="price-desc">For one agent, or to try Kalytera on real traffic.</div>
       <div class="price-feats">
-        <div class="price-feat"><span class="tick">✓</span>5,000 sessions / month</div>
-        <div class="price-feat"><span class="tick">✓</span>All 3 dashboard views</div>
-        <div class="price-feat"><span class="tick">✓</span>Loss pattern detection</div>
-        <div class="price-feat"><span class="tick">✓</span>Plain-English root cause</div>
+        <div class="price-feat"><span class="tick">✓</span>5,000 conversations / month</div>
+        <div class="price-feat"><span class="tick">✓</span>Connect Langfuse or LangSmith</div>
+        <div class="price-feat"><span class="tick">✓</span>Problems and Slack alerts</div>
+        <div class="price-feat"><span class="tick">✓</span>Rules that block costly actions</div>
         <div class="price-feat"><span class="tick">✓</span>No credit card required</div>
       </div>
       <button class="btn-s" onclick="openSignup('free')">Get started free</button>
@@ -670,11 +643,8 @@ If the agent is a custom loop with no framework, also:
       <div class="price-unit">/ month</div>
       <div class="price-desc">For teams running agents in production.</div>
       <div class="price-feats">
-        <div class="price-feat"><span class="tick">✓</span>25,000 sessions / month</div>
+        <div class="price-feat"><span class="tick">✓</span>25,000 conversations / month</div>
         <div class="price-feat"><span class="tick">✓</span>Everything in Free</div>
-        <div class="price-feat"><span class="tick">✓</span>Custom quality weights</div>
-        <div class="price-feat"><span class="tick">✓</span>Multiple API keys (staging, prod)</div>
-        <div class="price-feat"><span class="tick">✓</span>Team members — unlimited</div>
         <div class="price-feat"><span class="tick">✓</span>Email support</div>
       </div>
       <button class="btn-p" onclick="openSignup('starter')">Start with Starter →</button>
@@ -685,37 +655,17 @@ If the agent is a custom loop with no framework, also:
       <div class="price-unit">/ month</div>
       <div class="price-desc">For organizations with multiple agents in production.</div>
       <div class="price-feats">
-        <div class="price-feat"><span class="tick">✓</span>100,000 sessions / month</div>
+        <div class="price-feat"><span class="tick">✓</span>100,000 conversations / month</div>
         <div class="price-feat"><span class="tick">✓</span>Everything in Starter</div>
         <div class="price-feat"><span class="tick">✓</span>Priority support</div>
-        <div class="price-feat"><span class="tick">✓</span>Structured eval export (JSON)</div>
       </div>
       <button class="btn-s" onclick="openSignup('growth')">Start with Growth →</button>
     </div>
   </div>
   <div style="margin-top:40px;padding:28px;border:1px solid var(--border);border-radius:12px;background:var(--card)">
-    <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;margin-bottom:8px">Enterprise — custom contract</div>
-    <div style="font-size:12px;color:rgba(232,236,240,0.42);max-width:580px;line-height:1.7;margin-bottom:18px">100K+ sessions/month. Kubernetes deployment in your VPC. SAML SSO, RBAC, SOC 2, BAA. Dedicated support and SLA. Contact us to get started.</div>
+    <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;margin-bottom:8px">More than 100,000 conversations a month?</div>
+    <div style="font-size:12px;color:rgba(232,236,240,0.42);max-width:580px;line-height:1.7;margin-bottom:18px">Email us for a custom plan, or if you need a security review before you start.</div>
     <a href="mailto:priya@kalytera.ai" style="display:inline-block;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:11px;padding:10px 20px;border:1px solid var(--border);border-radius:7px;color:var(--white);text-decoration:none">Contact priya@kalytera.ai →</a>
-  </div>
-</div>
-<footer><div class="footer-logo"><div class="nav-dot"></div>Kalytera</div><div class="footer-note">priya@kalytera.ai</div></footer>
-</div>
-
-<!-- ===== RESEARCH ===== -->
-<div class="page" id="pg-research">
-<div class="sec">
-  <div style="font-size:12px;letter-spacing:.5px;text-transform:uppercase;color:rgba(232,236,240,0.45);margin-bottom:8px">Research</div>
-  <div class="docs-h1">How AI agents fail in production.</div>
-  <p class="docs-lead">The failure taxonomy and evaluation methodology behind Kalytera are published openly. The methodology is research, not proprietary lock-in.</p>
-  <div class="res-list">
-    <div class="res-item"><div class="res-n">01</div><div><div class="res-tag">Taxonomy</div><div class="res-title">A Production Quality Taxonomy of AI Agent Failure Modes</div><div class="res-desc">Seven failure types optimized for autonomous LLM-as-a-Judge detection, defined by observable signals in traces rather than code root cause.</div></div><div class="res-status">Available now</div></div>
-    <div class="res-item"><div class="res-n">02</div><div><div class="res-tag">Methodology</div><div class="res-title">Why Continuous Autonomous Evaluation is Required for Multi-Step Agents</div><div class="res-desc">Point-in-time sampling systematically misses failure patterns that only emerge across thousands of interactions over time.</div></div><div class="res-status">Coming Month 2</div></div>
-    <div class="res-item"><div class="res-n">03</div><div><div class="res-tag">Methodology</div><div class="res-title">Evaluation Dimensions Optimized for Autonomous LLM Judge Systems</div><div class="res-desc">Why goal alignment must be scored separately from accuracy — and what that means for production agent quality.</div></div><div class="res-status">Coming Month 2</div></div>
-    <div class="res-item"><div class="res-n">04</div><div><div class="res-tag">Empirical · NET NEW</div><div class="res-title">Loss Patterns in Enterprise AI Agents: A Cross-Industry Analysis</div><div class="res-desc">The first cross-industry empirical study of how production agents actually fail, drawn from real evaluation data.</div></div><div class="res-status">Coming Month 6–9</div></div>
-    <div class="res-item"><div class="res-n">05</div><div><div class="res-tag">Empirical · NET NEW</div><div class="res-title">The Pareto Distribution of Agent Failures by Intent Type</div><div class="res-desc">A small number of intent types account for the large majority of all quality failures across enterprise agents.</div></div><div class="res-status">Coming Month 6–9</div></div>
-    <div class="res-item"><div class="res-n">06</div><div><div class="res-tag">Causal inference · NET NEW</div><div class="res-title">Measuring Business Impact of Agent RL Improvements via Causal Inference</div><div class="res-desc">Adapting Diff-in-Diff, Double ML, and PSM to show which agent quality improvements caused measurable business outcome changes.</div></div><div class="res-status">Coming Month 9–12</div></div>
-    <div class="res-item"><div class="res-n">07</div><div><div class="res-tag">Benchmark</div><div class="res-title">State of Agent Quality: Annual Benchmark Report</div><div class="res-desc">Instrumented production data, not self-reported surveys — the annual industry benchmark on agent quality.</div></div><div class="res-status">Coming Year 2</div></div>
   </div>
 </div>
 <footer><div class="footer-logo"><div class="nav-dot"></div>Kalytera</div><div class="footer-note">priya@kalytera.ai</div></footer>
@@ -727,21 +677,19 @@ If the agent is a custom loop with no framework, also:
   <aside class="docs-aside">
     <div class="docs-grp"><div class="docs-grp-lbl">Get started</div>
       <a class="docs-item on" onclick="showDoc('intro')">Introduction</a>
-      <a class="docs-item" onclick="showDoc('qs')">Quickstart</a>
+      <a class="docs-item" onclick="showDoc('connect')">Connect Langfuse or LangSmith</a>
+      <a class="docs-item" onclick="showDoc('qs')">Add to your code</a>
+      <a class="docs-item" onclick="showDoc('slack')">Slack alerts</a>
     </div>
     <div class="docs-grp"><div class="docs-grp-lbl">Concepts</div>
-      <a class="docs-item" onclick="showDoc('quality')">Quality scoring</a>
-      <a class="docs-item" onclick="showDoc('industries')">Industries</a>
-      <a class="docs-item" onclick="showDoc('taxonomy')">Failure taxonomy</a>
-    </div>
-    <div class="docs-grp"><div class="docs-grp-lbl">Dashboard</div>
-      <a class="docs-item" onclick="showDoc('dashboard')">The three views</a>
+      <a class="docs-item" onclick="showDoc('judge')">How conversations are judged</a>
+      <a class="docs-item" onclick="showDoc('problems')">Problems</a>
+      <a class="docs-item" onclick="showDoc('rules')">Rules</a>
+      <a class="docs-item" onclick="showDoc('memory')">Memory and sharing</a>
     </div>
     <div class="docs-grp"><div class="docs-grp-lbl">API reference</div>
-      <a class="docs-item" onclick="showDoc('init')">configure()</a>
-      <a class="docs-item" onclick="showDoc('watch')">@watch</a>
-      <a class="docs-item" onclick="showDoc('trace')">trace()</a>
-      <a class="docs-item" onclick="showDoc('dm')">Data model</a>
+      <a class="docs-item" onclick="showDoc('init')">init()</a>
+      <a class="docs-item" onclick="showDoc('tool')">@tool and session()</a>
     </div>
   </aside>
   <div class="docs-main">
@@ -749,162 +697,152 @@ If the agent is a custom loop with no framework, also:
     <!-- INTRO -->
     <div id="doc-intro">
       <div class="docs-h1">Introduction</div>
-      <p class="docs-lead">Kalytera evaluates every interaction at every step, in real time — not a sample, not after the fact — and tells you exactly what broke, where, and why.</p>
-      <div class="docs-h2">The problem</div>
-      <p class="docs-p">Enterprise AI agents run complex multi-step workflows. Unlike traditional software, agents think and act differently in every interaction — standard quality checks aren't built for that. Eval and observability platforms exist, but they use sampled data and after-the-fact analysis. They miss failures mid-workflow, including one-off failures that could be catastrophic.</p>
+      <p class="docs-lead">Kalytera catches the mistakes your AI agents make in production, and stops the costly ones before they happen.</p>
       <div class="docs-h2">What Kalytera does</div>
-      <ul class="docs-ul"><li>Evaluates every interaction at every step, the moment it happens</li><li>Gives every interaction a quality score calibrated to your industry</li><li>Surfaces one-off catastrophic failures immediately in the Failure Feed</li><li>Groups repeating failures into named patterns with plain English root cause</li></ul>
-      <div class="pager"><div></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('qs')">Quickstart</a></div></div>
+      <ul class="docs-ul">
+        <li>Reads every conversation from Langfuse or LangSmith (no code), or from the SDK</li>
+        <li>Judges each whole conversation, including what every action did and returned</li>
+        <li>Groups the failures into problems, named in plain English, and tells you in Slack</li>
+        <li>Turns a problem into a rule; <span class="ic">kalytera.init()</span> blocks the action before it runs</li>
+        <li>Shows failed conversations before and after a rule started blocking</li>
+      </ul>
+      <div class="docs-h2">Two ways in</div>
+      <p class="docs-p"><b>Connect</b> Langfuse or LangSmith from the dashboard to find problems, with no code. <b>Add one line</b> to your agent to also stop costly actions. Many teams start with the first and add the second once they've seen their problems.</p>
+      <div class="pager"><div></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('connect')">Connect Langfuse or LangSmith</a></div></div>
+    </div>
+
+    <!-- CONNECT -->
+    <div id="doc-connect" style="display:none">
+      <div class="docs-h1">Connect Langfuse or LangSmith</div>
+      <p class="docs-lead">No code. Kalytera reads the last 30 days right away, then new conversations every 15 minutes.</p>
+      <div class="docs-h3">1. Get read keys</div>
+      <p class="docs-p"><b>Langfuse:</b> Project settings → API keys → create a key pair (a public key <span class="ic">pk-lf-…</span> and a secret key <span class="ic">sk-lf-…</span>). Note your region (EU or US), or your URL if you self-host.<br><b>LangSmith:</b> Settings → API keys → create a key (<span class="ic">lsv2_…</span>).</p>
+      <div class="docs-h3">2. Connect</div>
+      <p class="docs-p">Open <a href="https://app.kalytera.dev" style="color:var(--cyan)">app.kalytera.dev</a>, sign in with your Kalytera key, click <b>＋ Connect an agent</b>, choose Langfuse or LangSmith, name the agent and paste the keys. Problems appear as soon as judging finishes; the dashboard shows its progress.</p>
+      <div class="callout"><div class="callout-lbl">Your keys</div><div class="callout-body">They're stored encrypted, only ever used to read conversations, and deleted when you remove the connection. Conversations newer than 5 minutes are left for the next read, so they're complete when judged.</div></div>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('intro')">Introduction</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('qs')">Add to your code</a></div></div>
     </div>
 
     <!-- QUICKSTART -->
     <div id="doc-qs" style="display:none">
-      <div class="docs-h1">Quickstart</div>
-      <p class="docs-lead">From <span class="ic">pip install</span> to your first scored interaction in under two minutes.</p>
+      <div class="docs-h1">Add to your code</div>
+      <p class="docs-lead">Records every conversation, and checks every action against your rules before it runs.</p>
       <div class="docs-h3">1. Install</div>
       <div class="cb"><pre><span class="cm">$</span> pip install kalytera</pre></div>
       <div class="docs-h3">2. Add one line</div>
       <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="cm"># export KALYTERA_API_KEY=kly_live_...</span>
 <span class="kw">import</span> kalytera
 kalytera.<span class="fn">init</span>()  <span class="cm"># before your agents run</span></pre></div>
-      <p class="docs-lead" style="font-size:14px">That's all for the OpenAI Agents SDK and LangChain / LangGraph: every run is recorded and scored, every tool call is checked against your rules, and each agent appears under its own name.</p>
+      <p class="docs-lead" style="font-size:14px">That's all for the OpenAI Agents SDK and LangChain / LangGraph: every run is recorded and judged, every tool call is checked against your rules, and each agent appears under its own name.</p>
       <div class="docs-h3">3. Your own agent loop? Two more lines</div>
       <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="kw">@</span>kalytera.tool  <span class="cm"># checks your rules before each call</span>
 <span class="kw">def</span> <span class="fn">refund_api</span>(order_id, amount): ...
 
 <span class="kw">with</span> kalytera.<span class="fn">session</span>(conversation_id, input=message) <span class="kw">as</span> s:
     s.output = run_my_agent(message)</pre></div>
-      <div class="callout"><div class="callout-lbl">Never blocks, never raises</div><div class="callout-body">Recording happens in the background and never raises. If Kalytera is unreachable, your agent keeps running and tools still run.</div></div>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('intro')">Introduction</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('quality')">Quality scoring</a></div></div>
+      <div class="callout"><div class="callout-lbl">Kalytera never breaks your agent</div><div class="callout-body">Recording happens in the background. If Kalytera is unreachable, your agent keeps running and its actions still run. Only a rule you've switched to blocking stops an action.</div></div>
+      <p class="docs-p">Try it with no agent of your own: <span class="ic">pip install kalytera</span>, then <span class="ic">KALYTERA_API_KEY=kly_live_… kalytera quickstart</span>, runs a sample refund agent, finds its problem, writes the rule and blocks the next bad refund.</p>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('connect')">Connect</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('slack')">Slack alerts</a></div></div>
     </div>
 
-    <!-- QUALITY -->
-    <div id="doc-quality" style="display:none">
-      <div class="docs-h1">Quality scoring</div>
-      <p class="docs-lead">Every interaction gets a quality score from 0 to 100, computed from six dimensions evaluated by an LLM judge.</p>
-      <div class="docs-h2">The six dimensions</div>
+    <!-- SLACK -->
+    <div id="doc-slack" style="display:none">
+      <div class="docs-h1">Slack alerts</div>
+      <p class="docs-lead">A message when a new problem appears, and when one gets worse. Each links straight to its conversations.</p>
+      <div class="docs-h3">Set up</div>
+      <ul class="docs-ul">
+        <li>Go to <span class="ic">api.slack.com/apps</span> → <b>Create New App</b> → <b>From scratch</b>, and pick your workspace</li>
+        <li><b>Incoming Webhooks</b> → turn on → <b>Add New Webhook to Workspace</b> → choose a channel → copy the URL</li>
+        <li>In the dashboard: <b>＋ Connect an agent</b> → <b>Alerts in Slack</b> → paste the URL</li>
+      </ul>
+      <p class="docs-p">Kalytera posts a test message right away. Problems found before you turned alerts on stay in the dashboard; Slack hears about new ones from then on.</p>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('qs')">Add to your code</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('judge')">How conversations are judged</a></div></div>
+    </div>
+
+    <!-- JUDGE -->
+    <div id="doc-judge" style="display:none">
+      <div class="docs-h1">How conversations are judged</div>
+      <p class="docs-lead">A judge model reads each finished conversation as a whole: what the customer asked, what the agent said, and what each action was given and returned.</p>
+      <div class="docs-h2">Six scores</div>
       <div class="pt">
-        <div class="pr"><div class="pname">accuracy</div><div class="ptype">0.0–1.0</div><div class="pdesc">Was the response factually correct given available context and tool outputs?</div></div>
-        <div class="pr"><div class="pname">goal_alignment</div><div class="ptype">0.0–1.0</div><div class="pdesc">Did the agent serve what the user actually needed — not just the literal request?</div></div>
-        <div class="pr"><div class="pname">decision_quality</div><div class="ptype">0.0–1.0</div><div class="pdesc">Was the reasoning sound and tool selection appropriate and well-sequenced?</div></div>
-        <div class="pr"><div class="pname">completeness</div><div class="ptype">0.0–1.0</div><div class="pdesc">Was the request fully resolved, or did the agent stop short?</div></div>
-        <div class="pr"><div class="pname">helpfulness</div><div class="ptype">0.0–1.0</div><div class="pdesc">Did the response have practical value the user could act on?</div></div>
-        <div class="pr"><div class="pname">factuality</div><div class="ptype">0.0–1.0</div><div class="pdesc">Were all claims grounded and verifiable — no hallucinations?</div></div>
+        <div class="pr"><div class="pname">accuracy</div><div class="ptype">0–100</div><div class="pdesc">Was it correct, given what the actions returned?</div></div>
+        <div class="pr"><div class="pname">goal_alignment</div><div class="ptype">0–100</div><div class="pdesc">Did it serve what the customer actually needed?</div></div>
+        <div class="pr"><div class="pname">decision_quality</div><div class="ptype">0–100</div><div class="pdesc">Were the right actions taken, with the right inputs, in the right order?</div></div>
+        <div class="pr"><div class="pname">completeness</div><div class="ptype">0–100</div><div class="pdesc">Was the request fully resolved?</div></div>
+        <div class="pr"><div class="pname">helpfulness</div><div class="ptype">0–100</div><div class="pdesc">Could the customer act on the answer?</div></div>
+        <div class="pr"><div class="pname">factuality</div><div class="ptype">0–100</div><div class="pdesc">Was every claim backed by what the actions returned?</div></div>
       </div>
-      <div class="docs-h2">Pass threshold</div>
-      <p class="docs-p">An interaction passes when <span class="ic">overall_score ≥ 0.7</span>. Configurable per agent from the dashboard.</p>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('qs')">Quickstart</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('industries')">Industries</a></div></div>
+      <p class="docs-p">A conversation passes at 70 or more. In the dashboard (Overview → Scoring configuration) you can pick weights for your kind of agent, change the pass mark, and add your own checks. A failure also gets one of seven types: wrong_answer, tool_failure, goal_drift, incomplete, hallucination, context_loss, loop.</p>
+      <div class="callout"><div class="callout-lbl">When the judge is wrong</div><div class="callout-body">Open the conversation and click 👍 Not a failure or 👎 This failed. Your verdict replaces the judge's everywhere, and problems are regrouped right away. Judge models make mistakes; this is how you correct them.</div></div>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('slack')">Slack alerts</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('problems')">Problems</a></div></div>
     </div>
 
-    <!-- INDUSTRIES -->
-    <div id="doc-industries" style="display:none">
-      <div class="docs-h1">Industries</div>
-      <p class="docs-lead">A healthcare agent and a marketing agent shouldn't be graded the same way. Kalytera ships with quality weightings tuned per industry.</p>
-      <table class="itab">
-        <thead><tr><th>Industry</th><th>Accuracy</th><th>Goal alignment</th><th>Decision quality</th><th>Completeness</th></tr></thead>
-        <tbody>
-          <tr><td>Healthcare</td><td>0.50</td><td>0.30</td><td>0.10</td><td>0.10</td></tr>
-          <tr><td>Coding</td><td>0.50</td><td>0.20</td><td>0.20</td><td>0.10</td></tr>
-          <tr><td>Retail / Customer service</td><td>0.25</td><td>0.40</td><td>0.10</td><td>0.25</td></tr>
-          <tr><td>Marketing</td><td>0.20</td><td>0.45</td><td>0.20</td><td>0.15</td></tr>
-          <tr class="hl"><td>Default (any)</td><td>0.35</td><td>0.35</td><td>0.15</td><td>0.15</td></tr>
-        </tbody>
-      </table>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('quality')">Quality scoring</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('taxonomy')">Failure taxonomy</a></div></div>
+    <!-- PROBLEMS -->
+    <div id="doc-problems" style="display:none">
+      <div class="docs-h1">Problems</div>
+      <p class="docs-lead">A problem is the same mistake repeating: at least 5 failed conversations that went wrong in the same action or step.</p>
+      <p class="docs-p">Failures are grouped by the action they were about (refund_api, track_order), or by step or type of failure when no action is involved. Each problem is named from all of its conversations, shows how many it affected and whether it's getting worse week over week, and lists the conversations. Problems update every hour, and right after each new read from Langfuse or LangSmith.</p>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('judge')">How conversations are judged</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('rules')">Rules</a></div></div>
     </div>
 
-    <!-- TAXONOMY -->
-    <div id="doc-taxonomy" style="display:none">
-      <div class="docs-h1">Failure taxonomy</div>
-      <p class="docs-lead">Every failed interaction is classified into one of seven failure types.</p>
-      <div class="pt">
-        <div class="pr"><div class="pname" style="color:var(--red)">wrong_answer</div><div></div><div class="pdesc">The response is factually incorrect given available context and tool outputs.</div></div>
-        <div class="pr"><div class="pname" style="color:var(--red)">tool_failure</div><div></div><div class="pdesc">A tool call failed, timed out, or returned an unhandled error.</div></div>
-        <div class="pr"><div class="pname" style="color:var(--red)">goal_drift</div><div></div><div class="pdesc">The task completed, but the user's actual underlying goal remains unresolved.</div></div>
-        <div class="pr"><div class="pname" style="color:var(--red)">incomplete</div><div></div><div class="pdesc">The agent stopped before fully resolving the request.</div></div>
-        <div class="pr"><div class="pname" style="color:var(--red)">hallucination</div><div></div><div class="pdesc">The agent asserts specific facts not grounded in context or tool outputs.</div></div>
-        <div class="pr"><div class="pname" style="color:var(--red)">context_loss</div><div></div><div class="pdesc">The agent contradicts or ignores a user statement from 3+ steps prior.</div></div>
-        <div class="pr"><div class="pname" style="color:var(--red)">loop</div><div></div><div class="pdesc">The agent repeats the same action or response without progressing.</div></div>
-      </div>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('industries')">Industries</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('dashboard')">The three views</a></div></div>
+    <!-- RULES -->
+    <div id="doc-rules" style="display:none">
+      <div class="docs-h1">Rules</div>
+      <p class="docs-lead">A rule checks an action before your agent takes it: for example, a refund over $250 needs a person to approve it.</p>
+      <ul class="docs-ul">
+        <li><b>Suggested rules</b> come from your problems, with what they would have caught: failed conversations stopped, and good ones touched</li>
+        <li><b>New rules only watch.</b> They record what they would have blocked, so trying one is safe. Switch a rule to blocking when you trust it.</li>
+        <li><b>Blocking</b> needs the SDK (<span class="ic">kalytera.init()</span>, or <span class="ic">@kalytera.tool</span> on your own tools). A blocked action doesn't run. Your agent gets the rule's reason instead, for example "Refund needs a person to approve it when the amount is over 250".</li>
+      </ul>
+      <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="kw">@</span>kalytera.tool(on_block=<span class="kw">lambda</span> d: <span class="str">f"I can't do that automatically: {d.reason}"</span>)
+<span class="kw">def</span> <span class="fn">refund_api</span>(order_id, amount): ...</pre></div>
+      <p class="docs-p">Without <span class="ic">on_block</span>, a blocked call raises <span class="ic">kalytera.Blocked</span>. If Kalytera can't be reached, actions run.</p>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('problems')">Problems</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('memory')">Memory and sharing</a></div></div>
     </div>
 
-    <!-- DASHBOARD -->
-    <div id="doc-dashboard" style="display:none">
-      <div class="docs-h1">The dashboard</div>
-      <p class="docs-lead">Three views. Each answers one question: is my agent healthy, what's failing right now, and exactly what happened in this one interaction.</p>
-      <div class="docs-h2">1. Agent Overview</div>
-      <p class="docs-p">Quality score trend over 7 days, today's pass rate, active failure count, and top 3 failure types ranked by frequency.</p>
-      <div class="docs-h2">2. Failure Feed</div>
-      <p class="docs-p">Every failure the moment it happens. One-off failures shown individually. Repeating patterns grouped automatically once 5+ failures share the same type and step, with a one-sentence root cause.</p>
-      <div class="docs-h2">3. Interaction Detail</div>
-      <p class="docs-p">Full step-by-step trace. Per-step quality score. The failing step highlighted. Failure reason in one plain English sentence — not a JSON dump.</p>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('taxonomy')">Failure taxonomy</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('init')">configure()</a></div></div>
+    <!-- MEMORY -->
+    <div id="doc-memory" style="display:none">
+      <div class="docs-h1">Memory and sharing</div>
+      <p class="docs-lead">Kalytera remembers at three levels: the agent, your account, and anonymously across companies.</p>
+      <ul class="docs-ul">
+        <li><b>The agent:</b> its problems and rules</li>
+        <li><b>Your account:</b> rules from your other agents are offered to each agent, with what they would have caught there</li>
+        <li><b>Across companies:</b> tell Kalytera what the agent does (industry and kind of agent) and it warns you about mistakes agents like it make elsewhere</li>
+      </ul>
+      <p class="docs-p">What's shared is anonymous and aggregated: kinds of mistakes and the shapes of rules that stopped them. Conversations, names and your limits are never shared, and a pattern appears only once at least 5 companies share it. Sharing is on by default. Turn it off in the dashboard (Overview → Data &amp; retention); your contributions are removed right away. <a href="security.html" style="color:var(--cyan)">Data &amp; security →</a></p>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('rules')">Rules</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('init')">init()</a></div></div>
     </div>
 
-    <!-- CONFIGURE -->
+    <!-- INIT -->
     <div id="doc-init" style="display:none">
       <div class="docs-tag">API reference</div>
-      <div class="docs-h1">kalytera.configure()</div>
-      <p class="docs-lead">Authenticates Kalytera and sets defaults. Call once at startup before any trace() calls.</p>
-      <div class="cb"><pre>kalytera.<span class="fn">configure</span>(
-  api_key: <span class="kw">str</span>,
-  api_endpoint: <span class="kw">str</span> = <span class="str">"https://api.kalytera.dev"</span>,
-  agent_id: <span class="kw">str</span> | <span class="kw">None</span> = <span class="kw">None</span>,
+      <div class="docs-h1">kalytera.init()</div>
+      <p class="docs-lead">Call once at startup, before your agents run. Returns immediately.</p>
+      <div class="cb"><pre>kalytera.<span class="fn">init</span>(
+  api_key: <span class="kw">str</span> = <span class="str">""</span>,       <span class="cm"># or KALYTERA_API_KEY</span>
+  agent_id: <span class="kw">str</span> = <span class="str">""</span>,      <span class="cm"># or KALYTERA_AGENT_ID</span>
+  redact: <span class="kw">bool</span> = <span class="kw">False</span>,     <span class="cm"># or KALYTERA_REDACT=1</span>
 ) -&gt; <span class="kw">None</span></pre></div>
       <div class="pt">
-        <div class="pr"><div class="pname">api_key</div><div class="ptype">str</div><div class="pdesc">Your Kalytera API key (kly_live_...). Also reads from KALYTERA_API_KEY env var.</div></div>
-        <div class="pr"><div class="pname">api_endpoint</div><div class="ptype">str</div><div class="pdesc">URL of your Kalytera server. Also reads from KALYTERA_API_ENDPOINT env var.</div></div>
-        <div class="pr"><div class="pname">agent_id</div><div class="ptype">str | None</div><div class="pdesc">Optional stable name for your agent in the dashboard (e.g. "billing-agent").</div></div>
+        <div class="pr"><div class="pname">api_key</div><div class="ptype">str</div><div class="pdesc">Your Kalytera API key (kly_live_…).</div></div>
+        <div class="pr"><div class="pname">agent_id</div><div class="ptype">str</div><div class="pdesc">Report everything under one name. By default each framework agent appears under its own name.</div></div>
+        <div class="pr"><div class="pname">redact</div><div class="ptype">bool</div><div class="pdesc">Mask email addresses, phone numbers and card numbers in everything sent to Kalytera. Rules still see the real values.</div></div>
       </div>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('dashboard')">The three views</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('watch')">@watch</a></div></div>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('memory')">Memory and sharing</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('tool')">@tool and session()</a></div></div>
     </div>
 
-    <!-- WATCH -->
-    <div id="doc-watch" style="display:none">
+    <!-- TOOL / SESSION -->
+    <div id="doc-tool" style="display:none">
       <div class="docs-tag">API reference</div>
-      <div class="docs-h1">@kalytera.watch</div>
-      <p class="docs-lead">A decorator that instruments any agent function. Captures input, output, and latency automatically.</p>
-      <div class="cb"><pre><span class="kw">@</span>kalytera.watch
-<span class="kw">def</span> <span class="fn">your_agent</span>(user_input: <span class="kw">str</span>) -&gt; <span class="kw">str</span>:
-    ...</pre></div>
-      <p class="docs-p">Works with any Python callable — LangChain chains, CrewAI agents, AutoGen agents, or a plain function.</p>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('init')">configure()</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('trace')">trace()</a></div></div>
-    </div>
+      <div class="docs-h1">@kalytera.tool and kalytera.session()</div>
+      <p class="docs-lead">For agents without a supported framework.</p>
+      <div class="cb"><pre><span class="kw">@</span>kalytera.tool                       <span class="cm"># check rules before every call, record it</span>
+<span class="kw">def</span> <span class="fn">refund_api</span>(order_id: <span class="kw">str</span>, amount: <span class="kw">float</span>) -&gt; <span class="kw">str</span>: ...
 
-    <!-- TRACE -->
-    <div id="doc-trace" style="display:none">
-      <div class="docs-tag">API reference</div>
-      <div class="docs-h1">kalytera.trace()</div>
-      <p class="docs-lead">Manually log one step of an interaction. Use when your agent can't be wrapped with @watch.</p>
-      <div class="cb"><pre>kalytera.<span class="fn">trace</span>(
-  session_id: <span class="kw">str</span>,
-  step_number: <span class="kw">int</span>,
-  step_name: <span class="kw">str</span>,
-  input: <span class="kw">str</span>,
-  output: <span class="kw">str</span>,
-  tool_calls: <span class="kw">list</span> | <span class="kw">None</span> = <span class="kw">None</span>,
-  metadata: <span class="kw">dict</span> | <span class="kw">None</span> = <span class="kw">None</span>,
-  session_ended: <span class="kw">bool</span> = <span class="kw">False</span>,
-) -&gt; <span class="kw">None</span></pre></div>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('watch')">@watch</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('dm')">Data model</a></div></div>
-    </div>
-
-    <!-- DATA MODEL -->
-    <div id="doc-dm" style="display:none">
-      <div class="docs-tag">API reference</div>
-      <div class="docs-h1">Data model</div>
-      <p class="docs-lead">Four tables. Everything Kalytera stores, nothing more.</p>
-      <div class="docs-h2">AgentLog</div>
-      <div class="cb"><pre>id · agent_id · session_id · step_number · step_name
-input · output · tool_calls · latency_ms · timestamp</pre></div>
-      <div class="docs-h2">EvalResult</div>
-      <div class="cb"><pre>log_id · accuracy · goal_alignment · decision_quality
-completeness · helpfulness · factuality · overall_score · passed · failure_type · failure_reason</pre></div>
-      <div class="docs-h2">LossPattern</div>
-      <div class="cb"><pre>agent_id · pattern_type · pattern_value · failure_count
-failure_rate · pct_of_all_failures · root_cause · is_worsening</pre></div>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('trace')">trace()</a></div><div></div></div>
+<span class="kw">with</span> kalytera.<span class="fn">session</span>(conversation_id, input=user_message) <span class="kw">as</span> s:
+    s.output = run_agent(user_message)  <span class="cm"># actions called in here are recorded</span></pre></div>
+      <p class="docs-p"><span class="ic">session()</span> is one conversation. Steps are numbered for you, and the conversation is judged when the block exits (also if it raises). <span class="ic">@tool</span> works on sync and async functions. Put it under a framework's own decorator so the framework still sees the real signature.</p>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('init')">init()</a></div><div></div></div>
     </div>
 
   </div>
@@ -916,7 +854,7 @@ failure_rate · pct_of_all_failures · root_cause · is_worsening</pre></div>
 const API_BASE = 'https://api.kalytera.dev';
 
 // ---- Page routing ----
-const pages = ['home','docs','pricing','research'];
+const pages = ['home','docs','pricing'];
 function go(p) {
   pages.forEach(id => {
     document.getElementById('pg-'+id).classList.toggle('on', id===p);
@@ -928,7 +866,7 @@ function go(p) {
 }
 
 // ---- Docs routing ----
-const docs = ['intro','qs','quality','industries','taxonomy','dashboard','init','watch','trace','dm'];
+const docs = ['intro','connect','qs','slack','judge','problems','rules','memory','init','tool'];
 function showDoc(id) {
   docs.forEach(d => {
     const el = document.getElementById('doc-'+d);
@@ -941,9 +879,9 @@ function showDoc(id) {
 
 // ---- Signup modal ----
 const PLAN_META = {
-  free:    { label:'Free plan',    desc:'5,000 sessions/month, free forever. No credit card required.', tagClass:'free' },
-  starter: { label:'Starter plan', desc:'25,000 sessions/month at $49/mo. You\'ll be taken to Stripe to complete payment.', tagClass:'starter' },
-  growth:  { label:'Growth plan',  desc:'100,000 sessions/month at $149/mo. You\'ll be taken to Stripe to complete payment.', tagClass:'growth' },
+  free:    { label:'Free plan',    desc:'5,000 conversations a month, free forever. No credit card required.', tagClass:'free' },
+  starter: { label:'Starter plan', desc:'25,000 conversations a month at $49/mo. You\'ll be taken to Stripe to complete payment.', tagClass:'starter' },
+  growth:  { label:'Growth plan',  desc:'100,000 conversations a month at $149/mo. You\'ll be taken to Stripe to complete payment.', tagClass:'growth' },
 };
 let _currentPlan = 'free';
 
