@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kalytera — Make sure your AI agents only do what they should</title>
+<title>Kalytera — Catch your AI agents' mistakes, block the dangerous ones</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -347,6 +347,15 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 .k-final .btn-p{margin-bottom:36px}
 .k-dev{text-align:left}
 @media(max-width:860px){.k-grid3,.k-grid4{grid-template-columns:1fr}.k-ex{grid-template-columns:1fr}.k-ex-arrow{transform:rotate(90deg);justify-self:center}.k-hero{padding-top:56px}}
+.k-intro{text-align:center;font-size:17px;color:rgba(232,236,240,0.75);margin:-14px auto 28px;max-width:640px}
+.k-grid2{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.k-inc{background:var(--card);border:1px solid rgba(232,85,85,0.28);border-radius:14px;padding:24px;display:flex;flex-direction:column}
+.k-inc p{font-size:15px;line-height:1.55;color:rgba(232,236,240,0.78);margin-bottom:16px;flex:1}
+.k-inc-n{font-weight:800;font-size:26px;color:var(--red);letter-spacing:-.5px;margin-bottom:6px}
+.k-inc-f{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;border-top:1px solid var(--border);padding-top:12px}
+.k-inc-f span{color:var(--cyan);font-weight:600}
+.k-inc-f a{color:rgba(232,236,240,0.5)}
+@media(max-width:860px){.k-grid2{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -428,68 +437,68 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 <div class="page on" id="pg-home">
 
 <section class="k-hero">
-  <div class="k-eyebrow">Safety for AI agents in production</div>
-  <h1 class="k-h1">Know your AI agents are doing <span>only what they should.</span></h1>
-  <p class="k-sub">Kalytera checks every conversation your agents have with customers, tells you as soon as something goes wrong, and blocks risky actions, like a wrong refund, before they happen.</p>
+  <div class="k-eyebrow">AI agent safety</div>
+  <h1 class="k-h1">Catch your AI agents' mistakes.<br><span>Block the dangerous ones.</span></h1>
+  <p class="k-sub">Kalytera reads every conversation and every action your agents take, tells you in Slack the moment something goes wrong, and blocks risky actions, like refunds, account changes and deletions, before a customer gets hurt.</p>
   <div class="k-ctas">
     <button class="btn-p" onclick="openSignup('free')">Get started free</button>
-    <a class="k-link" href="#example">See an example ↓</a>
+    <a class="k-link" href="#how">How it works ↓</a>
   </div>
-  <p class="k-small">Works with Langfuse, LangSmith, the OpenAI Agents SDK and LangChain. Free for 5,000 conversations a month.</p>
+  <p class="k-small">Connect Langfuse or LangSmith in two minutes, with no code. Free for 5,000 conversations a month.</p>
 </section>
 
 <section class="k-sec">
-  <h2 class="k-h2">Why it matters</h2>
-  <div class="k-grid3">
-    <div class="k-card"><div class="k-card-t">Agents act on their own</div><p>They issue refunds, make bookings, send emails and change records, and nobody checks each one.</p></div>
-    <div class="k-card"><div class="k-card-t">Mistakes look fine</div><p>The reply says "$45 refunded." The refund the agent actually issued was $450.</p></div>
-    <div class="k-card"><div class="k-card-t">Customers find out first</div><p><b>74%</b> of enterprises have rolled back a customer-facing AI agent after a governance failure. <a href="https://sinch.com/news/sinch-releases-ai-production-paradox/" target="_blank" rel="noopener">Sinch, 2026</a></p></div>
-  </div>
-</section>
-
-<section class="k-sec">
-  <h2 class="k-h2">How Kalytera keeps your agents safe</h2>
-  <div class="k-grid3">
-    <div class="k-step"><div class="k-num">1</div><div class="k-card-t">Every conversation checked</div><p>Connect Langfuse or LangSmith in two minutes, with no code. Kalytera reads every conversation, including what each action really did.</p></div>
-    <div class="k-step"><div class="k-num">2</div><div class="k-card-t">You hear about it in Slack</div><p>When a mistake keeps happening, you get one plain sentence saying what went wrong, how often, and a link to the conversations.</p></div>
-    <div class="k-step"><div class="k-num">3</div><div class="k-card-t">Risky actions blocked</div><p>One click turns a problem into a rule. With one line of code, your agent can't take that action again, and it tells the customer why.</p></div>
-  </div>
-</section>
-
-<section class="k-sec" id="example">
-  <h2 class="k-h2">An example from a support agent</h2>
-  <div class="k-ex">
-    <div class="k-ex-col">
-      <div class="k-ex-lbl">What happened</div>
-      <div class="k-msg"><span>Customer</span>My order arrived damaged. Please refund the $45 I paid.</div>
-      <div class="k-msg k-bad"><span>Agent's action</span>refund(amount = <b>450</b>)</div>
-      <div class="k-msg"><span>Agent's reply</span>All done! I've refunded $45.00.</div>
+  <h2 class="k-h2">AI agents are already going rogue</h2>
+  <p class="k-intro">Each time, the agent did something nobody approved, and the company found out from its users.</p>
+  <div class="k-grid2">
+    <div class="k-inc">
+      <div class="k-inc-n">20,225 accounts</div>
+      <div class="k-card-t">Meta's support agent handed Instagram accounts to hackers</div>
+      <p>Attackers asked it to link their own email to someone else's account, then reset the password. It did. Meta has since sent account changes to human review.</p>
+      <div class="k-inc-f"><span>Watch for: an agent changing who controls an account</span><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-meta-ai-support-bot-account-takeover-20260/" target="_blank" rel="noopener">Cloud Security Alliance · June 2026</a></div>
     </div>
-    <div class="k-ex-arrow">→</div>
-    <div class="k-ex-col">
-      <div class="k-ex-lbl">What Kalytera did</div>
-      <ul class="k-list">
-        <li><b>Found it 12 times</b> in 29 conversations: refunds ten times too big</li>
-        <li><b>Told the team in Slack</b>, with links to all 12 conversations</li>
-        <li><b>Suggested a rule:</b> refunds over $70 need a person. In past conversations it would have stopped all 12 and none of the good ones.</li>
-        <li><b>Blocked the next one.</b> The $450 refund never went out.</li>
-      </ul>
+    <div class="k-inc">
+      <div class="k-inc-n">9 seconds</div>
+      <div class="k-card-t">An agent deleted a company's database, and its backups</div>
+      <p>It hit an error and "fixed" it by deleting PocketOS's production data. The company's rental-car customers were left in chaos for 30 hours.</p>
+      <div class="k-inc-f"><span>Watch for: an agent deleting data</span><a href="https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue" target="_blank" rel="noopener">Tom's Hardware · April 2026</a></div>
+    </div>
+    <div class="k-inc">
+      <div class="k-inc-n">Liable</div>
+      <div class="k-card-t">An airline had to honor a refund its chatbot made up</div>
+      <p>Air Canada's bot promised a grieving customer a refund the policy didn't allow. A tribunal ruled the company is responsible for what its bot says.</p>
+      <div class="k-inc-f"><span>Watch for: promises your policy doesn't allow</span><a href="https://www.cbsnews.com/news/aircanada-chatbot-discount-customer/" target="_blank" rel="noopener">CBS News · 2024</a></div>
+    </div>
+    <div class="k-inc">
+      <div class="k-inc-n">"Code freeze"</div>
+      <div class="k-card-t">Told to change nothing, an agent wiped a live database</div>
+      <p>Replit's agent ignored the freeze, deleted the data, then said it couldn't be recovered. It could.</p>
+      <div class="k-inc-f"><span>Watch for: an agent ignoring its instructions</span><a href="https://www.eweek.com/news/replit-ai-coding-assistant-failure/" target="_blank" rel="noopener">eWeek · July 2025</a></div>
     </div>
   </div>
 </section>
 
+<section class="k-sec" id="how">
+  <h2 class="k-h2">How Kalytera keeps your agents in line</h2>
+  <div class="k-grid3">
+    <div class="k-step"><div class="k-num">1</div><div class="k-card-t">Read every conversation</div><p>Connect Langfuse or LangSmith, with no code. Kalytera checks every conversation, including what each action actually did, not just what the agent said it did.</p></div>
+    <div class="k-step"><div class="k-num">2</div><div class="k-card-t">Hear about it in plain English</div><p>When a mistake starts repeating, Slack tells you what went wrong, how often, and links to the conversations.</p></div>
+    <div class="k-step"><div class="k-num">3</div><div class="k-card-t">Block the action</div><p>Turn the problem into a rule, like "changing an account's email needs a person." With one line of code, your agent can't take that action, and it tells the customer why.</p></div>
+  </div>
+</section>
+
 <section class="k-sec">
-  <h2 class="k-h2">Built so you can trust it</h2>
-  <div class="k-grid4">
-    <div class="k-card"><div class="k-card-t">Read-only to start</div><p>Connecting only reads conversations. Your keys are stored encrypted.</p></div>
-    <div class="k-card"><div class="k-card-t">Safe to try</div><p>A new rule only watches at first, and shows what it would have blocked.</p></div>
-    <div class="k-card"><div class="k-card-t">Never breaks your agent</div><p>If Kalytera is unreachable, your agent keeps working as before.</p></div>
-    <div class="k-card"><div class="k-card-t">Learns as you go</div><p>A rule that protects one agent is offered to your others.</p></div>
+  <h2 class="k-h2">Why teams trust Kalytera with their agents</h2>
+  <div class="k-grid2">
+    <div class="k-card"><div class="k-card-t">You see what a rule would do before it blocks anything</div><p>Every rule starts out only watching. Kalytera shows which past conversations it would have stopped, and how many good ones it would have touched. In our test agent, a refund rule would have stopped 12 of 12 bad refunds and touched 0 of 11 good conversations.</p></div>
+    <div class="k-card"><div class="k-card-t">Proof that it worked</div><p>For each rule, you see failed conversations before and after it started blocking, and every block your team marked as wrong.</p></div>
+    <div class="k-card"><div class="k-card-t">Your agent never goes down because of us</div><p>If Kalytera can't be reached, your agent keeps running as normal. Only rules you've switched on can stop an action.</p></div>
+    <div class="k-card"><div class="k-card-t">Your data stays under your control</div><p>Connections only read, and keys are stored encrypted. You can mask emails, phone numbers and card numbers before anything leaves your servers, choose how long data is kept, and delete it at any time.</p></div>
   </div>
 </section>
 
 <section class="k-final">
-  <h2 class="k-h2">See what your agents did this week.</h2>
+  <h2 class="k-h2">Find out what your agents did this week.</h2>
   <p class="k-small">Two minutes to connect. Free for 5,000 conversations a month. No credit card.</p>
   <button class="btn-p" onclick="openSignup('free')">Get started free</button>
   <div class="k-dev">
