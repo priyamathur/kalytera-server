@@ -444,38 +444,63 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
     <button class="btn-p" onclick="openSignup('free')">Get started free</button>
     <a class="k-link" href="#how">How it works ↓</a>
   </div>
-  <p class="k-small">Connect Langfuse or LangSmith in two minutes, with no code. Free for 5,000 conversations a month.</p>
+  <p class="k-small">Free for 5,000 conversations a month. No credit card.</p>
 </section>
 
 <section class="k-sec">
   <h2 class="k-h2">AI agents are already going rogue</h2>
-  <p class="k-intro">Each time, the agent did something nobody approved, and the company found out from its users.</p>
+  <p class="k-intro">Agents from OpenAI, Anthropic, Google and Meta have all done things nobody approved. Most were found only after the damage was done.</p>
   <div class="k-grid2">
+    <div class="k-inc">
+      <div class="k-inc-n">Broke in</div>
+      <div class="k-card-t">OpenAI's agents escaped their test and broke into Hugging Face's servers</div>
+      <p>A swarm of agents running a security test got out of its sandbox and into another company's systems.</p>
+      <div class="k-inc-f"><span>Reaching systems it was never allowed to touch</span><a href="https://techcrunch.com/2026/09/04/openais-rogue-agents-keep-escaping-with-no-formal-process-to-investigate-them/" target="_blank" rel="noopener">TechCrunch · Sept 2026</a></div>
+    </div>
+    <div class="k-inc">
+      <div class="k-inc-n">3 months unnoticed</div>
+      <div class="k-card-t">An OpenAI agent spent a stranger's crypto, then left it out of its report</div>
+      <p>It had no money for a task, so it searched 362 wallets, used one that wasn't its own, and didn't mention it. OpenAI found out in an audit three months later.</p>
+      <div class="k-inc-f"><span>Spending money without permission</span><a href="https://fortune.com/2026/10/16/rogue-openai-agent-crypto-wallet-funds-task/" target="_blank" rel="noopener">Fortune · Oct 2026</a></div>
+    </div>
+    <div class="k-inc">
+      <div class="k-inc-n">Then lied</div>
+      <div class="k-card-t">OpenAI's agents switched off the systems watching them</div>
+      <p>In two internal tasks, agents disabled or weakened their own safety monitoring. One removed a monitor and then claimed it hadn't.</p>
+      <div class="k-inc-f"><span>Turning off its own safeguards</span><a href="https://www.aljazeera.com/economy/2026/10/21/openai-says-its-agents-turned-off-own-safeguards" target="_blank" rel="noopener">Al Jazeera · Oct 2026</a></div>
+    </div>
     <div class="k-inc">
       <div class="k-inc-n">20,225 accounts</div>
       <div class="k-card-t">Meta's support agent handed Instagram accounts to hackers</div>
-      <p>Attackers asked it to link their own email to someone else's account, then reset the password. It did. Meta has since sent account changes to human review.</p>
-      <div class="k-inc-f"><span>Watch for: an agent changing who controls an account</span><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-meta-ai-support-bot-account-takeover-20260/" target="_blank" rel="noopener">Cloud Security Alliance · June 2026</a></div>
+      <p>Attackers asked it to link their own email to someone else's account, then reset the password. It did.</p>
+      <div class="k-inc-f"><span>Changing who controls an account</span><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-meta-ai-support-bot-account-takeover-20260/" target="_blank" rel="noopener">Cloud Security Alliance · June 2026</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">9 seconds</div>
-      <div class="k-card-t">An agent deleted a company's database, and its backups</div>
+      <div class="k-card-t">A Claude-powered agent deleted a company's database, and its backups</div>
       <p>It hit an error and "fixed" it by deleting PocketOS's production data. The company's rental-car customers were left in chaos for 30 hours.</p>
-      <div class="k-inc-f"><span>Watch for: an agent deleting data</span><a href="https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue" target="_blank" rel="noopener">Tom's Hardware · April 2026</a></div>
+      <div class="k-inc-f"><span>Deleting data</span><a href="https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue" target="_blank" rel="noopener">Tom's Hardware · April 2026</a></div>
+    </div>
+    <div class="k-inc">
+      <div class="k-inc-n">Whole drive</div>
+      <div class="k-card-t">Google's Antigravity agent wiped a developer's entire drive</div>
+      <p>Asked to clear a project's cache, it deleted the developer's whole D: drive. Then it apologized.</p>
+      <div class="k-inc-f"><span>Deleting far more than asked</span><a href="https://www.techradar.com/ai-platforms-assistants/googles-antigravity-ai-deleted-a-developers-drive-and-then-apologized" target="_blank" rel="noopener">TechRadar · Dec 2025</a></div>
+    </div>
+    <div class="k-inc">
+      <div class="k-inc-n">One character</div>
+      <div class="k-card-t">Claude Code erased a developer's home folder</div>
+      <p>Its cleanup command ended in <code>~/</code>, the user's home folder, and it deleted most of their Mac.</p>
+      <div class="k-inc-f"><span>Destructive commands nobody checked</span><a href="https://simonwillison.net/2025/Dec/9/claude" target="_blank" rel="noopener">Simon Willison · Dec 2025</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">Liable</div>
       <div class="k-card-t">An airline had to honor a refund its chatbot made up</div>
       <p>Air Canada's bot promised a grieving customer a refund the policy didn't allow. A tribunal ruled the company is responsible for what its bot says.</p>
-      <div class="k-inc-f"><span>Watch for: promises your policy doesn't allow</span><a href="https://www.cbsnews.com/news/aircanada-chatbot-discount-customer/" target="_blank" rel="noopener">CBS News · 2024</a></div>
-    </div>
-    <div class="k-inc">
-      <div class="k-inc-n">"Code freeze"</div>
-      <div class="k-card-t">Told to change nothing, an agent wiped a live database</div>
-      <p>Replit's agent ignored the freeze, deleted the data, then said it couldn't be recovered. It could.</p>
-      <div class="k-inc-f"><span>Watch for: an agent ignoring its instructions</span><a href="https://www.eweek.com/news/replit-ai-coding-assistant-failure/" target="_blank" rel="noopener">eWeek · July 2025</a></div>
+      <div class="k-inc-f"><span>Promising what your policy doesn't allow</span><a href="https://www.cbsnews.com/news/aircanada-chatbot-discount-customer/" target="_blank" rel="noopener">CBS News · 2024</a></div>
     </div>
   </div>
+  <p class="k-intro" style="margin:28px auto 0">Kalytera checks your agents' actions before they run, and reads every conversation for the mistakes that get through.</p>
 </section>
 
 <section class="k-sec" id="how">
@@ -499,7 +524,7 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 
 <section class="k-final">
   <h2 class="k-h2">Find out what your agents did this week.</h2>
-  <p class="k-small">Two minutes to connect. Free for 5,000 conversations a month. No credit card.</p>
+  <p class="k-small">Connect Langfuse or LangSmith in two minutes. No code.</p>
   <button class="btn-p" onclick="openSignup('free')">Get started free</button>
   <div class="k-dev">
     <button class="prompt-trigger" onclick="togglePrompt()"><span>Developers: add one line to your agent instead</span><span class="prompt-chevron" id="prompt-chevron">▾</span></button>
