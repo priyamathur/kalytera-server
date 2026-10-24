@@ -300,16 +300,30 @@ from kalytera.dashboard_rules import (  # noqa: E402
 )
 
 
-def _validate_key(key: str) -> Optional[Dict[str, Any]]:
+def _validate_key(key: str, timeout: float = 5) -> Optional[Dict[str, Any]]:
     try:
         r = _requests.get(
             f"{_API}/billing/usage",
             headers={"Authorization": f"Bearer {key}"},
-            timeout=5,
+            timeout=timeout,
         )
         return r.json() if r.status_code == 200 else None
     except Exception:
         return None
+
+
+def _check_key(key: str) -> Tuple[Optional[Dict[str, Any]], str]:
+    """Sign-in: (account, "") or (None, why). A sleeping API can take a minute to wake;
+    that is not a wrong key."""
+    try:
+        r = _requests.get(f"{_API}/billing/usage", headers={"Authorization": f"Bearer {key}"}, timeout=90)
+    except Exception:
+        return None, "Kalytera didn't answer. Wait a moment and try again."
+    if r.status_code == 200:
+        return r.json(), ""
+    if r.status_code in (401, 403):
+        return None, "Kalytera doesn't recognize this key. Check that you copied all of it, or email priya@kalytera.ai."
+    return None, "Kalytera couldn't check the key just now. Wait a moment and try again."
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -394,11 +408,12 @@ if not st.session_state.get("authenticated"):
             _submitted = st.form_submit_button("Sign in →", use_container_width=True)
 
         if _submitted:
+            _key_input = _key_input.strip()
             if not _key_input.startswith("kly_live_"):
                 st.error("That doesn't look right — Kalytera API keys start with `kly_live_`")
             else:
-                with st.spinner("Verifying…"):
-                    _usage = _validate_key(_key_input)
+                with st.spinner("Checking your key… (up to a minute if Kalytera was asleep)"):
+                    _usage, _why = _check_key(_key_input)
                 if _usage:
                     st.session_state.update({
                         "authenticated": True,
@@ -411,7 +426,7 @@ if not st.session_state.get("authenticated"):
                     })
                     st.rerun()
                 else:
-                    st.error("Invalid key. Check it at kalytera.dev or email priya@kalytera.ai")
+                    st.error(_why)
 
         st.markdown("""
         <div style="text-align:center;margin-top:20px;font-size:12px;color:#94a3b8">
