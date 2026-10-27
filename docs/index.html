@@ -365,7 +365,7 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 .k-car{position:relative}
 .k-car-track{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;scrollbar-width:none;padding:4px 2px 8px}
 .k-car-track::-webkit-scrollbar{display:none}
-.k-tile{flex:0 0 calc((100% - 32px)/3);scroll-snap-align:start;background:var(--card);border:1px solid rgba(232,85,85,0.28);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:10px;min-height:220px}
+.k-tile{flex:0 0 calc(100%/3);scroll-snap-align:start;background:var(--card);border:1px solid rgba(232,85,85,0.28);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:10px;min-height:220px}
 .k-tile-n{font-family:'Inter',sans-serif;font-weight:800;font-size:30px;letter-spacing:-.6px;color:var(--red);line-height:1}
 .k-tile p{font-size:16px;line-height:1.5;color:var(--white);flex:1}
 .k-tile-s{font-family:'DM Mono',ui-monospace,monospace;font-size:13.5px;color:var(--cyan);border-top:1px solid var(--border);padding-top:10px}
@@ -379,8 +379,24 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 .k-prom-t{font-family:'Inter',sans-serif;font-weight:800;font-size:clamp(22px,2.4vw,27px);line-height:1.12;letter-spacing:-.5px;color:var(--white);margin-bottom:12px}
 .k-prom-t span{color:var(--cyan)}
 .k-prom p{font-size:15.5px;line-height:1.55;color:rgba(232,236,240,0.72)}
-@media(max-width:960px){.k-tile{flex-basis:calc((100% - 16px)/2)}.k-car-prev{left:-8px}.k-car-next{right:-8px}}
+@media(max-width:960px){.k-tile{flex-basis:50%}.k-car-prev{left:-8px}.k-car-next{right:-8px}}
 @media(max-width:620px){.k-tile{flex-basis:85%}.k-car-btn{display:none}.k-prom{grid-template-columns:1fr}.k-prom>div{padding:22px 0 0}.k-prom>div+div{border-left:0;border-top:1px solid var(--border);margin-top:22px}}
+/* Hero, option-B layout: left-aligned on the page grid, large headline */
+.k-hero.k-hero-b{max-width:1060px;text-align:left;padding:88px 24px 56px}
+.k-hero-b .k-h1{font-size:clamp(40px,6.6vw,84px);line-height:.98;letter-spacing:-.04em;max-width:15ch;margin-bottom:20px}
+.k-hero-b .k-answer{margin:0 0 18px;font-size:clamp(22px,2.6vw,32px)}
+.k-hero-b .k-sub{margin:0 0 30px;max-width:52ch;font-size:18px}
+.k-hero-b .k-ctas{justify-content:flex-start;gap:12px}
+.k-hero-b .k-small{text-align:left}
+/* Incidents: open columns with dividers, no boxes */
+.k-car .k-tile{background:none;border:0;border-radius:0;border-top:2px solid var(--red);padding:20px 22px 6px 0;min-height:0}
+.k-car .k-tile+.k-tile{border-left:1px solid var(--border);padding-left:22px}
+.k-car .k-tile-s{border-top:0;padding-top:0}
+.k-car-track{gap:0}
+.k-car-nav{display:flex;justify-content:flex-end;gap:8px;margin-top:14px}
+.k-car-nav button{width:34px;height:34px;border-radius:50%;border:1px solid var(--border);background:none;color:rgba(232,236,240,0.7);font-size:20px;line-height:1;cursor:pointer}
+.k-car-nav button:hover{border-color:var(--cyan);color:var(--cyan)}
+@media(max-width:620px){.k-hero.k-hero-b{padding-top:56px}.k-car .k-tile+.k-tile{border-left:0;padding-left:0}.k-car .k-tile{padding-right:16px}}
 .k-trust{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px}
 .k-trust-t{font-weight:800;font-size:clamp(20px,2.2vw,24px);line-height:1.25;letter-spacing:-.4px;color:var(--white);margin-bottom:10px}
 .k-trust p{font-size:16px;line-height:1.5;color:rgba(232,236,240,0.72)}
@@ -471,7 +487,7 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 <!-- ===== HOME ===== -->
 <div class="page on" id="pg-home">
 
-<section class="k-hero">
+<section class="k-hero k-hero-b">
   <div class="k-kicker">April 2026 · PocketOS</div>
   <h1 class="k-h1">An AI agent deleted a company's database in <em>9&nbsp;seconds.</em></h1>
   <p class="k-answer">With Kalytera, it would have waited for a person.</p>
@@ -487,7 +503,6 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
   <h2 class="k-h2">It wasn't a one-off.</h2>
   <p class="k-intro">Agents from OpenAI, Anthropic, Google and Meta have all done things nobody approved.</p>
   <div class="k-car" aria-roledescription="carousel" aria-label="Real incidents of AI agents going rogue">
-    <button class="k-car-btn k-car-prev" type="button" aria-label="Previous incidents" onclick="carStep(-1)">‹</button>
     <div class="k-car-track" id="carTrack" tabindex="0">
       <article class="k-tile" role="group" aria-roledescription="slide" aria-label="1 of 8">
         <div class="k-tile-n">20,225</div>
@@ -538,7 +553,7 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
         <a class="k-tile-src" href="https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue" target="_blank" rel="noopener">Tom's Hardware · Apr 2026</a>
       </article>
     </div>
-    <button class="k-car-btn k-car-next" type="button" aria-label="Next incidents" onclick="carStep(1)">›</button>
+    <div class="k-car-nav"><button type="button" aria-label="Previous incidents" onclick="carStep(-1)">‹</button><button type="button" aria-label="Next incidents" onclick="carStep(1)">›</button></div>
   </div>
 </section>
 
@@ -900,7 +915,7 @@ const docs = ['intro','connect','qs','slack','judge','problems','rules','replies
   window.carStep = function(dir){
     const tile = track.querySelector('.k-tile');
     if (!tile) return;
-    const step = tile.getBoundingClientRect().width + 16;
+    const step = tile.getBoundingClientRect().width;
     const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 4;
     const atStart = track.scrollLeft <= 4;
     if (dir > 0 && atEnd) track.scrollTo({left: 0});
