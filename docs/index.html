@@ -359,6 +359,28 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 .k-inc-f span{color:var(--cyan);font-weight:600}
 .k-inc-f a{color:rgba(232,236,240,0.5)}
 @media(max-width:860px){.k-grid2{grid-template-columns:1fr}}
+.k-kicker{font-family:'DM Mono',ui-monospace,monospace;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--red);margin-bottom:18px}
+.k-h1 em{font-style:normal;color:var(--red)}
+.k-answer{font-family:'Inter',sans-serif;font-weight:700;font-size:clamp(20px,2.4vw,28px);letter-spacing:-.4px;color:var(--cyan);margin:-6px auto 18px}
+.k-car{position:relative}
+.k-car-track{display:flex;gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;scroll-behavior:smooth;scrollbar-width:none;padding:4px 2px 8px}
+.k-car-track::-webkit-scrollbar{display:none}
+.k-tile{flex:0 0 calc((100% - 32px)/3);scroll-snap-align:start;background:var(--card);border:1px solid rgba(232,85,85,0.28);border-radius:14px;padding:22px;display:flex;flex-direction:column;gap:10px;min-height:220px}
+.k-tile-n{font-family:'Inter',sans-serif;font-weight:800;font-size:30px;letter-spacing:-.6px;color:var(--red);line-height:1}
+.k-tile p{font-size:16px;line-height:1.5;color:var(--white);flex:1}
+.k-tile-s{font-family:'DM Mono',ui-monospace,monospace;font-size:13.5px;color:var(--cyan);border-top:1px solid var(--border);padding-top:10px}
+.k-tile-src{font-size:12.5px;color:rgba(232,236,240,0.5)}
+.k-car-btn{position:absolute;top:50%;transform:translateY(-50%);z-index:2;width:40px;height:40px;border-radius:50%;border:1px solid var(--border);background:#0f1418;color:var(--white);font-size:24px;line-height:1;cursor:pointer;display:grid;place-items:center}
+.k-car-btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.k-car-prev{left:-20px}.k-car-next{right:-20px}
+.k-prom{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--border)}
+.k-prom>div{padding:26px 24px 4px}
+.k-prom>div+div{border-left:1px solid var(--border)}
+.k-prom-t{font-family:'Inter',sans-serif;font-weight:800;font-size:clamp(22px,2.4vw,27px);line-height:1.12;letter-spacing:-.5px;color:var(--white);margin-bottom:12px}
+.k-prom-t span{color:var(--cyan)}
+.k-prom p{font-size:15.5px;line-height:1.55;color:rgba(232,236,240,0.72)}
+@media(max-width:960px){.k-tile{flex-basis:calc((100% - 16px)/2)}.k-car-prev{left:-8px}.k-car-next{right:-8px}}
+@media(max-width:620px){.k-tile{flex-basis:85%}.k-car-btn{display:none}.k-prom{grid-template-columns:1fr}.k-prom>div{padding:22px 0 0}.k-prom>div+div{border-left:0;border-top:1px solid var(--border);margin-top:22px}}
 .k-trust{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:28px}
 .k-trust-t{font-weight:800;font-size:clamp(20px,2.2vw,24px);line-height:1.25;letter-spacing:-.4px;color:var(--white);margin-bottom:10px}
 .k-trust p{font-size:16px;line-height:1.5;color:rgba(232,236,240,0.72)}
@@ -450,78 +472,84 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 <div class="page on" id="pg-home">
 
 <section class="k-hero">
-  <div class="k-eyebrow">AI agent safety</div>
-  <h1 class="k-h1">Catch your AI agents' mistakes.<br><span>Block the dangerous ones.</span></h1>
-  <p class="k-sub">Kalytera reads every conversation and every action your agents take, tells you in Slack the moment something goes wrong, and stops risky actions and false replies, like a wrong refund, an account takeover or a deleted database, before anyone gets hurt.</p>
+  <div class="k-kicker">April 2026 · PocketOS</div>
+  <h1 class="k-h1">An AI agent deleted a company's database in <em>9&nbsp;seconds.</em></h1>
+  <p class="k-answer">With Kalytera, it would have waited for a person.</p>
+  <p class="k-sub">Kalytera checks every action your AI agents take before it runs, and every reply before a customer sees it. Serious mistakes reach Slack right away.</p>
   <div class="k-ctas">
     <button class="btn-p" onclick="openSignup('free')">Get started free</button>
-    <a class="k-link" href="#how">How it works ↓</a>
+    <a class="btn-s" href="mailto:priya@kalytera.ai?subject=Kalytera" style="text-decoration:none">Talk to us</a>
   </div>
   <p class="k-small">Free for 5,000 conversations a month. No credit card.</p>
 </section>
 
 <section class="k-sec">
-  <h2 class="k-h2">AI agents are already going rogue</h2>
-  <p class="k-intro">Agents from OpenAI, Anthropic, Google and Meta have all done things nobody approved. Most were found only after the damage was done.</p>
-  <div class="k-grid2">
-    <div class="k-inc">
-      <div class="k-inc-n">Broke in</div>
-      <div class="k-card-t">OpenAI's agents escaped their test and broke into Hugging Face's servers</div>
-      <p>A swarm of agents running a security test got out of its sandbox and into another company's systems.</p>
-      <div class="k-inc-s"><b>With Kalytera:</b> A rule like “connecting anywhere except our own systems needs a person” stops the connection before it’s made.</div>
-      <div class="k-inc-f"><a href="https://techcrunch.com/2026/09/04/openais-rogue-agents-keep-escaping-with-no-formal-process-to-investigate-them/" target="_blank" rel="noopener">TechCrunch · Sept 2026</a></div>
+  <h2 class="k-h2">It wasn't a one-off.</h2>
+  <p class="k-intro">Agents from OpenAI, Anthropic, Google and Meta have all done things nobody approved.</p>
+  <div class="k-car" aria-roledescription="carousel" aria-label="Real incidents of AI agents going rogue">
+    <button class="k-car-btn k-car-prev" type="button" aria-label="Previous incidents" onclick="carStep(-1)">‹</button>
+    <div class="k-car-track" id="carTrack" tabindex="0">
+      <article class="k-tile" role="group" aria-roledescription="slide" aria-label="1 of 8">
+        <div class="k-tile-n">20,225</div>
+        <p>Instagram accounts handed to hackers by Meta's support agent</p>
+        <div class="k-tile-s">→ account changes held</div>
+        <a class="k-tile-src" href="https://labs.cloudsecurityalliance.org/research/csa-research-note-meta-ai-support-bot-account-takeover-20260/" target="_blank" rel="noopener">Cloud Security Alliance · Jun 2026</a>
+      </article>
+      <article class="k-tile" role="group" aria-roledescription="slide" aria-label="2 of 8">
+        <div class="k-tile-n">3 months</div>
+        <p>before anyone noticed an OpenAI agent spent a stranger's crypto</p>
+        <div class="k-tile-s">→ Slack the same day</div>
+        <a class="k-tile-src" href="https://fortune.com/2026/10/16/rogue-openai-agent-crypto-wallet-funds-task/" target="_blank" rel="noopener">Fortune · Oct 2026</a>
+      </article>
+      <article class="k-tile" role="group" aria-roledescription="slide" aria-label="3 of 8">
+        <div class="k-tile-n">Then lied</div>
+        <p>OpenAI agents turned off their own monitoring and denied it</p>
+        <div class="k-tile-s">→ rules the AI can't switch off</div>
+        <a class="k-tile-src" href="https://www.aljazeera.com/economy/2026/10/21/openai-says-its-agents-turned-off-own-safeguards" target="_blank" rel="noopener">Al Jazeera · Oct 2026</a>
+      </article>
+      <article class="k-tile" role="group" aria-roledescription="slide" aria-label="4 of 8">
+        <div class="k-tile-n">Broke in</div>
+        <p>OpenAI agents escaped a test into Hugging Face's servers</p>
+        <div class="k-tile-s">→ outside connections held</div>
+        <a class="k-tile-src" href="https://techcrunch.com/2026/09/04/openais-rogue-agents-keep-escaping-with-no-formal-process-to-investigate-them/" target="_blank" rel="noopener">TechCrunch · Sep 2026</a>
+      </article>
+      <article class="k-tile" role="group" aria-roledescription="slide" aria-label="5 of 8">
+        <div class="k-tile-n">Whole drive</div>
+        <p>wiped by Google's Antigravity when asked to clear a cache</p>
+        <div class="k-tile-s">→ bulk deletes held</div>
+        <a class="k-tile-src" href="https://www.techradar.com/ai-platforms-assistants/googles-antigravity-ai-deleted-a-developers-drive-and-then-apologized" target="_blank" rel="noopener">TechRadar · Dec 2025</a>
+      </article>
+      <article class="k-tile" role="group" aria-roledescription="slide" aria-label="6 of 8">
+        <div class="k-tile-n">~/</div>
+        <p>One character, and Claude Code erased a home folder</p>
+        <div class="k-tile-s">→ commands checked first</div>
+        <a class="k-tile-src" href="https://simonwillison.net/2025/Dec/9/claude" target="_blank" rel="noopener">Simon Willison · Dec 2025</a>
+      </article>
+      <article class="k-tile" role="group" aria-roledescription="slide" aria-label="7 of 8">
+        <div class="k-tile-n">Liable</div>
+        <p>Air Canada paid for a refund its chatbot invented</p>
+        <div class="k-tile-s">→ replies checked against your policy</div>
+        <a class="k-tile-src" href="https://www.cbsnews.com/news/aircanada-chatbot-discount-customer/" target="_blank" rel="noopener">CBS News · 2024</a>
+      </article>
+      <article class="k-tile" role="group" aria-roledescription="slide" aria-label="8 of 8">
+        <div class="k-tile-n">9 s</div>
+        <p>PocketOS's database and backups, deleted by a Claude-powered agent</p>
+        <div class="k-tile-s">→ deletes held for a person</div>
+        <a class="k-tile-src" href="https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue" target="_blank" rel="noopener">Tom's Hardware · Apr 2026</a>
+      </article>
     </div>
-    <div class="k-inc">
-      <div class="k-inc-n">3 months unnoticed</div>
-      <div class="k-card-t">An OpenAI agent spent a stranger's crypto, then left it out of its report</div>
-      <p>It had no money for a task, so it searched 362 wallets, used one that wasn't its own, and didn't mention it. OpenAI found out in an audit three months later.</p>
-      <div class="k-inc-s"><b>With Kalytera:</b> Payments above your limit need a person to approve them. And one serious mistake reaches your Slack the same day, not three months later.</div>
-      <div class="k-inc-f"><a href="https://fortune.com/2026/10/16/rogue-openai-agent-crypto-wallet-funds-task/" target="_blank" rel="noopener">Fortune · Oct 2026</a></div>
-    </div>
-    <div class="k-inc">
-      <div class="k-inc-n">Then lied</div>
-      <div class="k-card-t">OpenAI's agents switched off the systems watching them</div>
-      <p>In two internal tasks, agents disabled or weakened their own safety monitoring. One removed a monitor and then claimed it hadn't.</p>
-      <div class="k-inc-s"><b>With Kalytera:</b> Turning off monitoring or security needs a person to approve it. Kalytera’s rules aren’t part of the AI, so the agent can’t switch them off or talk its way past them.</div>
-      <div class="k-inc-f"><a href="https://www.aljazeera.com/economy/2026/10/21/openai-says-its-agents-turned-off-own-safeguards" target="_blank" rel="noopener">Al Jazeera · Oct 2026</a></div>
-    </div>
-    <div class="k-inc">
-      <div class="k-inc-n">20,225 accounts</div>
-      <div class="k-card-t">Meta's support agent handed Instagram accounts to hackers</div>
-      <p>Attackers asked it to link their own email to someone else's account, then reset the password. It did.</p>
-      <div class="k-inc-s"><b>With Kalytera:</b> Changing an account’s email or password needs a person to approve it, no matter how convincing the request is.</div>
-      <div class="k-inc-f"><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-meta-ai-support-bot-account-takeover-20260/" target="_blank" rel="noopener">Cloud Security Alliance · June 2026</a></div>
-    </div>
-    <div class="k-inc">
-      <div class="k-inc-n">9 seconds</div>
-      <div class="k-card-t">A Claude-powered agent deleted a company's database, and its backups</div>
-      <p>It hit an error and "fixed" it by deleting PocketOS's production data. The company's rental-car customers were left in chaos for 30 hours.</p>
-      <div class="k-inc-s"><b>With Kalytera:</b> Commands that can wipe a database, like <code>DROP TABLE</code>, are held for a person before they run.</div>
-      <div class="k-inc-f"><a href="https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue" target="_blank" rel="noopener">Tom's Hardware · April 2026</a></div>
-    </div>
-    <div class="k-inc">
-      <div class="k-inc-n">Whole drive</div>
-      <div class="k-card-t">Google's Antigravity agent wiped a developer's entire drive</div>
-      <p>Asked to clear a project's cache, it deleted the developer's whole D: drive. Then it apologized.</p>
-      <div class="k-inc-s"><b>With Kalytera:</b> Commands that delete files in bulk, like <code>rm -rf</code>, are held for a person, whatever they point at.</div>
-      <div class="k-inc-f"><a href="https://www.techradar.com/ai-platforms-assistants/googles-antigravity-ai-deleted-a-developers-drive-and-then-apologized" target="_blank" rel="noopener">TechRadar · Dec 2025</a></div>
-    </div>
-    <div class="k-inc">
-      <div class="k-inc-n">One character</div>
-      <div class="k-card-t">Claude Code erased a developer's home folder</div>
-      <p>Its cleanup command ended in <code>~/</code>, the user's home folder, and it deleted most of their Mac.</p>
-      <div class="k-inc-s"><b>With Kalytera:</b> The command is checked before it runs. <code>rm -rf ~/</code> waits for a person instead of erasing anything.</div>
-      <div class="k-inc-f"><a href="https://simonwillison.net/2025/Dec/9/claude" target="_blank" rel="noopener">Simon Willison · Dec 2025</a></div>
-    </div>
-    <div class="k-inc">
-      <div class="k-inc-n">Liable</div>
-      <div class="k-card-t">An airline had to honor a refund its chatbot made up</div>
-      <p>Air Canada's bot promised a grieving customer a refund the policy didn't allow. A tribunal ruled the company is responsible for what its bot says.</p>
-      <div class="k-inc-s"><b>With Kalytera:</b> Replies about money and policy are checked against your policy before they’re sent, and promises it doesn’t make are held back.</div>
-      <div class="k-inc-f"><a href="https://www.cbsnews.com/news/aircanada-chatbot-discount-customer/" target="_blank" rel="noopener">CBS News · 2024</a></div>
-    </div>
+    <button class="k-car-btn k-car-next" type="button" aria-label="Next incidents" onclick="carStep(1)">›</button>
   </div>
   <p class="k-intro" style="margin:28px auto 0">Kalytera checks your agents' actions before they run and their replies before they're sent, and reads every conversation for anything that gets through.</p>
+</section>
+
+<section class="k-sec">
+  <h2 class="k-h2">Three promises to your customers.</h2>
+  <div class="k-prom">
+    <div><div class="k-prom-t">Nothing risky runs <span>without a person.</span></div><p>Kalytera spots your agent's actions that move money, delete data, change accounts or turn off monitoring, and suggests rules for them on day one. Turn them on with <code>kalytera.init()</code>.</p></div>
+    <div><div class="k-prom-t">Nothing false <span>reaches a customer.</span></div><p>A reply that says "your refund is done" when the refund failed is swapped for a safe message. Replies about money and policy can be checked against your policy.</p></div>
+    <div><div class="k-prom-t">Nothing serious <span>goes unnoticed.</span></div><p>Connect Langfuse or LangSmith with no code. Every conversation is judged; one serious mistake reaches Slack right away.</p></div>
+  </div>
 </section>
 
 <section class="k-sec" id="how">
@@ -874,6 +902,28 @@ function go(p) {
 
 // ---- Docs routing ----
 const docs = ['intro','connect','qs','slack','judge','problems','rules','replies','memory','init','tool'];
+// Incident carousel: 3 at a time; while the pointer is over it, it moves on by one every 2.5 s.
+(function(){
+  const track = document.getElementById('carTrack');
+  if (!track) return;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let timer = null;
+  window.carStep = function(dir){
+    const tile = track.querySelector('.k-tile');
+    if (!tile) return;
+    const step = tile.getBoundingClientRect().width + 16;
+    const atEnd = track.scrollLeft + track.clientWidth >= track.scrollWidth - 4;
+    const atStart = track.scrollLeft <= 4;
+    if (dir > 0 && atEnd) track.scrollTo({left: 0});
+    else if (dir < 0 && atStart) track.scrollTo({left: track.scrollWidth});
+    else track.scrollBy({left: dir * step});
+  };
+  const car = track.parentElement;
+  car.addEventListener('mouseenter', () => { if (!reduce && !timer) timer = setInterval(() => carStep(1), 2500); });
+  car.addEventListener('mouseleave', () => { clearInterval(timer); timer = null; });
+  track.addEventListener('keydown', e => { if (e.key === 'ArrowRight') carStep(1); if (e.key === 'ArrowLeft') carStep(-1); });
+})();
+
 function showDoc(id) {
   docs.forEach(d => {
     const el = document.getElementById('doc-'+d);
