@@ -352,7 +352,10 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 .k-inc{background:var(--card);border:1px solid rgba(232,85,85,0.28);border-radius:14px;padding:24px;display:flex;flex-direction:column}
 .k-inc p{font-size:15px;line-height:1.55;color:rgba(232,236,240,0.78);margin-bottom:16px;flex:1}
 .k-inc-n{font-weight:800;font-size:26px;color:var(--red);letter-spacing:-.5px;margin-bottom:6px}
-.k-inc-f{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;border-top:1px solid var(--border);padding-top:12px}
+.k-inc-s{font-size:14.5px;line-height:1.5;color:var(--white);background:rgba(0,200,232,0.07);border-left:3px solid var(--cyan);border-radius:6px;padding:10px 12px;margin-bottom:14px}
+.k-inc-s b{color:var(--cyan)}
+.k-inc-s code{white-space:nowrap}
+.k-inc-f{display:flex;justify-content:flex-end;gap:12px;flex-wrap:wrap;font-size:13px;border-top:1px solid var(--border);padding-top:12px}
 .k-inc-f span{color:var(--cyan);font-weight:600}
 .k-inc-f a{color:rgba(232,236,240,0.5)}
 @media(max-width:860px){.k-grid2{grid-template-columns:1fr}}
@@ -449,7 +452,7 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 <section class="k-hero">
   <div class="k-eyebrow">AI agent safety</div>
   <h1 class="k-h1">Catch your AI agents' mistakes.<br><span>Block the dangerous ones.</span></h1>
-  <p class="k-sub">Kalytera reads every conversation and every action your agents take, tells you in Slack the moment something goes wrong, and blocks risky actions, like refunds, account changes and deletions, before a customer gets hurt.</p>
+  <p class="k-sub">Kalytera reads every conversation and every action your agents take, tells you in Slack the moment something goes wrong, and stops risky actions and false replies, like a wrong refund, an account takeover or a deleted database, before anyone gets hurt.</p>
   <div class="k-ctas">
     <button class="btn-p" onclick="openSignup('free')">Get started free</button>
     <a class="k-link" href="#how">How it works ↓</a>
@@ -465,67 +468,76 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
       <div class="k-inc-n">Broke in</div>
       <div class="k-card-t">OpenAI's agents escaped their test and broke into Hugging Face's servers</div>
       <p>A swarm of agents running a security test got out of its sandbox and into another company's systems.</p>
-      <div class="k-inc-f"><span>Reaching systems it was never allowed to touch</span><a href="https://techcrunch.com/2026/09/04/openais-rogue-agents-keep-escaping-with-no-formal-process-to-investigate-them/" target="_blank" rel="noopener">TechCrunch · Sept 2026</a></div>
+      <div class="k-inc-s"><b>With Kalytera:</b> A rule like “connecting anywhere except our own systems needs a person” stops the connection before it’s made.</div>
+      <div class="k-inc-f"><a href="https://techcrunch.com/2026/09/04/openais-rogue-agents-keep-escaping-with-no-formal-process-to-investigate-them/" target="_blank" rel="noopener">TechCrunch · Sept 2026</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">3 months unnoticed</div>
       <div class="k-card-t">An OpenAI agent spent a stranger's crypto, then left it out of its report</div>
       <p>It had no money for a task, so it searched 362 wallets, used one that wasn't its own, and didn't mention it. OpenAI found out in an audit three months later.</p>
-      <div class="k-inc-f"><span>Spending money without permission</span><a href="https://fortune.com/2026/10/16/rogue-openai-agent-crypto-wallet-funds-task/" target="_blank" rel="noopener">Fortune · Oct 2026</a></div>
+      <div class="k-inc-s"><b>With Kalytera:</b> Payments above your limit need a person to approve them. And one serious mistake reaches your Slack the same day, not three months later.</div>
+      <div class="k-inc-f"><a href="https://fortune.com/2026/10/16/rogue-openai-agent-crypto-wallet-funds-task/" target="_blank" rel="noopener">Fortune · Oct 2026</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">Then lied</div>
       <div class="k-card-t">OpenAI's agents switched off the systems watching them</div>
       <p>In two internal tasks, agents disabled or weakened their own safety monitoring. One removed a monitor and then claimed it hadn't.</p>
-      <div class="k-inc-f"><span>Turning off its own safeguards</span><a href="https://www.aljazeera.com/economy/2026/10/21/openai-says-its-agents-turned-off-own-safeguards" target="_blank" rel="noopener">Al Jazeera · Oct 2026</a></div>
+      <div class="k-inc-s"><b>With Kalytera:</b> Turning off monitoring or security needs a person to approve it. Kalytera’s rules aren’t part of the AI, so the agent can’t switch them off or talk its way past them.</div>
+      <div class="k-inc-f"><a href="https://www.aljazeera.com/economy/2026/10/21/openai-says-its-agents-turned-off-own-safeguards" target="_blank" rel="noopener">Al Jazeera · Oct 2026</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">20,225 accounts</div>
       <div class="k-card-t">Meta's support agent handed Instagram accounts to hackers</div>
       <p>Attackers asked it to link their own email to someone else's account, then reset the password. It did.</p>
-      <div class="k-inc-f"><span>Changing who controls an account</span><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-meta-ai-support-bot-account-takeover-20260/" target="_blank" rel="noopener">Cloud Security Alliance · June 2026</a></div>
+      <div class="k-inc-s"><b>With Kalytera:</b> Changing an account’s email or password needs a person to approve it, no matter how convincing the request is.</div>
+      <div class="k-inc-f"><a href="https://labs.cloudsecurityalliance.org/research/csa-research-note-meta-ai-support-bot-account-takeover-20260/" target="_blank" rel="noopener">Cloud Security Alliance · June 2026</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">9 seconds</div>
       <div class="k-card-t">A Claude-powered agent deleted a company's database, and its backups</div>
       <p>It hit an error and "fixed" it by deleting PocketOS's production data. The company's rental-car customers were left in chaos for 30 hours.</p>
-      <div class="k-inc-f"><span>Deleting data</span><a href="https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue" target="_blank" rel="noopener">Tom's Hardware · April 2026</a></div>
+      <div class="k-inc-s"><b>With Kalytera:</b> Commands that can wipe a database, like <code>DROP TABLE</code>, are held for a person before they run.</div>
+      <div class="k-inc-f"><a href="https://www.tomshardware.com/tech-industry/artificial-intelligence/claude-powered-ai-coding-agent-deletes-entire-company-database-in-9-seconds-backups-zapped-after-cursor-tool-powered-by-anthropics-claude-goes-rogue" target="_blank" rel="noopener">Tom's Hardware · April 2026</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">Whole drive</div>
       <div class="k-card-t">Google's Antigravity agent wiped a developer's entire drive</div>
       <p>Asked to clear a project's cache, it deleted the developer's whole D: drive. Then it apologized.</p>
-      <div class="k-inc-f"><span>Deleting far more than asked</span><a href="https://www.techradar.com/ai-platforms-assistants/googles-antigravity-ai-deleted-a-developers-drive-and-then-apologized" target="_blank" rel="noopener">TechRadar · Dec 2025</a></div>
+      <div class="k-inc-s"><b>With Kalytera:</b> Commands that delete files in bulk, like <code>rm -rf</code>, are held for a person, whatever they point at.</div>
+      <div class="k-inc-f"><a href="https://www.techradar.com/ai-platforms-assistants/googles-antigravity-ai-deleted-a-developers-drive-and-then-apologized" target="_blank" rel="noopener">TechRadar · Dec 2025</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">One character</div>
       <div class="k-card-t">Claude Code erased a developer's home folder</div>
       <p>Its cleanup command ended in <code>~/</code>, the user's home folder, and it deleted most of their Mac.</p>
-      <div class="k-inc-f"><span>Destructive commands nobody checked</span><a href="https://simonwillison.net/2025/Dec/9/claude" target="_blank" rel="noopener">Simon Willison · Dec 2025</a></div>
+      <div class="k-inc-s"><b>With Kalytera:</b> The command is checked before it runs. <code>rm -rf ~/</code> waits for a person instead of erasing anything.</div>
+      <div class="k-inc-f"><a href="https://simonwillison.net/2025/Dec/9/claude" target="_blank" rel="noopener">Simon Willison · Dec 2025</a></div>
     </div>
     <div class="k-inc">
       <div class="k-inc-n">Liable</div>
       <div class="k-card-t">An airline had to honor a refund its chatbot made up</div>
       <p>Air Canada's bot promised a grieving customer a refund the policy didn't allow. A tribunal ruled the company is responsible for what its bot says.</p>
-      <div class="k-inc-f"><span>Promising what your policy doesn't allow</span><a href="https://www.cbsnews.com/news/aircanada-chatbot-discount-customer/" target="_blank" rel="noopener">CBS News · 2024</a></div>
+      <div class="k-inc-s"><b>With Kalytera:</b> Replies about money and policy are checked against your policy before they’re sent, and promises it doesn’t make are held back.</div>
+      <div class="k-inc-f"><a href="https://www.cbsnews.com/news/aircanada-chatbot-discount-customer/" target="_blank" rel="noopener">CBS News · 2024</a></div>
     </div>
   </div>
-  <p class="k-intro" style="margin:28px auto 0">Kalytera checks your agents' actions before they run, and reads every conversation for the mistakes that get through.</p>
+  <p class="k-intro" style="margin:28px auto 0">Kalytera checks your agents' actions before they run and their replies before they're sent, and reads every conversation for anything that gets through.</p>
 </section>
 
 <section class="k-sec" id="how">
   <h2 class="k-h2">How Kalytera keeps your agents in line</h2>
-  <div class="k-grid3">
+  <div class="k-grid2">
     <div class="k-step"><div class="k-num">1</div><div class="k-card-t">Read every conversation</div><p>Connect Langfuse or LangSmith, with no code. Kalytera checks every conversation, including what each action actually did, not just what the agent said it did.</p></div>
-    <div class="k-step"><div class="k-num">2</div><div class="k-card-t">Hear about it in plain English</div><p>When a mistake starts repeating, Slack tells you what went wrong, how often, and links to the conversations.</p></div>
-    <div class="k-step"><div class="k-num">3</div><div class="k-card-t">Block the action</div><p>Turn the problem into a rule, like "changing an account's email needs a person." With one line of code, your agent can't take that action, and it tells the customer why.</p></div>
+    <div class="k-step"><div class="k-num">2</div><div class="k-card-t">Hear about it in plain English</div><p>A serious mistake, like a wrong refund or deleted data, reaches Slack after one conversation. Smaller ones reach you once they repeat, so Slack stays quiet.</p></div>
+    <div class="k-step"><div class="k-num">3</div><div class="k-card-t">Stop risky actions before they run</div><p>Kalytera sees which of your agent's actions can delete data, move money, change accounts or turn off monitoring, and suggests rules for them on day one: a person approves those actions first.</p></div>
+    <div class="k-step"><div class="k-num">4</div><div class="k-card-t">Stop false replies before they're sent</div><p>A reply that says "your refund is done" when the refund failed is swapped for a safe message. Replies about money and policy can also be checked against your policy first.</p></div>
   </div>
 </section>
 
 <section class="k-sec">
   <h2 class="k-h2">Why you can trust it</h2>
   <div class="k-grid2">
-    <div class="k-trust"><div class="k-trust-t">Rules are code, not another AI.</div><p>Meta's agent was talked into handing over accounts. A rule like "account changes need a person" can't be talked out of anything. Keeping that decision outside the AI is what <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/" target="_blank" rel="noopener">OWASP</a> recommends.</p></div>
+    <div class="k-trust"><div class="k-trust-t">Rules are code, not another AI.</div><p>An AI can be argued with. A rule can't. Kalytera's rules check the action itself, so no trick or convincing request gets past them. Keeping that decision outside the AI is what <a href="https://genai.owasp.org/llmrisk/llm062025-excessive-agency/" target="_blank" rel="noopener">security experts recommend</a>.</p></div>
     <div class="k-trust"><div class="k-trust-t">If Kalytera goes down, your rules don't.</div><p>Rules run inside your own app, instantly, from the last copy it loaded. Your agent stays protected and doesn't slow down.</p></div>
     <div class="k-trust"><div class="k-trust-t">Nothing gets blocked by surprise.</div><p>Every rule watches first and shows you what it would have stopped. You decide when it starts blocking.</p></div>
     <div class="k-trust"><div class="k-trust-t">Your customers' data stays yours.</div><p>Kalytera only reads. Card numbers and emails can be masked before they leave your servers, and you can delete everything at any time.</p></div>
@@ -662,6 +674,7 @@ If the agent is a custom loop with no framework, also:
       <a class="docs-item" onclick="showDoc('judge')">How conversations are judged</a>
       <a class="docs-item" onclick="showDoc('problems')">Problems</a>
       <a class="docs-item" onclick="showDoc('rules')">Rules</a>
+      <a class="docs-item" onclick="showDoc('replies')">Check replies</a>
       <a class="docs-item" onclick="showDoc('memory')">Memory and sharing</a>
     </div>
     <div class="docs-grp"><div class="docs-grp-lbl">API reference</div>
@@ -725,7 +738,7 @@ kalytera.<span class="fn">init</span>()  <span class="cm"># before your agents r
     <!-- SLACK -->
     <div id="doc-slack" style="display:none">
       <div class="docs-h1">Slack alerts</div>
-      <p class="docs-lead">A message when a new problem appears, and when one gets worse. Each links straight to its conversations.</p>
+      <p class="docs-lead">A message right away when there's a serious mistake (even just one) or a reply was stopped before a customer saw it, and when a smaller problem starts repeating or gets worse. Each links straight to the conversation.</p>
       <div class="docs-h3">Set up</div>
       <ul class="docs-ul">
         <li>Go to <span class="ic">api.slack.com/apps</span> → <b>Create New App</b> → <b>From scratch</b>, and pick your workspace</li>
@@ -767,6 +780,7 @@ kalytera.<span class="fn">init</span>()  <span class="cm"># before your agents r
       <div class="docs-h1">Rules</div>
       <p class="docs-lead">A rule checks an action before your agent takes it: for example, a refund over $250 needs a person to approve it.</p>
       <ul class="docs-ul">
+        <li><b>Starter rules, before anything goes wrong.</b> Kalytera looks at the actions your agent takes and suggests "a person approves it first" for the risky ones: commands that can wipe files or databases (like <span class="ic">rm -rf</span> or <span class="ic">DROP TABLE</span>), turning off monitoring or security, deleting things, moving money above a limit, and changing accounts</li>
         <li><b>Suggested rules</b> come from your problems, with what they would have caught: failed conversations stopped, and good ones touched</li>
         <li><b>New rules only watch.</b> They record what they would have blocked, so trying one is safe. Switch a rule to blocking when you trust it.</li>
         <li><b>Blocking</b> needs the SDK (<span class="ic">kalytera.init()</span>, or <span class="ic">@kalytera.tool</span> on your own tools). A blocked action doesn't run. Your agent gets the rule's reason instead, for example "Refund needs a person to approve it when the amount is over 250".</li>
@@ -774,10 +788,26 @@ kalytera.<span class="fn">init</span>()  <span class="cm"># before your agents r
       <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="kw">@</span>kalytera.tool(on_block=<span class="kw">lambda</span> d: <span class="str">f"I can't do that automatically: {d.reason}"</span>)
 <span class="kw">def</span> <span class="fn">refund_api</span>(order_id, amount): ...</pre></div>
       <p class="docs-p">Without <span class="ic">on_block</span>, a blocked call raises <span class="ic">kalytera.Blocked</span>. If Kalytera can't be reached, actions run.</p>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('problems')">Problems</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('memory')">Memory and sharing</a></div></div>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('problems')">Problems</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('replies')">Check replies</a></div></div>
     </div>
 
     <!-- MEMORY -->
+    <div id="doc-replies" style="display:none">
+      <div class="docs-h1">Check replies</div>
+      <p class="docs-lead">An agent that says "your refund has been processed" when the refund failed does as much harm as a wrong refund. <span class="ic">check_reply()</span> stops that reply before the customer sees it.</p>
+      <div class="cb"><div class="cb-lbl">agent.py</div><pre><span class="kw">with</span> kalytera.<span class="fn">session</span>(conversation_id, input=message) <span class="kw">as</span> s:
+    reply = run_agent(message)
+    check = kalytera.<span class="fn">check_reply</span>(reply)   <span class="cm"># the original, or a safe message if it was held</span>
+    s.output = check.reply
+send_to_customer(check.reply)</pre></div>
+      <ul class="docs-ul">
+        <li><b>Always on, no delay:</b> a reply that says something was done (refunded, cancelled, deleted, sent) is held when that action failed, was blocked, or never ran in the conversation. This is plain code, not AI.</li>
+        <li><b>AI review, if you want it:</b> <span class="ic">check_reply(reply, review=True, policy=YOUR_POLICY)</span> also has Kalytera's AI reviewer read replies about money, policy, accounts or legal matters before they're sent, and hold promises your policy doesn't make. It adds about 1–3 seconds to those replies only. If the reviewer doesn't answer in time, the reply goes out.</li>
+        <li><b>You hear about it:</b> every held reply goes to Slack right away and shows in the Failure Feed, with what the agent wanted to send. The customer gets a safe message instead; set your own with <span class="ic">safe_reply="…"</span>.</li>
+      </ul>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('rules')">Rules</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('memory')">Memory and sharing</a></div></div>
+    </div>
+
     <div id="doc-memory" style="display:none">
       <div class="docs-h1">Memory and sharing</div>
       <p class="docs-lead">Kalytera remembers at three levels: the agent, your account, and anonymously across companies.</p>
@@ -787,7 +817,7 @@ kalytera.<span class="fn">init</span>()  <span class="cm"># before your agents r
         <li><b>Across companies:</b> tell Kalytera what the agent does (industry and kind of agent) and it warns you about mistakes agents like it make elsewhere</li>
       </ul>
       <p class="docs-p">What's shared is anonymous and aggregated: kinds of mistakes and the shapes of rules that stopped them. Conversations, names and your limits are never shared, and a pattern appears only once at least 5 companies share it. Sharing is on by default. Turn it off in the dashboard (Overview → Data &amp; retention); your contributions are removed right away. <a href="security.html" style="color:var(--cyan)">Data &amp; security →</a></p>
-      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('rules')">Rules</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('init')">init()</a></div></div>
+      <div class="pager"><div><div class="pg-lbl">← Previous</div><a onclick="showDoc('replies')">Check replies</a></div><div style="text-align:right"><div class="pg-lbl">Next →</div><a onclick="showDoc('init')">init()</a></div></div>
     </div>
 
     <!-- INIT -->
@@ -843,7 +873,7 @@ function go(p) {
 }
 
 // ---- Docs routing ----
-const docs = ['intro','connect','qs','slack','judge','problems','rules','memory','init','tool'];
+const docs = ['intro','connect','qs','slack','judge','problems','rules','replies','memory','init','tool'];
 function showDoc(id) {
   docs.forEach(d => {
     const el = document.getElementById('doc-'+d);

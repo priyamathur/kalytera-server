@@ -34,6 +34,7 @@ ul{padding-left:20px}
 <tr><th>Data</th><th>Stored</th></tr>
 <tr><td>Each step your agent sends: input, output, actions taken (name, arguments, success, error, latency), metadata</td><td>Yes, until you delete it or your retention period ends</td></tr>
 <tr><td>The judge's scores and failure reason for each session</td><td>Yes, until you delete it or your retention period ends</td></tr>
+<tr><td>Replies <code>check_reply()</code> held back</td><td>The reply the agent wanted to send and why it was held, until you delete the agent's data. With <code>redact=True</code>, it's masked first</td></tr>
 <tr><td>Rule checks (<code>guard()</code> decisions)</td><td>Tool name, decision, rule — <b>a hash of the arguments, not the arguments</b></td></tr>
 <tr><td>Langfuse / LangSmith keys and Slack webhook URLs (if you connect them)</td><td><b>Encrypted</b> (Fernet: AES with an HMAC). Used only to read conversations or send alerts; deleted when you remove the connection</td></tr>
 <tr><td>Your account</td><td>Email, organisation name. API keys are stored only as SHA-256 hashes. Signing in with Google uses only your email address. <a href="privacy.html">Privacy policy</a></td></tr>
@@ -52,7 +53,7 @@ ul{padding-left:20px}
 <h2>Who processes it</h2>
 <ul>
 <li><b>Kalytera's API</b>, hosted on Render, and its <b>database</b>, hosted on Neon (both in the United States). Every API call is scoped to your account; an agent name belongs to one account and other accounts can't read or write it.</li>
-<li><b>Anthropic (Claude)</b> scores each finished session: the session's steps and tool calls are sent to Anthropic's API for that one request. Nothing else is sent to an LLM; finding problems and drafting rules run on Kalytera's servers. See <a href="https://www.anthropic.com/legal/commercial-terms">Anthropic's commercial terms</a>.</li>
+<li><b>Anthropic (Claude)</b> scores each finished session: the session's steps and tool calls are sent to Anthropic's API for that one request. If you turn on AI review in <code>check_reply(review=True)</code>, the customer's message, the reply, the conversation's actions and the policy you pass are sent to Anthropic's API to check that one reply. Nothing else is sent to an LLM; finding problems, drafting rules and the built-in reply check run on Kalytera's servers or in your app. See <a href="https://www.anthropic.com/legal/commercial-terms">Anthropic's commercial terms</a>.</li>
 </ul>
 
 <h2>Delete your data</h2>

@@ -220,9 +220,10 @@ kalytera rules promote refund_cap           # now enforced
 kalytera guard refund_api --args '{"amount": 900}'   # DENY
 ```
 
-- **Operators:** `==` `!=` `>` `>=` `<` `<=` `in`. Fields can be nested: `"customer.tier"`. All conditions in a rule must hold.
+- **Operators:** `==` `!=` `>` `>=` `<` `<=` `in` `not in` (an allow-list: anything not listed matches) `contains` (text, or a list where any one matches; ignores case and extra spaces: `{"field": "command", "op": "contains", "value": ["rm -rf", "drop table"]}`). Fields can be nested: `"customer.tier"`. All conditions in a rule must hold. `not in` and `contains` need SDK 0.4.0 or later.
 - **Repeated calls:** `"session_conditions": [{"type": "count_in_window", "tool": "refund_api", "op": ">=", "value": 3, "window_seconds": 600}]` matches the 3rd call in 10 minutes within one session.
-- **Actions:** `DENY` or `ESCALATE` (your code decides what escalation means).
+- **Actions:** `DENY` or `ESCALATE` (a person must approve it; the action doesn't run, and your code decides how the person is asked).
+- **Starter rules, before anything goes wrong:** **Rules** lists the risky actions your agent already takes — commands that can wipe files or databases, turning off monitoring or security, deleting things, moving money, changing accounts — each with a ready "a person approves it first" rule (`GET /rules/starter?agent_id=…`).
 - **Fast:** rules are cached in your process and refreshed every 30 s — a check makes no network call and no LLM call.
 - **Fail-open:** if Kalytera is unreachable, `guard()` uses the last rules it loaded, or returns `ALLOW` if it never loaded any, and says why in `d.error`. Add `"fail_closed": true` to a rule to deny instead when evaluation fails. `guard()` never raises.
 - **Private:** decisions are recorded with a hash of the arguments, never the arguments themselves.
@@ -236,6 +237,26 @@ curl -s -X POST https://api.kalytera.dev/guard \
 ```
 
   Rules can be managed over HTTP too: `GET/POST /rules`, `PUT /rules/{id}`, `POST /rules/{id}/promote|demote`, `DELETE /rules/{id}`, `GET /rules/{id}/stats` — see [api.kalytera.dev/docs](https://api.kalytera.dev/docs).
+
+## Check replies before the customer sees them
+
+An agent that says "your refund has been processed" when the refund failed does as much damage as a wrong refund. `check_reply()` stops that reply and gives the customer a safe message instead:
+
+```python
+with kalytera.session(conversation_id, input=message) as s:
+    reply = run_agent(message)                      # actions made through @kalytera.tool are recorded
+    check = kalytera.check_reply(reply)             # held if it claims something the actions don't back up
+    s.output = check.reply                          # the original, or a safe message if it was held
+send_to_customer(check.reply)
+```
+
+- **In code, always:** a reply that says something was done (refunded, cancelled, deleted, sent, processed…) is held when that action failed, was blocked by a rule, or never ran in this conversation. No AI and no network call before the answer, so it adds no delay. Outside a session, pass `actions=[{"name": "refund_api", "success": False}]`.
+- **AI review, if you turn it on:** `check_reply(reply, review=True, policy=YOUR_POLICY)` also has Kalytera's AI reviewer read replies about money, policy, accounts or legal matters before they're sent — for example a promise your policy doesn't make. It adds about 1–3 seconds to those replies only (`review="always"`: every reply). If the reviewer doesn't answer within 8 seconds, the reply goes out and `check.error` says why. Up to 2,000 reviews a day per account.
+- **You hear about it:** every held reply goes to Slack right away and shows in the Failure Feed with what the agent wanted to send. `safe_reply="…"` sets what the customer gets instead.
+
+## Serious mistakes reach you after one
+
+Most mistakes are reported once they repeat (5 times), so Slack stays quiet. A mistake the judge rates **serious** — money moved wrongly, data or an account deleted or changed, saying something was done when it wasn't, a promise the business may be held to, personal data shown to the wrong person, harmful content — goes to Slack right away, after one conversation, with a link to it.
 
 ---
 
