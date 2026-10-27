@@ -145,3 +145,4 @@ def test_rules_from_your_other_agents_are_checked_on_this_agent_first(env: Simpl
     assert r["from_agent"] == "bot-1" and r["rule"]["agent_id"] == "billing-bot"
     assert r["coverage"] == {"failing_matched": 6, "failing_total": 6, "passing_matched": 0, "passing_total": 4}
     assert env.client.get("/agents/bot-1/rules/from-account").json()["rules"] == []  # it already has it
+

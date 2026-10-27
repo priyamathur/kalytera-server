@@ -250,3 +250,23 @@ def test_everyday_mistakes_wait_until_they_repeat(cx: SimpleNamespace) -> None:
     with patch.object(judge, "score_session", _judge_with_severity("low")):
         _connect(cx)
     assert not [m for m in cx.slack if "serious mistake" in m["text"]]
+
+
+def test_sample_agents_never_send_serious_alerts(cx: SimpleNamespace) -> None:
+    cx.client.put("/alerts/slack", json={"webhook_url": "https://hooks.slack.com/services/T/B/x"})
+    with patch.object(judge, "score_session", _judge_with_severity("high")):
+        assert cx.client.post("/agents/sample").status_code == 202
+    assert not [m for m in cx.slack if "serious mistake" in m["text"]]
+
+
+def test_a_serious_mistake_that_is_already_a_problem_is_not_sent_again(cx: SimpleNamespace) -> None:
+    """The problem's own alert covers it; Slack doesn't get one message per repeat."""
+    cx.client.put("/alerts/slack", json={"webhook_url": "https://hooks.slack.com/services/T/B/x"})
+    cx.convs = [_recent(i, failed=i < 5) for i in range(7)]  # 5 failing refunds: a problem
+    with patch.object(judge, "score_session", _judge_with_severity("high")):
+        _connect(cx)
+    db = cx.session()
+    db.query(ProblemAlert).filter(ProblemAlert.reason == "severe").delete()  # as if the problem came first
+    db.commit()
+    assert conn_api.send_alerts(db) == 0
+    db.close()

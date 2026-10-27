@@ -127,6 +127,7 @@ from db.queries import (  # noqa: E402
     get_quality_config,
     get_quality_trend,
     get_held_replies,
+    in_a_problem,
     get_recent_eval_failures,
     get_recent_session_results,
     get_pattern_sessions,
@@ -406,7 +407,7 @@ def _billing_controls(tier: str, plans: Dict[str, Any]) -> None:
             for name in ("starter", "growth"):
                 p = plans.get(name) or {}
                 if p.get("price_usd"):
-                    st.button(f"{name.title()} — ${p['price_usd']}/mo · {p['sessions_per_month']:,} sessions",
+                    st.button(f"{name.title()} — ${p['price_usd']}/mo · {p['sessions_per_month']:,} conversations",
                               key=f"upgrade_{name}", use_container_width=True, on_click=_start_checkout, args=(name,))
             st.caption("Payment is handled by Stripe. Your plan updates here within a minute of paying.")
     elif tier in ("starter", "growth"):
@@ -1473,7 +1474,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
     by_pattern = fetch_suggestion_data(agent_id).get("by_pattern", {}) if problems else {}
     options = [_rule_option(g, by_pattern) for g in problems]
 
-    _serious_mistakes(recent, names)
+    _serious_mistakes(recent, names, patterns)
     # The headline: how big the problem is, in one sentence.
     if problems:
         head = (f"<b>{len(problems)} problem{'s keep' if len(problems) != 1 else ' keeps'} happening</b> — "
@@ -1550,11 +1551,12 @@ def _sample_finish() -> None:
                   on_click=st.session_state.__setitem__, args=("_page", "connect"))
 
 
-def _serious_mistakes(recent: List[Tuple[Any, Any]], names: Dict[str, str]) -> None:
-    """Failures the judge rated serious: shown (and sent to Slack) after one, not once they repeat."""
+def _serious_mistakes(recent: List[Tuple[Any, Any]], names: Dict[str, str], patterns: List[Any]) -> None:
+    """Failures the judge rated serious that aren't already part of a problem: shown (and sent to
+    Slack) after one, not once they repeat."""
     serious: Dict[str, Tuple[Any, Any]] = {}
     for ev, log in recent:  # newest first
-        if getattr(ev, "severity", None) == "high":
+        if getattr(ev, "severity", None) == "high" and not in_a_problem(ev, patterns):
             serious.setdefault(log.session_id, (ev, log))
     if not serious:
         return
@@ -2382,7 +2384,8 @@ def _slack_settings() -> None:
     if status != 200 or not isinstance(body, dict):
         return
     if body.get("slack"):
-        msg = ("On: you'll hear about new problems and ones getting worse." if body.get("status") != "error"
+        msg = ("On: you'll hear right away about serious mistakes and replies Kalytera stopped, and about "
+               "problems that start repeating or get worse." if body.get("status") != "error"
                else f"⚠ Slack refused the last message: {body.get('last_error')}")
         text, off = st.columns([5, 1.1], vertical_alignment="center")
         text.markdown(f'<div class="kr-meta">{html.escape(msg)}</div>', unsafe_allow_html=True)
@@ -2425,9 +2428,9 @@ def _connect_page() -> None:
 def _welcome_panel() -> None:
     """A new account's first screen: connect where conversations already are, or try the sample."""
     st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
-    st.markdown('<div class="ob-hero">Kalytera catches every mistake your AI agents make in production</div>'
-                '<div class="ob-sub">Connect it once. It watches every conversation, tells you when something goes '
-                'wrong, and stops costly mistakes from happening again.</div>', unsafe_allow_html=True)
+    st.markdown('<div class="ob-hero">Catch your AI agents\' mistakes. Stop the dangerous ones.</div>'
+                '<div class="ob-sub">Connect it once. Kalytera reads every conversation, tells you in Slack when '
+                'something goes wrong, and stops risky actions before they run.</div>', unsafe_allow_html=True)
     st.markdown(_loop_html(0), unsafe_allow_html=True)
     left, right = st.columns([1.25, 1], gap="medium")
     with left.container(border=True):

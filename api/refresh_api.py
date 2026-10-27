@@ -126,6 +126,9 @@ def job_status(key: str, agent_id: str, db: Session) -> Dict[str, Any]:
     return _status(_jobs.get(key), agent_id, db)
 
 
+SAMPLE_AGENTS = ("sample-refund-bot-", "quickstart-refund-bot-")  # demo data: no serious-mistake alerts
+
+
 def sample_agent_id(org_id: str) -> str:
     return f"sample-refund-bot-{org_id.replace('-', '')[:6]}"
 

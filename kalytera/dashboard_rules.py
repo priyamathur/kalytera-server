@@ -415,19 +415,21 @@ def _review_blocks(agent_id: str, rid: str, outcome: Dict[str, Any]) -> None:
     label = (f"Review blocks — {outcome['marked_wrong']} marked wrong, {outcome['unreviewed']} not reviewed")
     with st.expander(label, expanded=st.session_state.get(f"_review_open_{rid}", False)):
         st.caption("Open a session to see the stopped call. Blocks marked wrong are counted as false blocks.")
-        for b in _blocks(st.session_state.get("api_key", ""), agent_id, rid):
+        for i, b in enumerate(_blocks(st.session_state.get("api_key", ""), agent_id, rid)):
             text, open_, right, wrong = st.columns([4, 1, 1, 1], vertical_alignment="center")
             verdict = {"wrong": " · <b style='color:#dc2626'>marked wrong</b>",
                        "right": " · <b style='color:#16a34a'>marked right</b>"}.get(b["verdict"] or "", "")
-            text.markdown(f'<div class="kr-meta"><code>{_e(b["session_id"])}</code> · {b["at"][:10]}{verdict}</div>',
-                          unsafe_allow_html=True)
-            if open_.button("Open", key=f"rvo_{rid}_{b['session_id']}", type="tertiary"):
-                st.session_state["open_session"] = b["session_id"]
+            sid = b["session_id"]
+            where = f'<code>{_e(sid)}</code>' if sid else "a check outside any conversation"
+            text.markdown(f'<div class="kr-meta">{where} · {b["at"][:10]}{verdict}</div>', unsafe_allow_html=True)
+            # Keys carry the row number: several checks can share a conversation, or have none.
+            if open_.button("Open", key=f"rvo_{rid}_{i}", type="tertiary", disabled=not sid):
+                st.session_state["open_session"] = sid
                 st.rerun()
-            right.button("✓ Right", key=f"rvr_{rid}_{b['session_id']}", type="tertiary", on_click=_review,
-                         args=(agent_id, b["session_id"], rid, False), disabled=b["verdict"] == "right")
-            wrong.button("✗ Wrong", key=f"rvw_{rid}_{b['session_id']}", type="tertiary", on_click=_review,
-                         args=(agent_id, b["session_id"], rid, True), disabled=b["verdict"] == "wrong")
+            right.button("✓ Right", key=f"rvr_{rid}_{i}", type="tertiary", on_click=_review,
+                         args=(agent_id, sid, rid, False), disabled=b["verdict"] == "right" or not sid)
+            wrong.button("✗ Wrong", key=f"rvw_{rid}_{i}", type="tertiary", on_click=_review,
+                         args=(agent_id, sid, rid, True), disabled=b["verdict"] == "wrong" or not sid)
 
 
 @st.cache_data(ttl=30, show_spinner=False)

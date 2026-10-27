@@ -28,7 +28,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from api.database import get_db
-from api.refresh_api import job_status, start_job
+from api.refresh_api import SAMPLE_AGENTS, job_status, start_job
 from db.models import AgentLog, AgentOrg, Connection, EvalResult, LossPattern, ProblemAlert
 from kalytera import importers, vault
 
@@ -198,14 +198,22 @@ def severe_message(evals: List[EvalResult], org_id: str = "") -> Dict[str, Any]:
 
 
 def _severe_to_tell(db: Session, agent_id: str, told: set, now: datetime) -> List[EvalResult]:
-    """Serious mistakes from the last day not yet sent, newest first."""
+    """Serious mistakes from the last day not yet sent and not already part of a problem, newest first.
+    Never for sample agents (demo data)."""
+    if agent_id.startswith(SAMPLE_AGENTS):
+        return []
     since = now - SEVERE_WINDOW
     rows = (db.query(EvalResult, AgentLog.timestamp)
             .join(AgentLog, AgentLog.id == EvalResult.log_id)
             .filter(EvalResult.agent_id == agent_id, EvalResult.passed.is_(False),
                     EvalResult.severity == "high", EvalResult.evaluated_at >= since)
             .order_by(EvalResult.evaluated_at.desc()).all())
-    return [ev for ev, ts in rows if ev.id not in told and ts is not None and _utc(ts) >= since]
+    # Once a mistake is a known problem, its own alerts ("new", "getting worse") cover it: no message per repeat.
+    from db.queries import in_a_problem
+
+    patterns = db.query(LossPattern).filter(LossPattern.agent_id == agent_id).all()
+    return [ev for ev, ts in rows if ev.id not in told and ts is not None and _utc(ts) >= since
+            and not in_a_problem(ev, patterns)]
 
 
 def held_reply_message(agent_id: str, session_id: str, reason: str, by: str, org_id: str = "") -> Dict[str, Any]:
