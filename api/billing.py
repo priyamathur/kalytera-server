@@ -86,7 +86,7 @@ def signup(req: SignupRequest, db: Session = Depends(get_db)):
     """
     existing = get_user_by_email(req.email, db)
     if existing:
-        raise HTTPException(status_code=409, detail="This email is already registered. Contact support if you need a new key.")
+        raise HTTPException(status_code=409, detail="This email already has an account. Sign in at app.kalytera.dev with Google using this email, or email info@kalytera.dev for a new key.")
 
     org = create_organization(name=req.name, db=db)
     user = create_user(email=req.email, org_id=org.id, role="admin", db=db)
