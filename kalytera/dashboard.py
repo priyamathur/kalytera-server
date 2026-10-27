@@ -23,7 +23,7 @@ st.set_page_config(
     page_title="Kalytera",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="auto",  # open on desktop, closed on phones (Slack links open on phones)
 )
 
 # ── Design tokens ─────────────────────────────────────────────────────────────
