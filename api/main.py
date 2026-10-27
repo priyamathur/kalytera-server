@@ -418,7 +418,7 @@ kalytera.<span class="fn">init</span>()  <span class="cm"># first thing, before 
   </div>
   <a href="https://app.kalytera.dev" class="btn">Open the dashboard →</a>
   <div class="help">
-    Questions? <a href="mailto:priya@kalytera.ai?subject=Kalytera%20support&body=Hi%20Priya%2C%0A%0AI%20just%20signed%20up%20for%20Kalytera%20and%20need%20help%20with%3A%0A%0A">Email priya@kalytera.ai</a>
+    Questions? <a href="mailto:info@kalytera.dev?subject=Kalytera%20support&body=Hi%20Priya%2C%0A%0AI%20just%20signed%20up%20for%20Kalytera%20and%20need%20help%20with%3A%0A%0A">Email info@kalytera.dev</a>
   </div>
 </div>
 </body>

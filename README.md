@@ -340,4 +340,4 @@ Tracing stays fire-and-forget: `trace()` never blocks. Only `guard()` can block,
 
 ## License
 
-MIT — [priya@kalytera.ai](mailto:priya@kalytera.ai)
+MIT — [info@kalytera.dev](mailto:info@kalytera.dev)

@@ -323,7 +323,7 @@ def _check_key(key: str) -> Tuple[Optional[Dict[str, Any]], str]:
     if r.status_code == 200:
         return r.json(), ""
     if r.status_code in (401, 403):
-        return None, "Kalytera doesn't recognize this key. Check that you copied all of it, or email priya@kalytera.ai."
+        return None, "Kalytera doesn't recognize this key. Check that you copied all of it, or email info@kalytera.dev."
     return None, "Kalytera couldn't check the key just now. Wait a moment and try again."
 
 
