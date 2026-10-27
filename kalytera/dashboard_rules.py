@@ -20,11 +20,12 @@ API = os.getenv("KALYTERA_API_ENDPOINT", "https://api.kalytera.dev").rstrip("/")
 
 # Plain-English operator labels for the form; values are the rule operators.
 OPS = {"is more than": ">", "is at least": ">=", "is less than": "<", "is at most": "<=",
-       "equals": "==", "is not": "!=", "is one of": "in"}
+       "equals": "==", "is not": "!=", "is one of": "in", "is not one of": "not in",
+       "contains": "contains"}
 _OP_WORDS = {v: k for k, v in OPS.items()}
-_ACTIONS = {"Block it": "DENY", "Flag it for review": "ESCALATE"}
-_VERB = {"DENY": "Block", "ESCALATE": "Flag"}
-_PAST = {"DENY": "blocked", "ESCALATE": "flagged"}
+_ACTIONS = {"Block it": "DENY", "Ask a person first": "ESCALATE"}
+_VERB = {"DENY": "Block", "ESCALATE": "Ask a person before"}
+_PAST = {"DENY": "blocked", "ESCALATE": "held for a person"}
 
 # Keyed popovers keep their open/closed state with the rule, not the card position.
 _POPOVER_TAKES_KEY = "key" in inspect.signature(st.popover).parameters
@@ -158,7 +159,8 @@ def _ordinal(n: int) -> str:
 def sentence(rule: Dict[str, Any]) -> str:
     """'Block <code>refund_api</code> when amount is more than 500'."""
     m = rule.get("match", {})
-    parts = [f"{_e(p['field'])} {_OP_WORDS.get(p['op'], _e(p['op']))} {_value_text(p['value'])}"
+    parts = [f"{_e(p['field'])} contains {_contains_text(p['value'])}" if p["op"] == "contains" else
+             f"{_e(p['field'])} {_OP_WORDS.get(p['op'], _e(p['op']))} {_value_text(p['value'])}"
              for p in m.get("args", [])]
     for c in rule.get("session_conditions", []):
         mins = c["window_seconds"] / 60
@@ -168,8 +170,17 @@ def sentence(rule: Dict[str, Any]) -> str:
         else:
             parts.append(f"it's called {_e(c['op'])} {_e(c['value'])} times within {window}")
     verb = _VERB.get(rule.get("action"), _e(rule.get("action")))
-    when = f"when {' and '.join(parts)}" if parts else "on every call"
+    when = f"when {' and '.join(parts)}" if parts else "every time"
     return f"{verb} <code>{_e(m.get('tool'))}</code> {when}"
+
+
+def _contains_text(value: Any) -> str:
+    """'“rm -rf”, “drop table”, “mkfs” or 24 more' — a long list stays one readable line."""
+    items = value if isinstance(value, list) else [value]
+    shown = ", ".join(f"“{_e(v.strip())}”" for v in items[:3])
+    if len(items) > 3:
+        return f"something like {shown} (or {len(items) - 3} more)"
+    return f"{'any of ' if len(items) > 1 else ''}{shown}"
 
 
 def _plural(n: int, word: str) -> str:
@@ -196,8 +207,11 @@ def _slug(*parts: str) -> str:
 def _parse_value(raw: str, op: str) -> Any:
     """Form input -> JSON value: numbers stay numbers, 'in' takes a comma list."""
     raw = raw.strip()
-    if op == "in":
+    if op in ("in", "not in"):
         return [_parse_value(x, "==") for x in raw.split(",") if x.strip()]
+    if op == "contains":
+        parts = [x.strip() for x in raw.split(",") if x.strip()]
+        return parts[0] if len(parts) == 1 else parts
     try:
         return json.loads(raw)
     except ValueError:
@@ -222,7 +236,7 @@ def _example_args(rule: Dict[str, Any]) -> Dict[str, Any]:
             v = _clearly_above(v)
         elif p["op"] == "<" and isinstance(v, (int, float)):
             v = v - 1
-        elif p["op"] == "in" and isinstance(v, list) and v:
+        elif p["op"] in ("in", "contains") and isinstance(v, list) and v:
             v = v[0]
         node = out
         *path, last = p["field"].split(".")
@@ -239,7 +253,7 @@ def show_rules(agent_id: str) -> None:
     head, btn = st.columns([5, 1.2], vertical_alignment="center")
     head.markdown(
         '<h1 style="margin-bottom:2px">Rules</h1>'
-        '<p style="font-size:14px;color:#64748b;margin:0">Stop known failures before your agent repeats them.</p>',
+        '<p style="font-size:14px;color:#64748b;margin:0">Stop dangerous actions before they happen.</p>',
         unsafe_allow_html=True,
     )
     st.markdown('<div style="height:12px"></div>', unsafe_allow_html=True)
@@ -260,6 +274,17 @@ def show_rules(agent_id: str) -> None:
     hidden = st.session_state.setdefault("hidden_suggestions", set())
     suggestions = [x for x in suggestions if not x.get("rule") or (
         _rule_sig(x["rule"]) not in hidden and not any(_same_rule(x["rule"], r) for r in rules))]
+
+    starter = [x for x in _starter_rules(st.session_state.get("api_key", ""), agent_id)
+               if _rule_sig(x["rule"]) not in hidden and not any(_same_rule(x["rule"], r) for r in rules)]
+    if starter:
+        _section("Protect risky actions before anything goes wrong",
+                 "Your agent can do things that have gone badly wrong at other companies: run commands that wipe "
+                 "data, turn off monitoring, delete things, move money or change accounts. With these rules a "
+                 "person approves them first: the action doesn't run, and your agent is told a person will "
+                 "handle it.")
+        for i, sug in enumerate(starter):
+            _starter_card(agent_id, sug, i)
 
     if suggestions:
         _section("Suggested for you", "Based on failures Kalytera already detected for this agent.")
@@ -307,6 +332,32 @@ def _fetch_suggestions(api_key: str, agent_id: str) -> Dict[str, Any]:
     except Exception:
         body = {}
     return {"suggestions": body.get("suggestions", []), "by_pattern": body.get("by_pattern", {})}
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def _starter_rules(api_key: str, agent_id: str) -> List[Dict[str, Any]]:
+    status, body = _api("GET", "/rules/starter", params={"agent_id": agent_id})
+    return body.get("starter", []) if status == 200 and isinstance(body, dict) else []
+
+
+def _starter_card(agent_id: str, sug: Dict[str, Any], i: int) -> None:
+    rule = sug["rule"]
+    with st.container(border=True):
+        text, actions = st.columns([4, 2.4], vertical_alignment="center")
+        text.markdown(f'<div class="kr-sentence">{sentence(rule)}</div>'
+                      f'<div class="kr-meta">Because {_e(sug["why"])} · your agent did this '
+                      f'{_plural(sug["calls"], "time")} recently</div>', unsafe_allow_html=True)
+        a1, a2, a3 = actions.columns([1.6, 1, 0.55])
+        if a1.button("Add rule", type="primary", key=f"add_starter_{i}", use_container_width=True,
+                     help="Adds it in watch mode: it counts matches but never stops anything until you "
+                          "click Start blocking"):
+            _create(agent_id, rule)
+        if a2.button("Not now", key=f"hide_starter_{i}", use_container_width=True):
+            st.session_state.setdefault("hidden_suggestions", set()).add(_rule_sig(rule))
+            st.rerun()
+        with a3.popover("⋯", use_container_width=True):
+            if st.button("Edit before adding", key=f"edit_starter_{i}", use_container_width=True):
+                _json_dialog(agent_id, rule, mode="create")
 
 
 @st.cache_data(ttl=60, show_spinner=False)
@@ -397,11 +448,10 @@ def _rule_sig(rule: Dict[str, Any]) -> str:
 def _empty_state(agent_id: str, has_suggestions: bool) -> None:
     with st.container(border=True):
         hint = ("Add a suggestion above, or write your own." if has_suggestions else
-                "Suggestions appear here once Kalytera sees the same failure repeat in traces that "
-                "include <code>tool_calls</code>.")
+                "More suggestions appear here once Kalytera sees the same mistake repeat.")
         st.markdown(
             '<div class="kr-empty"><div class="kr-empty-title">No rules yet</div>'
-            'A rule checks a tool call before your agent makes it — for example, '
+            'A rule checks an action before your agent takes it — for example, '
             f'<i>block refunds over 500</i>. New rules only <b>watch</b> at first, so trying one is safe.<br/>'
             f'<span style="color:#94a3b8">{hint}</span></div>',
             unsafe_allow_html=True,

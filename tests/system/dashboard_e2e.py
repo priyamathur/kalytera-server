@@ -171,7 +171,7 @@ check('<span class="ff-chip">tool failure</span>' in t and '<span class="ff-chip
 check("Suggested rule</span>Block <code>refund_api</code> when amount is more than" in t, "refund rule is suggested")
 check("Would have caught 10 of 10 failed sessions · touches 0 of 23 good ones" in t,
       "citation: caught 10 of 10 failed sessions, 0 of 23 good")
-check("Suggested rule</span>Flag <code>lookup_order</code> when it's the 3rd call or more" in t, "loop rule is suggested")
+check("Suggested rule</span>Ask a person before <code>lookup_order</code> when it's the 3rd call or more" in t, "loop rule is suggested")
 check(sum(b.label == "⚡ Make it a rule" and b.proto.type == "primary" for b in at.button) == 2,
       "one highlighted next step per card")
 
@@ -206,7 +206,7 @@ print("7. Rules page")
 at = dashboard("🛡  Rules")
 t = texts(at)
 check("Watching" in t and "refund_api" in t, "the new rule is listed as Watching")
-check("Flag <code>lookup_order</code>" in t, "the loop rule is still suggested there")
+check("Ask a person before <code>lookup_order</code>" in t, "the loop rule is still suggested there")
 check(t.count("Block <code>refund_api</code>") == 1, "the added rule isn't suggested again")
 
 print("8. Search sessions (top right)")

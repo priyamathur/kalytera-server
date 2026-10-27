@@ -12,6 +12,8 @@ Guard rules API — storage and server-side evaluation for kalytera.guard().
   POST   /rules/draft                   — draft a rule from a LossPattern (not saved)
   GET    /rules/suggestions?agent_id=X  — drafts for every detected pattern, deduped, cited;
                                           by_pattern says what each pattern can get
+  GET    /rules/starter?agent_id=X      — before anything goes wrong: "a person approves it first" for the
+                                          agent's actions that move money, delete things or change accounts
   POST   /guard                         — evaluate one call server-side (non-Python callers)
   POST   /guard/events                  — decisions reported by the SDK
 
@@ -32,12 +34,14 @@ from api.database import get_db
 from db.models import AgentLog, EvalResult, GuardEvent, GuardRule, LossPattern
 from db.queries import get_step_names, step_label
 from kalytera.drafts import draft_rule
+from kalytera.starter import starter_rules
 from kalytera.rules import ALLOW, ENFORCE, SHADOW, RuleError, SessionHistory, evaluate, parse_rule
 
 MAX_EVENTS_PER_BATCH = 500
 MAX_SUGGESTIONS = 5
 MAX_PASSING_SHARE = 0.1   # skip suggestions that would match more than 10% of successful sessions
 DRAFT_SESSION_LIMIT = 200
+STARTER_LOG_LIMIT = 2000  # recent steps read to see which actions an agent takes
 
 
 class GuardRequest(BaseModel):
@@ -264,6 +268,24 @@ def _suggestions(db: Session, org_id: Optional[str], agent_id: str) -> Dict[str,
     return {"suggestions": ranked[:MAX_SUGGESTIONS], "by_pattern": by_pattern}
 
 
+def _starter(db: Session, org_id: Optional[str], agent_id: str) -> List[Dict[str, Any]]:
+    """Starter rules for actions that don't have a rule yet."""
+    ruled = {_body(r).get("match", {}).get("tool") for r in _current_rows(db, org_id, agent_id)}
+    rows = (db.query(AgentLog.tool_calls).filter(AgentLog.agent_id == agent_id, AgentLog.tool_calls.isnot(None))
+            .order_by(AgentLog.timestamp.desc()).limit(STARTER_LOG_LIMIT).all())
+    actions = []
+    for (raw,) in rows:
+        try:
+            calls = json.loads(raw) if raw else []
+        except ValueError:
+            continue
+        for c in calls if isinstance(calls, list) else []:
+            if isinstance(c, dict) and c.get("name"):
+                args = c.get("input", c.get("args"))
+                actions.append((str(c["name"]), args if isinstance(args, dict) else {}))
+    return [s for s in starter_rules(agent_id, actions) if s["rule"]["match"]["tool"] not in ruled]
+
+
 def build_router(resolve_org: Callable[..., Any],
                  agent_ids_for_org: Optional[Callable[[str, Session], List[str]]] = None) -> APIRouter:
     """
@@ -277,6 +299,12 @@ def build_router(resolve_org: Callable[..., Any],
         if org is not None and agent_ids_for_org is not None and agent_id not in agent_ids_for_org(org.id, db):
             raise HTTPException(status_code=404, detail="agent not found")
         return {"agent_id": agent_id, **_suggestions(db, _org_id(org), agent_id)}
+
+    @router.get("/rules/starter")
+    async def starter(agent_id: str, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:
+        if org is not None and agent_ids_for_org is not None and agent_id not in agent_ids_for_org(org.id, db):
+            raise HTTPException(status_code=404, detail="agent not found")
+        return {"agent_id": agent_id, "starter": _starter(db, _org_id(org), agent_id)}
 
     @router.post("/rules/draft")
     async def draft(req: DraftRequest, org=Depends(resolve_org), db: Session = Depends(get_db)) -> Dict[str, Any]:

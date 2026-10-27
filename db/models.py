@@ -68,6 +68,7 @@ class EvalResult(Base):
     custom_scores = Column(Text, nullable=True)  # JSON: {"helpfulness": 0.85}
     judge_passed = Column(Boolean, nullable=True)  # the judge's own verdict, kept when a person overrules it
     failure_action = Column(String, nullable=True)  # the action the mistake was about (refund_api); problems group by it
+    severity = Column(String, nullable=True)  # failed only: high (alert on one) | low (alert once it repeats)
 
 
 class LossPattern(Base):
@@ -292,7 +293,7 @@ class ProblemAlert(Base):
     id = Column(String, primary_key=True, default=_uuid)
     org_id = Column(String, nullable=False, index=True)
     pattern_id = Column(String, nullable=False, index=True)
-    reason = Column(String, nullable=False)              # new | worse
+    reason = Column(String, nullable=False)              # new | worse | severe (pattern_id is then the eval's id)
     sent_at = Column(SADateTime(timezone=True), default=_now, nullable=False)
 
 
@@ -314,3 +315,17 @@ class GlobalFact(Base):
     action_category = Column(String, nullable=False, default="")
     rule_shape = Column(String, nullable=False, default="")
     last_seen = Column(SADateTime(timezone=True), nullable=False)
+
+
+class HeldReply(Base):
+    """A reply kalytera.check_reply() stopped before the customer saw it (the customer got a safe message)."""
+    __tablename__ = "held_replies"
+
+    id = Column(String, primary_key=True, default=_uuid)
+    org_id = Column(String, nullable=True, index=True)
+    agent_id = Column(String, nullable=False, index=True)
+    session_id = Column(String, nullable=False, default="")
+    reply = Column(Text, nullable=False)                 # what the agent wanted to send (masked if redact is on)
+    reason = Column(Text, nullable=False)
+    checked_by = Column(String, nullable=False)          # code | ai
+    created_at = Column(SADateTime(timezone=True), default=_now, nullable=False, index=True)

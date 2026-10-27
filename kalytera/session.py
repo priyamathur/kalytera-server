@@ -56,6 +56,8 @@ class Session:
         self.agent_id = agent_id
         self._step = 0
         self._pending: List[Dict[str, Any]] = []
+        self.calls: List[Dict[str, Any]] = []   # every action so far, for check_reply()
+        self.held_reply: Optional[Dict[str, str]] = None  # set when check_reply() held the reply
         self._token: Optional[contextvars.Token] = None
         self._started = 0.0
         # A framework hook (outer) and @kalytera.tool (inner) can both see one call:
@@ -76,6 +78,7 @@ class Session:
 
     def _record_call(self, call: Dict[str, Any]) -> None:
         self._pending.append(call)
+        self.calls.append(call)
 
     # ── context manager (sync and async) ─────────────────────────────────────
     def __enter__(self) -> "Session":

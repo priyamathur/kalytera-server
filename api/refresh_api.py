@@ -46,7 +46,10 @@ def score_session_once(session_id: str, agent_id: str) -> bool:
         if db.query(EvalResult.id).filter(EvalResult.agent_id == agent_id,
                                           EvalResult.session_id == session_id).first():
             return False
-        return evaluate_session(session_id, db, agent_id=agent_id) is not None
+        result = evaluate_session(session_id, db, agent_id=agent_id)
+        if result and result.get("severity") == "high":
+            _alert_now(agent_id, db)  # one serious mistake is enough to tell someone
+        return result is not None
     except Exception:
         db.rollback()
         raise

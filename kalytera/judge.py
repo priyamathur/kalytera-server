@@ -406,6 +406,8 @@ def _build_result(
         else None
     )
     failure_reason = parsed.get("failure_reason") if not passed else None
+    severity = (("high" if str(parsed.get("severity") or "").lower() == "high" else "low")
+                if not passed else None)
 
     return {
         "accuracy": accuracy,
@@ -420,6 +422,7 @@ def _build_result(
         "failure_type": failure_type,
         "failure_step": parsed.get("failure_step") if not passed else None,
         "failure_reason": failure_reason,
+        "severity": severity,
         "confidence": _clamp(parsed.get("confidence", 0.0)),
         "eval_error": False,
     }

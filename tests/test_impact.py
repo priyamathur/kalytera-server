@@ -147,6 +147,8 @@ def test_delete_agent_data_removes_everything_and_frees_the_name(env: SimpleName
     _seed(env)
     env.client.post(f"/agents/{AGENT}/blocks/feedback", json={"session_id": "blk1", "rule_id": "refund_cap",
                                                               "wrong": True})
+    assert env.client.post("/replies/held", json={"agent_id": AGENT, "reply": "Refund done!",
+                                                  "reason": "refund_api failed"}).status_code == 201
     env.org = SimpleNamespace(id="org-2")
     assert env.client.delete(f"/agents/{AGENT}/data").status_code == 404  # not yours
     env.org = SimpleNamespace(id="org-1")
@@ -154,7 +156,7 @@ def test_delete_agent_data_removes_everything_and_frees_the_name(env: SimpleName
     assert r.status_code == 200, r.text
     d = r.json()["deleted"]
     assert d["eval_results"] == 96 and d["guard_events"] == 41 and d["guard_rules"] == 2
-    assert d["block_feedback"] == 1 and d["agent_orgs"] == 1
+    assert d["block_feedback"] == 1 and d["agent_orgs"] == 1 and d["held_replies"] == 1
     db = env.session()
     for model in (EvalResult, GuardEvent, GuardRule, AgentOrg):
         assert db.query(model).filter(model.agent_id == AGENT).count() == 0

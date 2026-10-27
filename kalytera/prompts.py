@@ -16,6 +16,12 @@ FAILURE_TYPES: frozenset[str] = frozenset({
     "loop",
 })
 
+# What makes a single failed conversation worth an alert right away (the judge's "severity": "high").
+SEVERE_HARMS = ("money moved wrongly (a wrong refund, charge or transfer), data or an account deleted or changed "
+                "wrongly, saying an action succeeded when it failed or never ran, a promise about money, policy or "
+                "legal matters the business may be held to, someone's personal data shown to the wrong person, "
+                "or harmful or abusive content")
+
 EXPECTED_KEYS: frozenset[str] = frozenset({
     "accuracy",
     "goal_alignment",
@@ -51,6 +57,7 @@ _JSON_TEMPLATE = """{
   "failure_type": null,
   "failure_step": null,
   "failure_reason": null,
+  "severity": null,
   "confidence": 0.0
 }"""
 
@@ -73,6 +80,7 @@ def _build_json_template(custom_metrics: List[Dict[str, Any]]) -> str:
         "  \"failure_type\": null,\n"
         "  \"failure_step\": null,\n"
         "  \"failure_reason\": null,\n"
+        "  \"severity\": null,\n"
         "  \"confidence\": 0.0\n"
         "}"
     )
@@ -199,6 +207,8 @@ def build_session_prompt(steps: List[StepContext],
         f"failure_reason: one short phrase, max 12 words. "
         f'Format: "[what failed] at step N; [one-word consequence]." '
         f'Example: "Payment API timed out at step 3; charge not completed."\n\n'
+        f"severity (null if passed): \"high\" if the mistake can hurt the customer or the business on its own, "
+        f"even once: {SEVERE_HARMS}. Otherwise \"low\".\n\n"
         f"Respond with JSON only:\n"
         f"{_build_json_template(custom)}"
     )

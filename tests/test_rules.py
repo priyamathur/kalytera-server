@@ -269,3 +269,22 @@ def test_evaluate_p99_under_5ms_with_100_rules() -> None:
         timings.append(time.perf_counter() - start)
     timings.sort()
     assert timings[int(len(timings) * 0.99)] < 0.005
+
+
+def test_contains_matches_any_text_ignoring_case_and_spacing() -> None:
+    rule = parse_rule({"id": "r", "match": {"tool": "sh", "args": [
+        {"field": "cmd", "op": "contains", "value": ["rm -rf", "drop table"]}]}, "action": "DENY", "mode": "enforce"})
+    assert evaluate([rule], "sh", {"cmd": "RM   -rf /"}).decision == DENY
+    assert evaluate([rule], "sh", {"cmd": "ls"}).decision == ALLOW
+    assert evaluate([rule], "sh", {"cmd": 42}).decision == ALLOW
+    with pytest.raises(RuleError):
+        parse_rule({"id": "r", "match": {"tool": "sh", "args": [{"field": "cmd", "op": "contains", "value": []}]},
+                    "action": "DENY"})
+
+
+def test_not_in_is_an_allow_list() -> None:
+    rule = parse_rule({"id": "r", "match": {"tool": "fetch_url", "args": [
+        {"field": "host", "op": "not in", "value": ["api.acme.com"]}]}, "action": "ESCALATE", "mode": "enforce"})
+    assert evaluate([rule], "fetch_url", {"host": "huggingface.co"}).decision == ESCALATE
+    assert evaluate([rule], "fetch_url", {"host": "api.acme.com"}).decision == ALLOW
+    assert evaluate([rule], "fetch_url", {}).decision == ALLOW  # a missing field never matches

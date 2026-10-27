@@ -658,3 +658,15 @@ def test_failure_action_several_actions_uses_the_explanation_then_the_failed_one
     assert failure_action(steps, {"passed": False, "failure_reason": "Told the user it was done."}) == "send_email"
     assert failure_action([_st({"name": "a_x"}, {"name": "b_y"})], {"passed": False, "failure_reason": "?"}) is None
     assert failure_action([_st()], {"passed": False, "failure_reason": "Rude."}) is None
+
+
+def test_severity_is_kept_only_for_failures() -> None:
+    low = {k: 0.2 for k in ("accuracy", "goal_alignment", "decision_quality", "completeness",
+                            "helpfulness", "factuality")}
+    w = {"accuracy": 0.25, "goal_alignment": 0.25, "decision_quality": 0.15, "completeness": 0.15,
+         "helpfulness": 0.1, "factuality": 0.1}
+    assert _build_result({**low, "severity": "HIGH"}, w, 0.7, 1)["severity"] == "high"
+    assert _build_result({**low, "severity": None}, w, 0.7, 1)["severity"] == "low"
+    assert _build_result({**low, "severity": "catastrophic"}, w, 0.7, 1)["severity"] == "low"
+    good = {k: 0.95 for k in low}
+    assert _build_result({**good, "severity": "high"}, w, 0.7, 1)["severity"] is None

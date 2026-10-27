@@ -126,6 +126,7 @@ from db.queries import (  # noqa: E402
     get_patterns_for_agent,
     get_quality_config,
     get_quality_trend,
+    get_held_replies,
     get_recent_eval_failures,
     get_recent_session_results,
     get_pattern_sessions,
@@ -511,10 +512,12 @@ if not st.session_state.get("authenticated"):
 
 
 # A finished sample run switches agent and page; widgets can only be set before they render.
-# A Slack alert links to app.kalytera.dev/?agent=…&problem=…: open that problem.
+# A Slack alert links to app.kalytera.dev/?agent=…&problem=… (open that problem)
+# or ?agent=…&session=… (a serious mistake: open that conversation).
 if st.query_params.get("agent"):
     st.session_state["_switch_to"] = (st.query_params["agent"], "🔴  Failure Feed")
     st.session_state["_focus_problem"] = st.query_params.get("problem")
+    st.session_state["_focus_session"] = st.query_params.get("session")
     st.query_params.clear()
 
 _switch = st.session_state.pop("_switch_to", None)
@@ -523,6 +526,8 @@ if _switch:
     st.session_state["agent_id"], st.session_state["view"] = _switch
     st.session_state.pop("open_session", None)
     st.session_state.pop("_page", None)
+    if st.session_state.get("_focus_session"):
+        st.session_state["open_session"] = st.session_state.pop("_focus_session")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # SIDEBAR
@@ -1436,6 +1441,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
         recent = get_recent_eval_failures(agent_id, 50, db)
         counts = get_session_failure_counts(agent_id, db)
         names = get_step_names(agent_id, db)
+        held = get_held_replies(agent_id, 20, db)
     except Exception as _exc:
         st.error(f"Could not load failures: {_exc}", icon="🔴")
         return
@@ -1448,6 +1454,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
     if st.session_state.pop("_feed_toast", False):
         st.toast("**That's the loop.** Found → rule → blocked.", icon="🎉")
     total, failed = counts.get("total", 0), counts.get("failed", 0)
+    _held_replies(held)
     if total == 0:
         st.info("No sessions scored yet. Kalytera scores a session about 30 seconds after it ends "
                 "(when the `kalytera.session()` block exits).", icon="⏳")
@@ -1466,6 +1473,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
     by_pattern = fetch_suggestion_data(agent_id).get("by_pattern", {}) if problems else {}
     options = [_rule_option(g, by_pattern) for g in problems]
 
+    _serious_mistakes(recent, names)
     # The headline: how big the problem is, in one sentence.
     if problems:
         head = (f"<b>{len(problems)} problem{'s keep' if len(problems) != 1 else ' keeps'} happening</b> — "
@@ -1540,6 +1548,51 @@ def _sample_finish() -> None:
                     'agent\'s mistakes in minutes, no code.</div>', unsafe_allow_html=True)
         st.button("Connect your agent", type="primary", key="finish_connect",
                   on_click=st.session_state.__setitem__, args=("_page", "connect"))
+
+
+def _serious_mistakes(recent: List[Tuple[Any, Any]], names: Dict[str, str]) -> None:
+    """Failures the judge rated serious: shown (and sent to Slack) after one, not once they repeat."""
+    serious: Dict[str, Tuple[Any, Any]] = {}
+    for ev, log in recent:  # newest first
+        if getattr(ev, "severity", None) == "high":
+            serious.setdefault(log.session_id, (ev, log))
+    if not serious:
+        return
+    with st.container(border=True):
+        st.markdown(f'<div class="ff-row"><b>🚨 {len(serious)} serious mistake{"s" if len(serious) != 1 else ""}'
+                    f'</b> · each one matters on its own, so it\'s shown (and sent to Slack) right away</div>',
+                    unsafe_allow_html=True)
+        for sid, (ev, log) in list(serious.items())[:5]:
+            text, btn = st.columns([7, 1], vertical_alignment="center")
+            step = step_label(ev.failure_step, names) if ev.failure_step else log.step_name
+            text.markdown(
+                f'<div class="ff-row">{html.escape(_short_reason(ev.failure_reason, ev.failure_type, step))}</div>'
+                f'<div class="ff-sub">{_ago(ev.evaluated_at)} · <span class="ff-mono">{html.escape(sid)}</span></div>',
+                unsafe_allow_html=True)
+            if btn.button("Open", key=f"serious_{ev.id}", type="tertiary", use_container_width=True):
+                _open_trace(sid)
+                st.rerun(scope="app")
+
+
+def _held_replies(held: List[Any]) -> None:
+    """Replies check_reply() stopped: the customer got a safe message instead."""
+    if not held:
+        return
+    with st.container(border=True):
+        st.markdown(f'<div class="ff-row"><b>🛡 {len(held)}{"+" if len(held) >= 20 else ""} '
+                    f'repl{"ies" if len(held) != 1 else "y"} stopped before the customer saw '
+                    f'{"them" if len(held) != 1 else "it"}</b> · the customer got a safe message instead</div>',
+                    unsafe_allow_html=True)
+        for h in held[:5]:
+            text, btn = st.columns([7, 1], vertical_alignment="center")
+            by = "AI reviewer" if h.checked_by == "ai" else "Kalytera's check"
+            text.markdown(f'<div class="ff-row">{html.escape(h.reason)}</div>'
+                          f'<div class="ff-sub">{_ago(h.created_at)} · {by}'
+                          + (f' · <span class="ff-mono">{html.escape(h.session_id)}</span>' if h.session_id else "")
+                          + '</div>', unsafe_allow_html=True)
+            with btn.popover("See reply", use_container_width=True):
+                st.markdown("**What the agent wanted to send**")
+                st.text(h.reply)
 
 
 def _latest_failures(agent_id: str, recent: List[Tuple[Any, Any]], names: Dict[str, str]) -> None:

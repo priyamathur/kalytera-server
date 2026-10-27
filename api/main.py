@@ -42,6 +42,7 @@ from api.guard_api import build_router as build_guard_router
 from api.connections_api import build_router as build_connections_router
 from api.impact_api import build_router as build_impact_router
 from api.memory_api import build_router as build_memory_router
+from api.replies_api import build_router as build_replies_router
 from api.refresh_api import build_router as build_refresh_router, score_session_once
 
 logger = logging.getLogger(__name__)
@@ -360,6 +361,7 @@ app.include_router(build_refresh_router(_resolve_org, get_agent_ids_for_org))
 app.include_router(build_impact_router(_resolve_org, get_agent_ids_for_org))
 app.include_router(build_connections_router(_resolve_org))
 app.include_router(build_memory_router(_resolve_org, get_agent_ids_for_org))
+app.include_router(build_replies_router(_resolve_org))
 
 
 # ---------------------------------------------------------------------------

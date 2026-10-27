@@ -12,11 +12,13 @@ account in Slack when a problem appears or gets worse.
   GET    /alerts                       whether Slack alerts are on
   DELETE /alerts/slack                 turn them off
 
-Background (api/main.py): sync_all() every 15 minutes, send_alerts() after each analysis.
+Background (api/main.py): sync_all() every 15 minutes, send_alerts() after each analysis and right after
+a conversation is judged a serious mistake (one is enough; everyday mistakes are sent once they repeat).
 """
 import json
 import logging
 import re
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
@@ -27,7 +29,7 @@ from sqlalchemy.orm import Session
 
 from api.database import get_db
 from api.refresh_api import job_status, start_job
-from db.models import AgentLog, AgentOrg, Connection, LossPattern, ProblemAlert
+from db.models import AgentLog, AgentOrg, Connection, EvalResult, LossPattern, ProblemAlert
 from kalytera import importers, vault
 
 logger = logging.getLogger("kalytera.connections")
@@ -35,6 +37,9 @@ logger = logging.getLogger("kalytera.connections")
 SOURCES = ("langfuse", "langsmith")
 SYNC_OVERLAP = timedelta(minutes=30)   # re-read a little before the last pull; duplicates are skipped
 WORSE_ALERT_EVERY = timedelta(days=1)  # "getting worse" at most once a day per problem
+SEVERE_WINDOW = timedelta(hours=24)    # serious mistakes older than this (a first import) show as problems instead
+SEVERE_PER_MESSAGE = 5
+_sending = threading.Lock()  # scoring threads alert as they go: one sender at a time, so nothing is sent twice
 SLACK_PREFIX = "https://hooks.slack.com/"
 DASHBOARD = "https://app.kalytera.dev"
 
@@ -165,6 +170,78 @@ def slack_message(new: List[LossPattern], worse: List[LossPattern], org_id: str 
     return {"text": text, "blocks": blocks}
 
 
+def _conversation_link(agent_id: str, session_id: str) -> str:
+    from urllib.parse import urlencode
+
+    return f"{DASHBOARD}/?{urlencode({'agent': agent_id, 'session': session_id})}"
+
+
+def severe_message(evals: List[EvalResult], org_id: str = "") -> Dict[str, Any]:
+    """Serious mistakes, each one on its own: sent right away, without waiting for it to repeat."""
+    agent = _agent_name(evals[0].agent_id, org_id)
+    title = (f"A serious mistake in {agent}" if len(evals) == 1
+             else f"{len(evals)} serious mistakes in {agent}")
+    blocks: List[Dict[str, Any]] = [{"type": "section", "text": {"type": "mrkdwn", "text": f":rotating_light: *{title}*"}}]
+    for ev in evals[:SEVERE_PER_MESSAGE]:
+        what = (ev.failure_reason or str(ev.failure_type or "mistake").replace("_", " ")).strip().rstrip(".")
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*{what}*\nConversation {ev.session_id}"},
+                       "accessory": {"type": "button", "text": {"type": "plain_text", "text": "See conversation"},
+                                     "url": _conversation_link(ev.agent_id, ev.session_id)}})
+    if len(evals) > SEVERE_PER_MESSAGE:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn",
+                       "text": f"…and {len(evals) - SEVERE_PER_MESSAGE} more in the dashboard"}})
+    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text":
+                   "Serious mistakes are sent right away, even once. Others are sent when they repeat."}]})
+    first = evals[0]
+    text = f"{title}: {(first.failure_reason or '').rstrip('.')}"
+    return {"text": text, "blocks": blocks}
+
+
+def _severe_to_tell(db: Session, agent_id: str, told: set, now: datetime) -> List[EvalResult]:
+    """Serious mistakes from the last day not yet sent, newest first."""
+    since = now - SEVERE_WINDOW
+    rows = (db.query(EvalResult, AgentLog.timestamp)
+            .join(AgentLog, AgentLog.id == EvalResult.log_id)
+            .filter(EvalResult.agent_id == agent_id, EvalResult.passed.is_(False),
+                    EvalResult.severity == "high", EvalResult.evaluated_at >= since)
+            .order_by(EvalResult.evaluated_at.desc()).all())
+    return [ev for ev, ts in rows if ev.id not in told and ts is not None and _utc(ts) >= since]
+
+
+def held_reply_message(agent_id: str, session_id: str, reason: str, by: str, org_id: str = "") -> Dict[str, Any]:
+    """A reply stopped before the customer saw it: what was wrong, and that they got a safe message instead."""
+    agent = _agent_name(agent_id, org_id)
+    title = f"Kalytera stopped a reply from {agent} before the customer saw it"
+    who = "Kalytera's AI reviewer" if by == "ai" else "Kalytera's check"
+    section: Dict[str, Any] = {"type": "section", "text": {"type": "mrkdwn", "text":
+                               f"*{reason.strip()}*\n{who} held it; the customer got a safe message instead."}}
+    if session_id:
+        section["accessory"] = {"type": "button", "text": {"type": "plain_text", "text": "See conversation"},
+                                "url": _conversation_link(agent_id, session_id)}
+    return {"text": f"{title}: {reason.strip()}",
+            "blocks": [{"type": "section", "text": {"type": "mrkdwn", "text": f":shield: *{title}*"}}, section]}
+
+
+def alert_held_reply(db: Session, org_id: Optional[str], agent_id: str, session_id: str, reason: str,
+                     by: str) -> bool:
+    """Tell the account's Slack right away. False if there's no Slack or it failed (never raises)."""
+    if not org_id:
+        return False
+    slack = db.query(Connection).filter(Connection.kind == "slack", Connection.org_id == org_id).first()
+    if slack is None:
+        return False
+    try:
+        _post_slack(vault.decrypt(slack.secret)["webhook_url"],
+                    held_reply_message(agent_id, session_id, reason, by, org_id))
+        slack.status, slack.last_error = "ok", None
+        db.commit()
+        return True
+    except Exception as exc:
+        db.rollback()
+        logger.warning("[alerts] org=%s held-reply alert failed: %s", org_id, exc)
+        return False
+
+
 def _post_slack(url: str, payload: Dict[str, Any]) -> None:
     r = requests.post(url, json=payload, timeout=10)
     if r.status_code >= 300:
@@ -172,7 +249,13 @@ def _post_slack(url: str, payload: Dict[str, Any]) -> None:
 
 
 def send_alerts(db: Session, now: Optional[datetime] = None, org_id: Optional[str] = None) -> int:
-    """After an analysis: tell each account with Slack about new or worsening problems. Returns messages sent."""
+    """After an analysis: tell each account with Slack about serious mistakes and new or worsening problems.
+    Returns messages sent."""
+    with _sending:
+        return _send_alerts(db, now, org_id)
+
+
+def _send_alerts(db: Session, now: Optional[datetime], org_id: Optional[str]) -> int:
     now = now or datetime.now(timezone.utc)
     sent = 0
     slacks = db.query(Connection).filter(Connection.kind == "slack")
@@ -190,7 +273,22 @@ def send_alerts(db: Session, now: Optional[datetime] = None, org_id: Optional[st
         last_told: Dict[str, datetime] = {}
         for a in past:  # the latest message of any kind about each problem
             last_told[a.pattern_id] = max(last_told.get(a.pattern_id, _utc(a.sent_at)), _utc(a.sent_at))
+        told_severe = {a.pattern_id for a in past if a.reason == "severe"}
         for agent in agents:
+            severe = _severe_to_tell(db, agent, told_severe, now)
+            if severe:
+                try:
+                    _post_slack(url, severe_message(severe, slack.org_id))
+                except Exception as exc:
+                    slack.status, slack.last_error = "error", str(exc)[:500]
+                    db.commit()
+                    logger.warning("[alerts] org=%s Slack failed: %s", slack.org_id, exc)
+                    break
+                db.add_all([ProblemAlert(org_id=slack.org_id, pattern_id=ev.id, reason="severe", sent_at=now)
+                            for ev in severe])
+                slack.status, slack.last_error = "ok", None
+                db.commit()
+                sent += 1
             patterns = db.query(LossPattern).filter(LossPattern.agent_id == agent).all()
             new = [p for p in patterns if p.id not in alerted_new]
             # "Getting worse" only a day after the last word on it: a new problem is usually still rising.

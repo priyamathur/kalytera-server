@@ -1060,11 +1060,11 @@ def get_recent_session_results(agent_id: str, limit: int, db: Session) -> List[D
 
 def delete_agent_data(agent_id: str, db: Session) -> Dict[str, int]:
     """Delete everything stored for one agent, and release its name. Returns rows deleted per table."""
-    from db.models import BlockFeedback, GoldenLabel, GuardEvent, GuardRule
+    from db.models import BlockFeedback, GoldenLabel, GuardEvent, GuardRule, HeldReply
 
     counts: Dict[str, int] = {}
     for model in (AgentLog, EvalResult, LossPattern, GuardEvent, GuardRule, BlockFeedback, GoldenLabel,
-                  AgentQualityConfig, AgentOrg):
+                  HeldReply, AgentQualityConfig, AgentOrg):
         counts[model.__tablename__] = db.query(model).filter(model.agent_id == agent_id).delete(
             synchronize_session=False)
     db.commit()
@@ -1077,10 +1077,10 @@ RETENTION_CHOICES = (30, 90, 180, 365)
 def purge_expired_data(db: Session, now: Optional[datetime] = None) -> Dict[str, int]:
     """
     For accounts with a retention period, delete production data older than it:
-    steps, verdicts, problems, rule checks, block reviews and labels. Rules and
-    settings are kept. Returns rows deleted per table.
+    steps, verdicts, problems, rule checks, block reviews, labels and held replies.
+    Rules and settings are kept. Returns rows deleted per table.
     """
-    from db.models import BlockFeedback, GoldenLabel, GuardEvent
+    from db.models import BlockFeedback, GoldenLabel, GuardEvent, HeldReply
 
     now = now or datetime.now(timezone.utc)
     totals: Dict[str, int] = {}
@@ -1092,8 +1092,17 @@ def purge_expired_data(db: Session, now: Optional[datetime] = None) -> Dict[str,
         cutoff = now - timedelta(days=int(days))
         for model, column in ((AgentLog, AgentLog.timestamp), (EvalResult, EvalResult.evaluated_at),
                               (LossPattern, LossPattern.last_seen), (GuardEvent, GuardEvent.timestamp),
-                              (BlockFeedback, BlockFeedback.created_at), (GoldenLabel, GoldenLabel.created_at)):
+                              (BlockFeedback, BlockFeedback.created_at), (GoldenLabel, GoldenLabel.created_at),
+                              (HeldReply, HeldReply.created_at)):
             n = db.query(model).filter(model.agent_id.in_(agents), column < cutoff).delete(synchronize_session=False)
             totals[model.__tablename__] = totals.get(model.__tablename__, 0) + n
     db.commit()
     return totals
+
+
+def get_held_replies(agent_id: str, limit: int, db: Session) -> List[Any]:
+    """Replies kalytera.check_reply() stopped before the customer saw them, newest first."""
+    from db.models import HeldReply
+
+    return (db.query(HeldReply).filter(HeldReply.agent_id == agent_id)
+            .order_by(HeldReply.created_at.desc()).limit(limit).all())

@@ -28,7 +28,7 @@ ESCALATE = "ESCALATE"
 SHADOW = "shadow"
 ENFORCE = "enforce"
 
-OPS = ("==", "!=", ">", ">=", "<", "<=", "in")
+OPS = ("==", "!=", ">", ">=", "<", "<=", "in", "not in", "contains")
 ACTIONS = (DENY, ESCALATE)
 MODES = (SHADOW, ENFORCE)
 SESSION_CONDITION_TYPES = ("count_in_window",)
@@ -94,8 +94,11 @@ class Decision:
 def _check_op(op: Any, value: Any, where: str) -> None:
     if op not in OPS:
         raise RuleError(f"{where}: op must be one of {', '.join(OPS)} (got {op!r})")
-    if op == "in" and not isinstance(value, list):
-        raise RuleError(f"{where}: 'in' needs a list value")
+    if op in ("in", "not in") and not isinstance(value, list):
+        raise RuleError(f"{where}: '{op}' needs a list value")
+    if op == "contains" and not (isinstance(value, str) and value or
+                                 isinstance(value, list) and value and all(isinstance(v, str) and v for v in value)):
+        raise RuleError(f"{where}: 'contains' needs some text, or a list of texts (any of them matches)")
 
 
 def parse_rule(raw: Dict[str, Any]) -> Rule:
@@ -135,7 +138,7 @@ def parse_rule(raw: Dict[str, Any]) -> Rule:
             raise RuleError(f"{cw}: type must be one of {', '.join(SESSION_CONDITION_TYPES)}")
         if not isinstance(cond.get("tool"), str) or not cond["tool"]:
             raise RuleError(f"{cw}: tool is required")
-        if cond.get("op") not in OPS or cond.get("op") == "in":
+        if cond.get("op") not in OPS or cond.get("op") in ("in", "not in", "contains"):
             raise RuleError(f"{cw}: op must be a comparison operator")
         value = cond.get("value")
         if not isinstance(value, int) or isinstance(value, bool) or value < 0:
@@ -193,6 +196,14 @@ def _compare(actual: Any, op: str, expected: Any) -> bool:
             return bool(actual != expected)
         if op == "in":
             return actual in expected
+        if op == "not in":  # an allow-list: anything else matches ("host not in [our servers]")
+            return actual not in expected
+        if op == "contains":  # any of the texts, ignoring case and extra spaces: "rm -rf", "DROP  table"
+            if not isinstance(actual, str):
+                return False
+            text = " ".join(actual.lower().split())
+            wanted = expected if isinstance(expected, list) else [expected]
+            return any(" ".join(w.lower().split()) in text for w in wanted)
         # Ordering: never compare bools as numbers or numbers with strings.
         if isinstance(actual, bool) or isinstance(expected, bool):
             return False

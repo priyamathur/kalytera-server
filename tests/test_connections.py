@@ -210,3 +210,43 @@ def test_different_mistakes_become_different_problems(cx: SimpleNamespace) -> No
                 for p in db.query(LossPattern).filter(LossPattern.agent_id == agent)}
     assert problems == {("action", "refund_api"): 5, ("action", "track_order"): 6}
     db.close()
+
+
+def _judge_with_severity(severity: Optional[str]) -> Any:
+    def score(steps: List[Any], **kw: Any) -> Dict[str, Any]:
+        r = _fake_score_session(steps, **kw)
+        return {**r, "severity": severity if not r["passed"] else None}
+    return score
+
+
+def _recent(i: int, failed: bool, ago: timedelta = timedelta(minutes=5)) -> Dict[str, Any]:
+    c = _conv(i, failed)
+    c["started_at"] = (datetime.now(timezone.utc) - ago).isoformat()
+    return c
+
+
+def test_one_serious_mistake_reaches_slack_right_away(cx: SimpleNamespace) -> None:
+    """A single wrong refund is enough: no waiting for 5 like it."""
+    url = "https://hooks.slack.com/services/T/B/x"
+    cx.client.put("/alerts/slack", json={"webhook_url": url})
+    cx.convs = [_recent(0, failed=True), _recent(1, failed=False),
+                _recent(2, failed=True, ago=timedelta(days=3))]  # an old one from the first import
+    with patch.object(judge, "score_session", _judge_with_severity("high")):
+        agent = _connect(cx)["agent_id"]
+    serious = [m for m in cx.slack if "serious mistake" in m["text"]]
+    assert len(serious) == 1, [m["text"] for m in cx.slack]
+    assert serious[0]["blocks"][0]["text"]["text"] == ":rotating_light: *A serious mistake in support-bot*"
+    button = serious[0]["blocks"][1]["accessory"]
+    assert button["url"] == f"https://app.kalytera.dev/?agent={agent}&session=langfuse-tr0"
+    assert not [m for m in cx.slack if "new problem" in m["text"]]  # one mistake isn't a problem yet
+    db = cx.session()
+    assert conn_api.send_alerts(db) == 0  # never twice
+    db.close()
+
+
+def test_everyday_mistakes_wait_until_they_repeat(cx: SimpleNamespace) -> None:
+    cx.client.put("/alerts/slack", json={"webhook_url": "https://hooks.slack.com/services/T/B/x"})
+    cx.convs = [_recent(0, failed=True)]
+    with patch.object(judge, "score_session", _judge_with_severity("low")):
+        _connect(cx)
+    assert not [m for m in cx.slack if "serious mistake" in m["text"]]
