@@ -468,16 +468,14 @@ if not st.session_state.get("authenticated"):
                 st.error(_why)
             else:
                 st.warning(f"There's no Kalytera account for **{_guser['email']}**. Create one free at "
-                           "kalytera.dev with this email, or sign in with your API key below.")
+                           "kalytera.dev with this email, or sign in with an API key below.")
             st.button("Use a different Google account", on_click=st.logout, use_container_width=True)
         elif _GOOGLE_ON:
             st.button("Continue with Google", type="primary", use_container_width=True,
                       on_click=st.login, args=("google",))
-        if _GOOGLE_ON:
-            st.markdown('<div style="text-align:center;font-size:12px;color:#94a3b8;margin:14px 0 6px">'
-                        'or paste your API key</div>', unsafe_allow_html=True)
-
-        with st.form("login_form"):
+        # With Google on, the API key is the fallback: tucked away, not a second step.
+        _key_box = st.expander("Sign in with an API key instead") if _GOOGLE_ON else st.container()
+        with _key_box, st.form("login_form"):
             _key_input = st.text_input(
                 "API key",
                 type="password",
@@ -501,10 +499,10 @@ if not st.session_state.get("authenticated"):
 
         st.markdown("""
         <div style="text-align:center;margin-top:20px;font-size:12px;color:#94a3b8">
-          No key yet?
+          No account yet?
           <a href="https://kalytera.dev" target="_blank"
              style="color:#6366f1;font-weight:600;text-decoration:none">
-            Get one free at kalytera.dev →
+            Create one free at kalytera.dev →
           </a>
         </div>
         """, unsafe_allow_html=True)
@@ -1097,7 +1095,7 @@ def _show_overview(agent_id: str) -> None:
         )
         tc2.markdown(
             f'<div style="font-size:12px;color:#64748b;padding-top:8px">'
-            f'Steps scoring below <strong>{thresh}%</strong> are flagged as failures '
+            f'Conversations scoring below <strong>{thresh}%</strong> count as failed '
             f'and appear in the Failure Feed.</div>',
             unsafe_allow_html=True,
         )
@@ -1515,9 +1513,7 @@ def _profile_prompt(agent_id: str) -> None:
     profile = _agent_profile(key, agent_id)
     if not profile or (profile.get("industry") and profile.get("agent_type")):
         return
-    with st.container(border=True):
-        st.markdown('<div class="ff-row"><b>What does this agent do?</b> Kalytera then warns you about mistakes '
-                    'that agents like it make at other companies.</div>', unsafe_allow_html=True)
+    with st.expander("Get warned about mistakes that agents like this one make at other companies"):
         chosen = _profile_fields(f"profile_{agent_id}")
         if st.button("Save", key=f"profile_save_{agent_id}"):
             _rules_api("PUT", f"/agents/{agent_id}/profile", chosen)
@@ -2241,7 +2237,7 @@ _KEEP_SAFE = ("Kalytera stores these keys encrypted, only ever reads conversatio
 def _profile_fields(prefix: str) -> Dict[str, str]:
     c1, c2 = st.columns(2)
     industry = c1.selectbox("Industry", list(INDUSTRIES.values()), key=f"{prefix}_industry")
-    kind = c2.selectbox("What the agent does", list(AGENT_TYPES.values()), key=f"{prefix}_type")
+    kind = c2.selectbox("Agent's job", list(AGENT_TYPES.values()), key=f"{prefix}_type")
     return {"industry": next(k for k, v in INDUSTRIES.items() if v == industry),
             "agent_type": next(k for k, v in AGENT_TYPES.items() if v == kind)}
 

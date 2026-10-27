@@ -477,7 +477,7 @@ assert resp.status_code == 201, resp.text
 at.session_state["_switch_to"] = ("fresh-bot", "🔴  Failure Feed")
 run(at)
 check("No sessions scored yet" in texts(at), "a just-connected agent: 'no sessions scored yet', not 'all good'")
-check("What does this agent do?" in texts(at), "it asks what the agent does (to compare with similar agents)")
+check(any("agents like this one make" in e.label for e in at.expander), "it asks what the agent does (to compare with similar agents)")
 run(button(at, "↻ Score my sessions now").click())
 run(at)
 check("Its one session passed" in texts(at), "Score now → its one session is scored")
