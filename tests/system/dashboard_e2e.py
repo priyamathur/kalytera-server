@@ -300,9 +300,9 @@ _stripe.Subscription.retrieve = staticmethod(lambda sid, *a, **k: _stripe.Stripe
 _st.cache_data.clear()
 at = dashboard("📊  Overview")
 plans = [b.label for b in at.button if b.label.startswith(("Starter —", "Growth —"))]
-check(plans == ["Starter — $49/mo · 25,000 sessions", "Growth — $149/mo · 100,000 sessions"],
+check(plans == ["Starter — $49/mo · 25,000 conversations", "Growth — $149/mo · 100,000 conversations"],
       f"free account: Upgrade offers both plans with prices ({plans})")
-run(button(at, "Growth — $149/mo · 100,000 sessions").click())
+run(button(at, "Growth — $149/mo · 100,000 conversations").click())
 check(_checkouts and _checkouts[-1]["line_items"] == [{"price": "price_g", "quantity": 1}],
       "choosing Growth starts a Stripe checkout for Growth")
 org_id = client.get("/billing/usage", headers=H).json()["org_id"]
@@ -341,7 +341,7 @@ at.session_state["authenticated"] = True
 at.session_state["api_key"] = NEW_KEY
 run(at)
 t = texts(at)
-check("Kalytera catches every mistake your AI agents make in production" in t, "new account lands on the welcome page")
+check("Catch your AI agents' mistakes. Stop the dangerous ones." in t, "new account lands on the welcome page")
 check(not at.radio and not at.selectbox, "nothing to pick or navigate yet: no agent picker, no nav")
 check(button(at, "Connect").proto.type == "primary", "the main action is Connect (Langfuse / LangSmith, no code)")
 check(any(b.label == "▶ Run the sample agent" for b in at.button), "the sample agent is the other option")
