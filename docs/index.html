@@ -417,7 +417,7 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
     <span class="nav-link" onclick="go('docs')" id="nl-docs">Docs</span>
     <span class="nav-link" onclick="go('pricing')" id="nl-pricing">Pricing</span>
     <a class="nav-link" href="https://app.kalytera.dev" style="text-decoration:none">Sign in</a>
-    <span class="nav-cta" onclick="openSignup('free')">Get started free →</span>
+    <a class="nav-cta" href="https://app.kalytera.dev/?start=1" style="text-decoration:none">Get started free →</a>
   </div>
 </nav>
 
@@ -493,7 +493,7 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
   <p class="k-answer">With Kalytera, it would have waited for a person.</p>
   <p class="k-sub">Kalytera checks every action your AI agents take before it runs, and every reply before a customer sees it. Serious mistakes reach Slack right away.</p>
   <div class="k-ctas">
-    <button class="btn-p" onclick="openSignup('free')">Get started free</button>
+    <button class="btn-p" onclick="location.href='https://app.kalytera.dev/?start=1'">Get started free</button>
     <a class="btn-s" href="mailto:info@kalytera.dev?subject=Kalytera" style="text-decoration:none">Talk to us</a>
   </div>
   <p class="k-small">Free for 5,000 conversations a month. No credit card.</p>
@@ -579,7 +579,7 @@ code,pre,.ic,.prompt-text,.key-val{font-family:'DM Mono',ui-monospace,monospace}
 <section class="k-final">
   <h2 class="k-h2">Find out what your agents did this week.</h2>
   <p class="k-small">Connect Langfuse or LangSmith in two minutes. No code.</p>
-  <button class="btn-p" onclick="openSignup('free')">Get started free</button>
+  <button class="btn-p" onclick="location.href='https://app.kalytera.dev/?start=1'">Get started free</button>
   <div class="k-dev">
     <button class="prompt-trigger" onclick="togglePrompt()"><span>Developers: add one line to your agent instead</span><span class="prompt-chevron" id="prompt-chevron">▾</span></button>
     <div id="prompt-body" class="prompt-body-wrap" style="display:none">
@@ -593,8 +593,8 @@ Set up Kalytera in this working directory. Follow these steps in order.
 Check whether `KALYTERA_API_KEY` is set in the environment. If it is, skip this step.
 
 If it isn't, ask the user to:
-1. Open https://kalytera.dev and click "Get started free"
-2. Copy the API key (starts with `kly_live_`)
+1. Open https://kalytera.dev, click "Get started free" and continue with Google
+2. In the dashboard, open ＋ Connect an agent → "Add to your code" and copy the API key (starts with `kly_live_`)
 3. Set it as an environment variable: `export KALYTERA_API_KEY="kly_live_..."`
    Or add it to `.env` if the app loads one. Do not commit it to version control.
 
@@ -655,7 +655,7 @@ If the agent is a custom loop with no framework, also:
         <div class="price-feat"><span class="tick">✓</span>Rules that block costly actions</div>
         <div class="price-feat"><span class="tick">✓</span>No credit card required</div>
       </div>
-      <button class="btn-s" onclick="openSignup('free')">Get started free</button>
+      <button class="btn-s" onclick="location.href='https://app.kalytera.dev/?start=1'">Get started free</button>
     </div>
     <div class="price-card hl">
       <div class="price-badge">Most teams</div>
@@ -960,6 +960,8 @@ function openSignup(plan) {
   document.getElementById('signup-btn').textContent = 'Create account →';
   document.getElementById('signup-modal').classList.add('on');
 }
+
+if (location.hash === '#signup') openSignup('free');
 
 function closeModal() {
   document.getElementById('signup-modal').classList.remove('on');

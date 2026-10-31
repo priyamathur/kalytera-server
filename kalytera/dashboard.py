@@ -435,6 +435,11 @@ def _fetch_agents(key: str) -> List[str]:
 
 
 if not st.session_state.get("authenticated"):
+    # One page for both: "Get started free" on the website lands here with ?start=1.
+    _new_here = "start" in st.query_params
+    _gate_title = "Create your free account" if _new_here else "Welcome back"
+    _gate_sub = ("Free up to 5,000 conversations a month. No card needed." if _new_here
+                 else "Sign in to see what your agents did.")
     _, col, _ = st.columns([1, 1.2, 1])
     with col:
         st.markdown('<div style="height:72px"/>', unsafe_allow_html=True)
@@ -446,19 +451,19 @@ if not st.session_state.get("authenticated"):
                         font-size:26px;box-shadow:0 2px 10px rgba(99,102,241,0.3)">⚡</div>
             <div style="font-size:28px;font-weight:900;color:#0f172a;letter-spacing:-0.03em">Kalytera</div>
           </div>
-          <div style="font-size:22px;font-weight:800;color:#0f172a;margin-bottom:6px">Welcome back</div>
+          <div style="font-size:22px;font-weight:800;color:#0f172a;margin-bottom:6px">__TITLE__</div>
           <div style="font-size:14px;color:#64748b;line-height:1.5">
-            Sign in to see what your agents did.
+            __SUB__
           </div>
         </div>
-        """, unsafe_allow_html=True)
+        """.replace("__TITLE__", _gate_title).replace("__SUB__", _gate_sub), unsafe_allow_html=True)
 
         _guser = _google_user()
         if _guser and _guser.get("email") and _guser.get("email_verified", True):
             _db_g = _db()
             try:
-                from db.queries import dashboard_key_for_email
-                _gkey = dashboard_key_for_email(_guser["email"], os.environ["AUTH_COOKIE_SECRET"], _db_g)
+                from db.queries import dashboard_signup  # signs in, or makes a free account if new
+                _gkey = dashboard_signup(_guser["email"], _guser.get("name"), os.environ["AUTH_COOKIE_SECRET"], _db_g)
             finally:
                 _db_g.close()
             if _gkey:
@@ -469,8 +474,8 @@ if not st.session_state.get("authenticated"):
                     st.rerun()
                 st.error(_why)
             else:
-                st.warning(f"There's no Kalytera account for **{_guser['email']}**. Create one free at "
-                           "kalytera.dev with this email, or sign in with an API key below.")
+                st.warning(f"The Kalytera account for **{_guser['email']}** is closed. "
+                           "Email info@kalytera.dev to open it again.")
             st.button("Use a different Google account", on_click=st.logout, use_container_width=True)
         elif _GOOGLE_ON:
             st.button("Continue with Google", type="primary", use_container_width=True,
@@ -501,13 +506,14 @@ if not st.session_state.get("authenticated"):
 
         st.markdown("""
         <div style="text-align:center;margin-top:20px;font-size:12px;color:#94a3b8">
-          No account yet?
-          <a href="https://kalytera.dev" target="_blank"
+          __NEW__
+          <a href="https://kalytera.dev/#signup" target="_blank"
              style="color:#6366f1;font-weight:600;text-decoration:none">
-            Create one free at kalytera.dev →
+            Sign up with email →
           </a>
         </div>
-        """, unsafe_allow_html=True)
+        """.replace("__NEW__", "New here? Continue with Google makes your free account.<br>No Google account?"
+                                if _GOOGLE_ON else "No account yet?"), unsafe_allow_html=True)
 
     st.stop()
 

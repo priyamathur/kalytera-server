@@ -787,6 +787,29 @@ def dashboard_key_for_email(email: str, secret: str, db: Session) -> Optional[st
     return raw
 
 
+FREE_MAIL = ("gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "yahoo.com", "icloud.com", "proton.me")
+
+
+def account_name(email: str, person: Optional[str]) -> str:
+    """A new account's name: the company from a work email (acme.com → Acme), else the person's name."""
+    domain = email.strip().lower().rsplit("@", 1)[-1]
+    if domain and domain not in FREE_MAIL and "." in domain:
+        return domain.split(".")[0].replace("-", " ").title()
+    return (person or "").strip() or email.split("@")[0]
+
+
+def dashboard_signup(email: str, person: Optional[str], secret: str, db: Session) -> Optional[str]:
+    """Continue with Google for someone new: a free account (the same one the website's signup
+    makes), then their dashboard key. Signing in again finds the account; it is never made twice."""
+    if not secret:
+        return None
+    known = db.query(User).filter(func.lower(User.email) == email.strip().lower()).first()
+    if known is None:  # an existing but closed or revoked account stays closed
+        org = create_organization(name=account_name(email, person), db=db)
+        create_user(email=email.strip(), org_id=org.id, role="admin", db=db)
+    return dashboard_key_for_email(email, secret, db)
+
+
 def list_users_for_org(org_id: str, db: Session) -> List[User]:
     return db.query(User).filter(User.org_id == org_id, User.is_active == True).all()  # noqa: E712
 

@@ -240,3 +240,28 @@ def test_google_sign_in_finds_the_account_by_email(db: Session) -> None:
     rows[0].is_active = False
     db.commit()
     assert dashboard_key_for_email("priya@acme.com", "s3cret", db) is None  # a revoked key stays revoked
+
+
+def test_continue_with_google_makes_a_free_account_for_someone_new(db: Session) -> None:
+    from db.models import Organization, User
+    from db.queries import account_name, dashboard_signup
+    key = dashboard_signup("Sam@Acme-Labs.com", "Sam Lee", "s3cret", db)
+    assert key and key.startswith("kly_live_")
+    user = db.query(User).one()
+    org = db.query(Organization).filter(Organization.id == user.org_id).one()
+    assert org.name == "Acme Labs" and org.tier == "free" and user.role == "admin"
+    assert dashboard_signup("sam@acme-labs.com", "Sam Lee", "s3cret", db) == key   # next time: signs in
+    assert db.query(User).count() == 1 and db.query(Organization).count() == 1     # never made twice
+    assert account_name("jo@gmail.com", "Jo Park") == "Jo Park"                     # personal mail: their name
+    assert account_name("jo@gmail.com", None) == "jo"
+    assert dashboard_signup("new@acme.com", "New", "", db) is None                  # no secret: nothing made
+    assert db.query(User).count() == 1
+
+
+def test_continue_with_google_does_not_reopen_a_closed_account(db: Session) -> None:
+    from db.models import Organization, User
+    from db.queries import dashboard_signup
+    db.add_all([Organization(id="o1", name="Acme", is_active=False), User(id="u1", email="a@acme.com", org_id="o1")])
+    db.commit()
+    assert dashboard_signup("A@acme.com", "A", "s3cret", db) is None
+    assert db.query(Organization).count() == 1
