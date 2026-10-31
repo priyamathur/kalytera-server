@@ -170,6 +170,7 @@ def known_problems(db: Session, industry: str, agent_type: str, exclude_org: str
 def rules_from_account(db: Session, org_id: str, agent_id: str) -> List[Dict[str, Any]]:
     """Rules on your other agents for an action this agent also takes, with coverage on this agent's sessions."""
     from api.guard_api import _body, _current_rows, _rule_key, _session_tool_calls
+    from api.refresh_api import SAMPLE_AGENTS
     from kalytera.drafts import coverage
 
     mine = {_rule_key(_body(r)) for r in _current_rows(db, org_id, agent_id)}
@@ -184,7 +185,8 @@ def rules_from_account(db: Session, org_id: str, agent_id: str) -> List[Dict[str
     passing = list({s for s, ok in verdicts if ok} - set(failing))[:SAMPLE_SESSIONS]
     calls_f, calls_p = _session_tool_calls(db, agent_id, failing), _session_tool_calls(db, agent_id, passing)
     out, seen = [], set()
-    others = [a for (a,) in db.query(AgentOrg.agent_id).filter(AgentOrg.org_id == org_id, AgentOrg.agent_id != agent_id)]
+    others = [a for (a,) in db.query(AgentOrg.agent_id).filter(AgentOrg.org_id == org_id, AgentOrg.agent_id != agent_id)
+              if not a.startswith(SAMPLE_AGENTS)]  # the demo's rules fit the demo, not the customer's own agents
     for other in others:
         for row in _current_rows(db, org_id, other):
             rule = _body(row)

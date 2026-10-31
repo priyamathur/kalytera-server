@@ -436,8 +436,8 @@ check((prof["industry"], prof["agent_type"], prof["system"]) == ("retail", "supp
 print("12b. Rules from your other agents")
 at.session_state["view"] = "🛡  Rules"
 run(at)
-check("From your other agents" in texts(at) and "here it would have caught 6 of 6 failed sessions" in texts(at),
-      "the sample agent's refund rule is offered, checked on this agent's conversations")
+check("From your other agents" not in texts(at),
+      "the sample agent's demo rule is not offered to the customer's own agent")
 
 print("12c. Slack: set up, a new problem arrives, the link opens it")
 at.session_state["_page"] = "connect"

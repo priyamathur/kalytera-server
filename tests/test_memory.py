@@ -146,3 +146,16 @@ def test_rules_from_your_other_agents_are_checked_on_this_agent_first(env: Simpl
     assert r["coverage"] == {"failing_matched": 6, "failing_total": 6, "passing_matched": 0, "passing_total": 4}
     assert env.client.get("/agents/bot-1/rules/from-account").json()["rules"] == []  # it already has it
 
+
+
+def test_the_demo_agents_rules_are_not_offered_to_real_agents(env: SimpleNamespace) -> None:  # noqa: F811
+    db = env.session()
+    db.add(Organization(id="org-1", name="Company 1", share_patterns=True))
+    _agent(db, "org-1", "sample-refund-bot-abc")    # the demo every account starts with
+    db.add(GuardRule(org_id="org-1", agent_id="sample-refund-bot-abc", rule_id="refund_cap", version=1,
+                     mode="enforce", body=json.dumps({**REFUND_RULE, "agent_id": "sample-refund-bot-abc"}),
+                     is_active=True))
+    _agent(db, "org-1", "billing-bot")              # the customer's own agent, same action name
+    db.commit()
+    db.close()
+    assert env.client.get("/agents/billing-bot/rules/from-account").json()["rules"] == []
