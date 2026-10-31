@@ -1106,3 +1106,15 @@ def get_held_replies(agent_id: str, limit: int, db: Session) -> List[Any]:
 
     return (db.query(HeldReply).filter(HeldReply.agent_id == agent_id)
             .order_by(HeldReply.created_at.desc()).limit(limit).all())
+
+
+def in_a_problem(ev: Any, patterns: List[Any]) -> bool:
+    """Whether a failed conversation is already counted in one of the agent's problems."""
+    for p in patterns:
+        if p.pattern_type == "action" and ev.failure_action == p.pattern_value:
+            return True
+        if p.pattern_type == "failure_type" and not ev.failure_action and ev.failure_type == p.pattern_value:
+            return True
+        if p.pattern_type == "workflow_step" and str(ev.failure_step) == str(p.pattern_value):
+            return True
+    return False
