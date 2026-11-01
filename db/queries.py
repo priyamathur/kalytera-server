@@ -830,6 +830,15 @@ def get_apikey_by_hash(key_hash: str, db: Session) -> Optional[ApiKey]:
     )
 
 
+def get_key_and_org(key_hash: str, db: Session) -> Tuple[Optional[ApiKey], Optional[Organization]]:
+    """An active key and its active account in one round trip to the database (every request does this)."""
+    row = (db.query(ApiKey, Organization)
+           .outerjoin(Organization, (Organization.id == ApiKey.org_id) & (Organization.is_active == True))  # noqa: E712
+           .filter(ApiKey.key_hash == key_hash, ApiKey.is_active == True)  # noqa: E712
+           .first())
+    return (row[0], row[1]) if row else (None, None)
+
+
 def list_keys_for_org(org_id: str, db: Session) -> List[ApiKey]:
     return db.query(ApiKey).filter(ApiKey.org_id == org_id, ApiKey.is_active == True).all()  # noqa: E712
 

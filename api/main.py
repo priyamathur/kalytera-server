@@ -11,9 +11,10 @@ Kalytera API — core endpoints + billing.
 import asyncio
 import logging
 import os
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +32,7 @@ from db.queries import (
     get_unevaluated_sessions,
     insert_agent_log,
     get_apikey_by_hash,
+    get_key_and_org,
     get_org_by_id,
     get_current_usage,
     increment_session_count,
@@ -126,16 +128,32 @@ def _resolve_org(
         return None
 
     # Customer key — always resolve via ApiKey table regardless of admin_key
-    api_key_row = get_apikey_by_hash(hash_key(token), db)
+    api_key_row, org = get_key_and_org(hash_key(token), db)
     if not api_key_row:
         if not admin_key:
             return None  # dev mode — unknown key, allow through
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
-    org = get_org_by_id(api_key_row.org_id, db)
     if not org:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Organization not found")
     return org
+
+
+_USAGE_TTL_S = 30.0
+_usage_seen: Dict[Tuple[str, str], Tuple[float, int]] = {}
+
+
+def _sessions_used(org_id: str, period: str, db: Session) -> int:
+    """This month's count for the limit check, re-read at most every 30 s: the dashboard makes many
+    requests per page and each database round trip is ~0.1 s. The limit can be passed by 30 s."""
+    now = time.monotonic()
+    hit = _usage_seen.get((org_id, period))
+    if hit and now - hit[0] < _USAGE_TTL_S:
+        return hit[1]
+    usage = get_current_usage(org_id, period, db)
+    used = usage.session_count if usage else 0
+    _usage_seen[(org_id, period)] = (now, used)
+    return used
 
 
 def _require_auth(
@@ -148,8 +166,7 @@ def _require_auth(
 
     # Check monthly rate limit (shared across all keys in this org)
     period = datetime.now(timezone.utc).strftime("%Y-%m")
-    usage = get_current_usage(org.id, period, db)
-    sessions_used = usage.session_count if usage else 0
+    sessions_used = _sessions_used(org.id, period, db)
     tier_cfg = TIERS.get(org.tier, TIERS["free"])
     limit = tier_cfg["sessions"]
 

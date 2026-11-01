@@ -47,6 +47,24 @@ FT_WORDS = {"tool_failure": "an action failed", "wrong_answer": "wrong answer", 
             "incomplete": "left unfinished", "hallucination": "made something up",
             "context_loss": "forgot what was said", "loop": "stuck repeating itself"}
 
+SAMPLE_PREFIX = "sample-refund-bot-"
+DEMO_PREFIXES = (SAMPLE_PREFIX, "quickstart-refund-bot-")  # made-up refund agents (dashboard, kalytera quickstart)
+
+
+def _agent_rank(agent_id: str) -> int:
+    """Picker order: your real agents, then sample agents, then `kalytera check` test runs (one test
+    conversation each), then the shared demo."""
+    if agent_id == "demo-agent":
+        return 3
+    if agent_id.startswith("kalytera-check"):
+        return 2
+    return 1 if agent_id.startswith(DEMO_PREFIXES) else 0
+
+
+def _is_demo(agent_id: str) -> bool:
+    return agent_id == "demo-agent" or agent_id.startswith(DEMO_PREFIXES)
+
+
 AUTO_REFRESH_S = 30
 MIN_REPEAT = 5  # the analyzer only reports a failure once it repeats this often (analyzer.MIN_FAILURE_COUNT)
 TREND_DAYS = 7
@@ -614,8 +632,8 @@ with st.sidebar:
         )
         if _all_agents:
             # The API lists your own agents first; the shared demo agent only when you have none.
-            _own = [a for a in _all_agents if a != "demo-agent"]
-            _def = _all_agents.index(_own[0]) if _own else 0
+            _all_agents = sorted(_all_agents, key=_agent_rank)  # stable: keeps the API's order within a group
+            _def = 0
             if st.session_state.get("agent_id") not in _all_agents:
                 st.session_state["agent_id"] = _all_agents[_def]
             agent_id = st.selectbox(
@@ -2123,14 +2141,6 @@ def _search_bar() -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 # SAMPLE AGENT — a new account's first two minutes
 # ═══════════════════════════════════════════════════════════════════════════════
-SAMPLE_PREFIX = "sample-refund-bot-"
-DEMO_PREFIXES = (SAMPLE_PREFIX, "quickstart-refund-bot-")  # made-up refund agents (dashboard, kalytera quickstart)
-
-
-def _is_demo(agent_id: str) -> bool:
-    return agent_id == "demo-agent" or agent_id.startswith(DEMO_PREFIXES)
-
-
 def _demo_banner() -> None:
     """Above a demo agent's feed: these failures are made up, and where the real ones come from."""
     text, btn = st.columns([5, 1.4], vertical_alignment="center")
@@ -2206,9 +2216,13 @@ def _connect_steps() -> None:
 def _wait_for_first_agent() -> None:
     """Sentry-style: watch for the user's own agent, then take them straight to it."""
     key = st.session_state.get("api_key", "")
-    agents = _fetch_agents(key) if key else []
+    if "_known_agents" not in st.session_state:  # first look: the list the page already has, no extra wait
+        st.session_state["_known_agents"] = [a for a in (_agents_for_key(key) if key else []) if not _is_demo(a)]
+        agents: List[str] = []
+    else:
+        agents = _fetch_agents(key) if key else []
     mine = [a for a in agents if not _is_demo(a)]
-    known = st.session_state.setdefault("_known_agents", list(mine))  # agents that existed before don't count
+    known = st.session_state["_known_agents"]  # agents that existed before don't count
     new = [a for a in mine if a not in known]
     if new:
         known.extend(new)
@@ -2325,10 +2339,16 @@ _KEEP_SAFE = ("Kalytera stores these keys encrypted, only ever reads conversatio
 
 def _profile_fields(prefix: str) -> Dict[str, str]:
     c1, c2 = st.columns(2)
-    industry = c1.selectbox("Industry", list(INDUSTRIES.values()), key=f"{prefix}_industry")
-    kind = c2.selectbox("Agent's job", list(AGENT_TYPES.values()), key=f"{prefix}_type")
-    return {"industry": next(k for k, v in INDUSTRIES.items() if v == industry),
-            "agent_type": next(k for k, v in AGENT_TYPES.items() if v == kind)}
+    industry = c1.selectbox("Industry (optional)", list(INDUSTRIES.values()), index=None,
+                            placeholder="Choose", key=f"{prefix}_industry")
+    kind = c2.selectbox("Agent's job (optional)", list(AGENT_TYPES.values()), index=None,
+                        placeholder="Choose", key=f"{prefix}_type")
+    out = {}
+    if industry:
+        out["industry"] = next(k for k, v in INDUSTRIES.items() if v == industry)
+    if kind:
+        out["agent_type"] = next(k for k, v in AGENT_TYPES.items() if v == kind)
+    return out
 
 
 def _connect_form(kind: str) -> None:
@@ -2350,7 +2370,7 @@ def _connect_form(kind: str) -> None:
             body = {"settings": {"api_url": LANGSMITH_REGIONS[region], "project": project}, "secrets": {"api_key": key}}
             missing = not (key and project)
         st.caption(_KEEP_SAFE)
-        go = st.form_submit_button("Connect and read my conversations", type="primary", use_container_width=True)
+        go = st.form_submit_button("Connect", type="primary")
     if go:
         if missing or not name.strip():
             st.error("Fill in the agent name and the keys first.")
@@ -2366,7 +2386,8 @@ def _run_connect(body: Dict[str, Any], profile: Dict[str, str]) -> None:
             st.error(resp.get("detail") if isinstance(resp, dict) else str(resp))
             return
         agent = resp["agent_id"]
-        _rules_api("PUT", f"/agents/{agent}/profile", profile)
+        if profile:
+            _rules_api("PUT", f"/agents/{agent}/profile", profile)
         done = _follow_job(agent, box, 0, "conversation",
                            preparing=f"Reading the last 30 days from {_SOURCE[body['kind']]}…")
     if done is None:
@@ -2387,8 +2408,8 @@ def _sync_now(conn_id: str, agent: str) -> None:
         _follow_job(agent, box, 0, "conversation", preparing="Reading new conversations…")
 
 
-def _connections_list() -> None:
-    status, body = _rules_api("GET", "/connections")
+def _connections_list(fetched: Optional[Tuple[int, Any]] = None) -> None:
+    status, body = fetched or _rules_api("GET", "/connections")
     conns = body.get("connections", []) if status == 200 and isinstance(body, dict) else []
     if not conns:
         return
@@ -2412,9 +2433,9 @@ def _connections_list() -> None:
                     st.rerun()
 
 
-def _slack_settings() -> None:
+def _slack_settings(fetched: Optional[Tuple[int, Any]] = None) -> None:
     st.markdown("**Alerts in Slack**")
-    status, body = _rules_api("GET", "/alerts")
+    status, body = fetched or _rules_api("GET", "/alerts")
     if status != 200 or not isinstance(body, dict):
         return
     if body.get("slack"):
@@ -2441,6 +2462,12 @@ def _slack_settings() -> None:
 
 
 def _connect_page() -> None:
+    # Both lists at once instead of one after the other (each is a round trip to the API).
+    from concurrent.futures import ThreadPoolExecutor
+    key = st.session_state.get("api_key", "")
+    with ThreadPoolExecutor(2) as pool:
+        conns = pool.submit(_rules_api, "GET", "/connections", key=key)
+        alerts = pool.submit(_rules_api, "GET", "/alerts", key=key)
     st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
     _page_header("Connect", "")
     st.markdown('<div class="ob-sub" style="margin-top:-14px">Point Kalytera at where your agent\'s production '
@@ -2455,8 +2482,8 @@ def _connect_page() -> None:
         _connect_steps()
         _wait_for_first_agent()
     st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
-    _connections_list()
-    _slack_settings()
+    _connections_list(conns.result())
+    _slack_settings(alerts.result())
 
 
 def _welcome_panel() -> None:

@@ -175,7 +175,7 @@ def test_post_trace_no_key_configured_allows_all(client: TestClient) -> None:
 
 
 def test_post_trace_wrong_key_returns_401(authed_client: TestClient) -> None:
-    with patch("api.main.get_apikey_by_hash", return_value=None):
+    with patch("api.main.get_key_and_org", return_value=(None, None)):
         r = authed_client.post(
             "/trace",
             json=_trace_payload(),

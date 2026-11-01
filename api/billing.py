@@ -172,10 +172,10 @@ def _require_apikey(
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Authorization: Bearer <key> required")
     token = authorization[len("Bearer "):]
-    api_key = get_apikey_by_hash(hash_key(token), db)
+    from db.queries import get_key_and_org
+    api_key, org = get_key_and_org(hash_key(token), db)
     if not api_key:
         raise HTTPException(status_code=401, detail="Invalid API key")
-    org = get_org_by_id(api_key.org_id, db)
     if not org:
         raise HTTPException(status_code=401, detail="Organization not found or inactive")
     return api_key, org

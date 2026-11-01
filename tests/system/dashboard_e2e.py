@@ -402,15 +402,17 @@ def _fill_langfuse(secret: str) -> None:
     form_inputs[0].input("Billing bot")
     form_inputs[1].input("pk-lf-1")
     form_inputs[2].input(secret)
+    next(x for x in at.selectbox if x.label == "Industry (optional)").select("Retail & e-commerce")
+    next(x for x in at.selectbox if x.label == "Agent's job (optional)").select("Customer support")
 
 
 _fill_langfuse("wrong")
-run(next(b for b in at.button if b.label == "Connect and read my conversations").click())
+run(next(b for b in at.button if b.label == "Connect" and b.proto.form_id == "connect_langfuse").click())
 check("rejected these keys" in texts(at), "wrong keys: says why")
 check(client.get("/connections", headers={"Authorization": f"Bearer {NEW_KEY}"}).json()["connections"] == [],
       "and saves nothing")
 _fill_langfuse("sk-lf-2")
-run(next(b for b in at.button if b.label == "Connect and read my conversations").click())  # reruns into the feed
+run(next(b for b in at.button if b.label == "Connect" and b.proto.form_id == "connect_langfuse").click())  # reruns into the feed
 
 
 def reopen(old: AppTest) -> AppTest:

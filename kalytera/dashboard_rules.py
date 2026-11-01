@@ -56,9 +56,11 @@ _CSS = """
 # ── API ──────────────────────────────────────────────────────────────────────
 
 def _api(method: str, path: str, body: Optional[Dict[str, Any]] = None,
-         params: Optional[Dict[str, str]] = None) -> Tuple[int, Any]:
-    """Returns (status, json). status 0 means the API could not be reached."""
-    key = st.session_state.get("api_key", "")
+         params: Optional[Dict[str, str]] = None, key: Optional[str] = None) -> Tuple[int, Any]:
+    """Returns (status, json). status 0 means the API could not be reached. Pass `key` to call it
+    from a worker thread (st.session_state is only readable from the page's own thread)."""
+    if key is None:
+        key = st.session_state.get("api_key", "")
     try:
         r = requests.request(method, f"{API}{path}", json=body, params=params, timeout=15,
                              headers={"Authorization": f"Bearer {key}"} if key else {})
