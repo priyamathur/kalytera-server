@@ -317,15 +317,33 @@ def _validate_key(key: str, timeout: float = 5) -> Optional[Dict[str, Any]]:
 def _check_key(key: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """Sign-in: (account, "") or (None, why). A sleeping API can take a minute to wake;
     that is not a wrong key."""
-    try:
-        r = _requests.get(f"{_API}/billing/usage", headers={"Authorization": f"Bearer {key}"}, timeout=90)
-    except Exception:
-        return None, "Kalytera didn't answer. Wait a moment and try again."
-    if r.status_code == 200:
-        return r.json(), ""
-    if r.status_code in (401, 403):
-        return None, "Kalytera doesn't recognize this key. Check that you copied all of it, or email info@kalytera.dev."
-    return None, "Kalytera couldn't check the key just now. Wait a moment and try again."
+    import time as _time
+    deadline = _time.monotonic() + WAKE_S
+    while True:
+        try:
+            r = _requests.get(f"{_API}/billing/usage", headers={"Authorization": f"Bearer {key}"}, timeout=90)
+        except Exception:
+            r = None
+        if r is not None and r.status_code == 200:
+            try:
+                return r.json(), ""
+            except ValueError:
+                pass  # a "waking up" page, not Kalytera's answer
+        elif r is not None and r.status_code in (401, 403):
+            return None, "Kalytera doesn't recognize this key. Check that you copied all of it, or email info@kalytera.dev."
+        # Asleep or starting (no answer, 502/503, a waiting page): Render answers like this while it wakes.
+        if _time.monotonic() > deadline:
+            return None, "Kalytera is taking longer than usual to start. Wait a moment and try again."
+        _time.sleep(3)
+
+
+WAKE_S = 120  # the free Render API takes 30–60 s to wake after 15 idle minutes
+
+
+def _wake_api() -> None:
+    """Start waking the API as soon as the sign-in page shows, so it is up when Google sends you back."""
+    import threading
+    threading.Thread(target=lambda: _requests.get(f"{_API}/health", timeout=90), daemon=True).start()
 
 
 # ── Google sign-in ────────────────────────────────────────────────────────────
@@ -440,6 +458,12 @@ if not st.session_state.get("authenticated"):
     _gate_title = "Create your free account" if _new_here else "Welcome back"
     _gate_sub = ("Free up to 5,000 conversations a month. No card needed." if _new_here
                  else "Sign in to see what your agents did.")
+    if not st.session_state.get("_waking"):
+        st.session_state["_waking"] = True
+        try:
+            _wake_api()
+        except Exception:
+            pass
     _, col, _ = st.columns([1, 1.2, 1])
     with col:
         st.markdown('<div style="height:72px"/>', unsafe_allow_html=True)
