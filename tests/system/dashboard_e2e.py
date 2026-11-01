@@ -5,8 +5,8 @@ End-to-end check of the dashboard against the real API and a real database.
 
 Signs up, sends traces through POST /trace, scores them (stand-in for the LLM
 judge), runs the real pattern analyzer, then drives the Streamlit dashboard the
-way a user would: Failure Feed → See sessions → open a trace → back → Make it a
-rule → Rules page → session search → Overview. HTTP calls from the dashboard
+way a user would: Failure Feed → See conversations → open a trace → back → Make it a
+rule → Rules page → conversation search → Overview. HTTP calls from the dashboard
 are routed to the API in-process, so nothing listens on a port.
 
 Run by tests/test_dashboard_e2e.py; needs the dashboard dependencies
@@ -123,7 +123,7 @@ for i in range(8):
 check(AGENT in client.get("/agents", headers=H).json(), "agent appears for this key")
 
 # ── 2. Score (stand-in for the judge) and detect patterns ────────────────────
-print("2. Score sessions and run the real pattern analyzer")
+print("2. Score conversations and run the real pattern analyzer")
 from api.database import SessionLocal  # noqa: E402
 from db.models import EvalResult  # noqa: E402
 from kalytera.analyzer import run_analysis  # noqa: E402
@@ -157,32 +157,32 @@ check(at.session_state["authenticated"] is True, "key accepted")
 check(list(at.radio[0].options) == ["🔴  Failure Feed", "📊  Overview", "🛡  Rules"],
       "sidebar: Failure Feed first, then Overview, Rules (no Trace Viewer tab)")
 check(at.radio[0].value == "🔴  Failure Feed", "lands on the Failure Feed: what needs fixing")
-check(any(t.placeholder.startswith("🔍  Search sessions") for t in at.text_input), "search box at the top")
+check(any(t.placeholder.startswith("🔍  Search conversations") for t in at.text_input), "search box at the top")
 
 # ── 4. Failure Feed ──────────────────────────────────────────────────────────
-print("4. Failure Feed reads in sessions, with a ready rule")
+print("4. Failure Feed reads in conversations, with a ready rule")
 at = dashboard("🔴  Failure Feed")
 t = texts(at)
-check("2 problems keep happening</b> — 15 of 38 sessions failed (39%)" in t, "headline: 2 problems, 15 of 38 sessions (39%)")
-check('<div class="n">10</div><div class="l">sessions · 26%</div>' in t, "refund problem: 10 sessions · 26%")
-check('<div class="n">5</div><div class="l">sessions · 13%</div>' in t, "loop problem: 5 sessions · 13%")
-check('<span class="ff-chip">tool failure</span>' in t and '<span class="ff-chip">at issue_refund</span>' in t,
+check("2 problems keep happening</b> — 15 of 38 conversations failed (39%)" in t, "headline: 2 problems, 15 of 38 conversations (39%)")
+check('<div class="n">10</div><div class="l">conversations · 26%</div>' in t, "refund problem: 10 conversations · 26%")
+check('<div class="n">5</div><div class="l">conversations · 13%</div>' in t, "loop problem: 5 conversations · 13%")
+check('<span class="ff-chip">an action failed</span>' in t and '<span class="ff-chip">at issue_refund</span>' in t,
       "type and step shown as chips")
 check("Suggested rule</span>Block <code>refund_api</code> when amount is more than" in t, "refund rule is suggested")
-check("Would have caught 10 of 10 failed sessions · touches 0 of 23 good ones" in t,
-      "citation: caught 10 of 10 failed sessions, 0 of 23 good")
+check("Would have caught 10 of 10 failed conversations · touches 0 of 23 good ones" in t,
+      "citation: caught 10 of 10 failed conversations, 0 of 23 good")
 check("Suggested rule</span>Ask a person before <code>lookup_order</code> when it's the 3rd call or more" in t, "loop rule is suggested")
 check(sum(b.label == "⚡ Make it a rule" and b.proto.type == "primary" for b in at.button) == 2,
       "one highlighted next step per card")
 
-print("5. See sessions → open a trace → back")
-run(button(at, "▸ 10 sessions").click())
+print("5. See conversations → open a trace → back")
+run(button(at, "▸ 10 conversations").click())
 opens = [b for b in at.button if b.key and b.key.startswith("ps_")]
-check(len(opens) == 10, "10 sessions listed inline, under the card")
-check('<span class="ff-mono">sess-27</span>' in texts(at), "newest failed session (sess-27) is listed")
+check(len(opens) == 10, "10 conversations listed inline, under the card")
+check('<span class="ff-mono">sess-27</span>' in texts(at), "newest failed conversation (sess-27) is listed")
 run(opens[0].click())
-check("Session trace" in texts(at), "trace opens in place")
-check("lookup_order" in texts(at) and "issue_refund" in texts(at), "trace shows the session's steps")
+check("Conversation trace" in texts(at), "trace opens in place")
+check("lookup_order" in texts(at) and "issue_refund" in texts(at), "trace shows the conversation's steps")
 run(button(at, "← Back to Failure Feed").click())
 check("problems keep happening" in texts(at), "back on the Failure Feed")
 
@@ -209,31 +209,31 @@ check("Watching" in t and "refund_api" in t, "the new rule is listed as Watching
 check("Ask a person before <code>lookup_order</code>" in t, "the loop rule is still suggested there")
 check(t.count("Block <code>refund_api</code>") == 1, "the added rule isn't suggested again")
 
-print("8. Search sessions (top right)")
+print("8. Search conversations (top right)")
 at = dashboard("📊  Overview")
 search = next(x for x in at.text_input if x.key == "session_search")
 run(search.input("loop-3"))
-check("Session trace" in texts(at) and "find_order" in texts(at), "exact ID opens the trace directly")
+check("Conversation trace" in texts(at) and "find_order" in texts(at), "exact ID opens the trace directly")
 run(button(at, "← Back to Overview").click())
 check("Agent Overview" in texts(at), "back to Overview")
 search = next(x for x in at.text_input if x.key == "session_search")
 run(search.input("loop"))
-check("8 sessions</b>" in texts(at) or "**8 sessions**" in texts(at), "partial ID lists all 8 loop sessions")
+check("8 conversations</b>" in texts(at) or "**8 conversations**" in texts(at), "partial ID lists all 8 loop conversations")
 run(button(at, "Close").click())
 search = next(x for x in at.text_input if x.key == "session_search")
 run(search.input("same order"))
-check("**5 sessions**" in texts(at), "error text finds the 5 looping sessions")
+check("**5 conversations**" in texts(at), "error text finds the 5 looping conversations")
 run([b for b in at.button if b.key and b.key.startswith("sr_")][0].click())
-check("Session trace" in texts(at), "opening a result shows its trace")
+check("Conversation trace" in texts(at), "opening a result shows its trace")
 search = next(x for x in at.text_input if x.key == "session_search")
-run(search.input("no-such-session"))
-check("No sessions match" in texts(at), "no match says so")
+run(search.input("no-such-conversation"))
+check("No conversations match" in texts(at), "no match says so")
 
-print("9. Overview counts sessions")
+print("9. Overview counts conversations")
 at = dashboard("📊  Overview")
 t = texts(at)
-check("FAILED SESSIONS" in t.upper() and ">15<" in t, "15 failed sessions (10 refund + 5 loop)")
-check("39% of sessions" in t, "shown as 39% of 38 sessions")
+check("FAILED CONVERSATIONS" in t.upper() and ">15<" in t, "15 failed conversations (10 refund + 5 loop)")
+check("39% of conversations" in t, "shown as 39% of 38 conversations")
 
 print("10. An old bookmark to the Trace Viewer tab doesn't break")
 at = dashboard("🔍  Trace Viewer")
@@ -273,15 +273,15 @@ check("Started blocking" in texts(at) and "Created — watching" in texts(at), "
 
 print("10c. A person's verdict replaces the judge's")
 at = dashboard("🔴  Failure Feed")
-check("15 of 38 sessions failed" in texts(at), "before: 15 of 38 sessions failed")
+check("15 of 38 conversations failed" in texts(at), "before: 15 of 38 conversations failed")
 at.session_state["open_session"] = "sess-27"
 run(at)
 run(button(at, "👍 Not a failure").click())
 check("You marked: passed" in texts(at), "the trace shows the verdict")
 at = dashboard("🔴  Failure Feed")
-check("14 of 38 sessions failed" in texts(at), "after: 14 of 38 — the feed follows the person's verdict")
+check("14 of 38 conversations failed" in texts(at), "after: 14 of 38 — the feed follows the person's verdict")
 labels = [b.label for b in at.button]
-check("▸ 9 sessions" in labels, f"and the refund problem now has 9 sessions, regrouped at once ({[l for l in labels if 'sessions' in l]})")
+check("▸ 9 conversations" in labels, f"and the refund problem now has 9 conversations, regrouped at once ({[l for l in labels if 'sessions' in l]})")
 
 print("10d. Billing: upgrade from the dashboard, then manage billing")
 import hashlib as _hl, hmac as _hm, json as _json, time as _time  # noqa: E401,E402
@@ -350,6 +350,8 @@ run(button(at, "▶ Run the sample agent").click())  # scores and switches to th
 run(at)
 t = texts(at)
 check(at.radio[0].value == "🔴  Failure Feed", "lands on the sample agent's Failure Feed")
+check("Sample data." in t and any(b.label == "Connect your agent" for b in at.button),
+      "labelled as sample data, with a way to connect a real agent")
 check('ob-step done"><span class="n">✓</span><span class="t">Find the problem' in t
       and 'ob-step now"><span class="n">2</span><span class="t">Make it a rule' in t, "stepper: found ✓, now make a rule")
 check('<span class="ff-chip">refund api</span>' in t and "Suggested rule</span>Block <code>refund_api</code>" in t,
@@ -357,7 +359,7 @@ check('<span class="ff-chip">refund api</span>' in t and "Suggested rule</span>B
 run(button(at, "⚡ Make it a rule").click())
 t = texts(at)
 check('ob-step now"><span class="n">3</span><span class="t">Stop it' in t, "stepper moves to: stop it")
-check("Would have caught 10 of 10 failed sessions" in t, "watching shows the evidence for the rule")
+check("Would have caught 10 of 10 failed conversations" in t, "watching shows the evidence for the rule")
 run(button(at, "Start blocking").click())
 t = texts(at)
 check("Blocked: refund_api(amount=900)" in t and "The action never ran." in t, "after Start blocking: a live check shows it blocked")
@@ -425,7 +427,7 @@ t = texts(at)
 agent_picker = next(x for x in at.selectbox if x.key == "agent_id")
 check(at.radio[0].value == "🔴  Failure Feed" and "billing-bot" in str(agent_picker.value)
       and "Point Kalytera at where your agent" not in t, "after reading: lands on the new agent's Failure Feed")
-check("6 of 9 sessions failed" in t, "its real mistakes are there: 6 of 9 conversations failed")
+check("6 of 9 conversations failed" in t, "its real mistakes are there: 6 of 9 conversations failed")
 conns = client.get("/connections", headers={"Authorization": f"Bearer {NEW_KEY}"}).json()["connections"]
 check(len(conns) == 1 and conns[0]["kind"] == "langfuse" and conns[0]["status"] == "ok", "the connection is saved")
 NEW_AGENT = conns[0]["agent_id"]
@@ -457,7 +459,7 @@ run(at2)
 check(at2.radio[0].value == "🔴  Failure Feed"
       and NEW_AGENT in str(next(x for x in at2.selectbox if x.key == "agent_id").value),
       "a Slack link opens that agent's Failure Feed")
-check(any(b.label == "▾ Hide sessions" for b in at2.button), "with that problem's conversations already open")
+check(any(b.label == "▾ Hide conversations" for b in at2.button), "with that problem's conversations already open")
 
 print("12d. Sharing is on by default and can be turned off")
 at2.session_state["view"] = "📊  Overview"
@@ -476,10 +478,11 @@ resp = client.post("/trace", headers={"Authorization": f"Bearer {NEW_KEY}"}, jso
 assert resp.status_code == 201, resp.text
 at.session_state["_switch_to"] = ("fresh-bot", "🔴  Failure Feed")
 run(at)
-check("No sessions scored yet" in texts(at), "a just-connected agent: 'no sessions scored yet', not 'all good'")
-check(any("agents like this one make" in e.label for e in at.expander), "it asks what the agent does (to compare with similar agents)")
-run(button(at, "↻ Score my sessions now").click())
+check("No conversations scored yet" in texts(at), "a just-connected agent: 'no conversations scored yet', not 'all good'")
+check(not any("agents like this one make" in e.label for e in at.expander) and "Sample data" not in texts(at),
+      "a real agent: no extra questions, no sample-data label")
+run(button(at, "↻ Score my conversations now").click())
 run(at)
-check("Its one session passed" in texts(at), "Score now → its one session is scored")
+check("Its one conversation passed" in texts(at), "Score now → its one conversation is scored")
 
 print("\nAll dashboard checks passed.")

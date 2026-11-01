@@ -195,7 +195,7 @@ def _stats_line(stats: Dict[str, Any], rule: Dict[str, Any]) -> str:
     if not wb:
         return "No matching calls yet."
     failed = stats.get("would_block_sessions_that_failed", 0)
-    tail = f" · {failed} of those sessions failed" if failed else ""
+    tail = f" · {failed} of those conversations failed" if failed else ""
     return (f"Would have {_PAST.get(rule.get('action'), 'blocked')} {_plural(wb, 'call')} "
             f"in {_plural(stats.get('would_block_sessions', 0), 'session')}{tail}.")
 
@@ -302,7 +302,7 @@ def show_rules(agent_id: str) -> None:
                 text.markdown(
                     f'<div class="kr-sentence">{sentence(r["rule"])}</div>'
                     f'<div class="kr-meta">From <code>{_e(r["from_agent"])}</code> · here it would have caught '
-                    f'{cov["failing_matched"]} of {cov["failing_total"]} failed sessions and touched '
+                    f'{cov["failing_matched"]} of {cov["failing_total"]} failed conversations and touched '
                     f'{cov["passing_matched"]} of {cov["passing_total"]} good ones</div>', unsafe_allow_html=True)
                 if add.button("Add rule", key=f"add_acct_{i}", type="primary", use_container_width=True,
                               help="Adds it in watch mode: it counts matches but never blocks"):
@@ -406,7 +406,7 @@ def _outcome_line(outcome: Optional[Dict[str, Any]]) -> str:
                 f'needs 7 on each side.</div>')
     change = f" ({round(100 * (after - before) / before):+d}%)" if before else ""
     color = "#16a34a" if after < before else "#dc2626"
-    return (f'<div class="kr-meta">This problem: {before:g} failed sessions a day before blocking → '
+    return (f'<div class="kr-meta">This problem: {before:g} failed conversations a day before blocking → '
             f'<b style="color:{color}">{after:g} a day after{change}</b> · {ba["days_after"]:g} days so far. '
             f'Changes to the agent in that time also count.</div>')
 
@@ -414,7 +414,7 @@ def _outcome_line(outcome: Optional[Dict[str, Any]]) -> str:
 def _review_blocks(agent_id: str, rid: str, outcome: Dict[str, Any]) -> None:
     label = (f"Review blocks — {outcome['marked_wrong']} marked wrong, {outcome['unreviewed']} not reviewed")
     with st.expander(label, expanded=st.session_state.get(f"_review_open_{rid}", False)):
-        st.caption("Open a session to see the stopped call. Blocks marked wrong are counted as false blocks.")
+        st.caption("Open a conversation to see the stopped call. Blocks marked wrong are counted as false blocks.")
         for i, b in enumerate(_blocks(st.session_state.get("api_key", ""), agent_id, rid)):
             text, open_, right, wrong = st.columns([4, 1, 1, 1], vertical_alignment="center")
             verdict = {"wrong": " · <b style='color:#dc2626'>marked wrong</b>",
@@ -593,7 +593,7 @@ def _new_rule_dialog(agent_id: str) -> None:
 
     with st.expander("More options"):
         reason = st.text_input("Reason (returned to your code)", placeholder="Refunds over 500 need review")
-        repeat = st.number_input("Only from the Nth call in one session (0 = off)", min_value=0, value=0, step=1,
+        repeat = st.number_input("Only from the Nth call in one conversation (0 = off)", min_value=0, value=0, step=1,
                                  help="Catches loops: 3 = the 3rd call or more within the window")
         window = st.number_input("…within minutes", min_value=1, value=10, step=1)
         name = st.text_input("Rule name", placeholder=_slug(tool, field) if tool else "refund_cap")
@@ -659,7 +659,7 @@ def _promote_dialog(agent_id: str, rule: Dict[str, Any], stats: Dict[str, Any]) 
         failed = stats.get("would_block_sessions_that_failed", 0)
         st.write(f"While watching, it matched **{_plural(wb, 'call')}** in "
                  f"**{_plural(stats.get('would_block_sessions', 0), 'session')}**"
-                 + (f", and **{failed}** of those sessions failed." if failed else "."))
+                 + (f", and **{failed}** of those conversations failed." if failed else "."))
     else:
         st.write("It hasn't matched any calls yet, so there's no evidence yet that it targets real failures.")
     st.write(f"From now on, `guard()` returns **{rule.get('action')}** for matching calls. "

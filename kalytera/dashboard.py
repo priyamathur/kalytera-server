@@ -42,6 +42,11 @@ ALL_FT = [
     "incomplete", "hallucination", "context_loss", "loop",
 ]
 
+# The judge's failure types, in words a customer uses.
+FT_WORDS = {"tool_failure": "an action failed", "wrong_answer": "wrong answer", "goal_drift": "went off task",
+            "incomplete": "left unfinished", "hallucination": "made something up",
+            "context_loss": "forgot what was said", "loop": "stuck repeating itself"}
+
 AUTO_REFRESH_S = 30
 MIN_REPEAT = 5  # the analyzer only reports a failure once it repeats this often (analyzer.MIN_FAILURE_COUNT)
 TREND_DAYS = 7
@@ -793,23 +798,23 @@ def _show_overview(agent_id: str) -> None:
     p_vals = [int(np.percentile(arr, p)) for p in [50, 75, 90, 95, 99]]
 
     if failures_n == 0 and stats["total"] > 0:
-        st.success(f"No failed sessions in the {sel_label} — your agent is healthy.", icon="✅")
+        st.success(f"No failed conversations in the {sel_label} — your agent is healthy.", icon="✅")
 
     # ── KPI row ─────────────────────────────────────────────────────────────
     pass_color = "#16a34a" if pass_pct >= 70 else "#dc2626"
     fail_color = "#dc2626" if failures_n > 0 else "#16a34a"
     k1, k2, k3, k4, k5, k6 = st.columns(6)
-    k1.markdown(_kpi_card("Sessions", str(extra["session_count"]), f"distinct sessions, {sel_label}"), unsafe_allow_html=True)
+    k1.markdown(_kpi_card("Conversations", str(extra["session_count"]), f"distinct conversations, {sel_label}"), unsafe_allow_html=True)
     k2.markdown(_kpi_card("Pass Rate", f"{pass_pct:.0f}%", "score ≥ 70", color=pass_color), unsafe_allow_html=True)
     k3.markdown(_kpi_card("Avg Score", f"{extra['avg_score']:.0f}/100", "the judge's weighted score"), unsafe_allow_html=True)
-    k4.markdown(_kpi_card("Failed sessions", str(failures_n), f"{_pct(failures_n, stats['total'])} of sessions, {sel_label}", color=fail_color), unsafe_allow_html=True)
+    k4.markdown(_kpi_card("Failed conversations", str(failures_n), f"{_pct(failures_n, stats['total'])} of conversations, {sel_label}", color=fail_color), unsafe_allow_html=True)
     k5.markdown(_kpi_card("Avg Latency", f"{extra['avg_latency_ms']:,} ms" if extra["avg_latency_ms"] else "—",
                           "mean per step" if extra["avg_latency_ms"] else "not recorded"), unsafe_allow_html=True)
     _CALIB_COLOR = {"excellent": "#16a34a", "good": "#0891b2", "needs_calibration": "#dc2626", "unlabeled": "#6366f1"}
     _CALIB_LABEL = {"excellent": "Calibrated ✓", "good": "Good", "needs_calibration": "Review weights", "unlabeled": "Not yet labeled"}
     calib_status = calib["status"]
     calib_val = f"{calib['agreement_rate']*100:.0f}%" if calib["agreement_rate"] is not None else "—"
-    calib_sub = f"{calib['total_labeled']} sessions labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "Open a session (search ↗) → label 👍👎"
+    calib_sub = f"{calib['total_labeled']} conversations labeled · {_CALIB_LABEL[calib_status]}" if calib["total_labeled"] > 0 else "Open a conversation (search ↗) → label 👍👎"
     k6.markdown(_kpi_card("Judge Accuracy", calib_val, calib_sub, color=_CALIB_COLOR[calib_status]), unsafe_allow_html=True)
 
     # ── Quality trend + session volume ───────────────────────────────────────
@@ -819,9 +824,9 @@ def _show_overview(agent_id: str) -> None:
     if ba and ba["comparable"]:
         st.markdown(
             f'<div style="font-size:14px;color:#0f172a;margin:-4px 0 10px">Since blocking started '
-            f'({ba["since"][:10]}): failed sessions <b>{_pct(ba["before_failed"], ba["before_sessions"])}</b> → '
+            f'({ba["since"][:10]}): failed conversations <b>{_pct(ba["before_failed"], ba["before_sessions"])}</b> → '
             f'<b>{_pct(ba["after_failed"], ba["after_sessions"])}</b> '
-            f'<span style="color:#94a3b8">({ba["before_sessions"]} sessions before, {ba["after_sessions"]} since; '
+            f'<span style="color:#94a3b8">({ba["before_sessions"]} conversations before, {ba["after_sessions"]} since; '
             f'other changes to the agent also count)</span></div>', unsafe_allow_html=True)
     ch1, ch2 = st.columns([3, 2])
 
@@ -879,10 +884,10 @@ def _show_overview(agent_id: str) -> None:
                 marker_color=colors_b,
                 text=df_b["count"], textposition="outside",
                 textfont=dict(size=11, color="#475569"),
-                hovertemplate="Score %{x}: %{y} sessions<extra></extra>",
+                hovertemplate="Score %{x}: %{y} conversations<extra></extra>",
             ))
             _plotly_defaults(fig2, 230).update_layout(
-                yaxis=dict(title="Sessions", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                yaxis=dict(title="Conversations", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
                 xaxis=dict(title="Score range (0–100)", tickfont=dict(size=10),
                            gridcolor="#f1f5f9", linecolor="#e2e8f0"),
                 showlegend=False,
@@ -918,10 +923,10 @@ def _show_overview(agent_id: str) -> None:
             marker_color=bar_clrs,
             marker_line=dict(color="white", width=1),
             customdata=x_counts,
-            text=[f"{sc}/100  ·  {cnt} session{'s' if cnt != 1 else ''}" for sc, cnt in zip(x_scores, x_counts)],
+            text=[f"{sc}/100  ·  {cnt} conversation{'s' if cnt != 1 else ''}" for sc, cnt in zip(x_scores, x_counts)],
             textposition="outside",
             textfont=dict(size=11, color="#475569"),
-            hovertemplate="<b>%{y}</b><br>Avg score: %{x}/100<br>Based on %{customdata} session(s)<extra></extra>",
+            hovertemplate="<b>%{y}</b><br>Avg score: %{x}/100<br>Based on %{customdata} conversation(s)<extra></extra>",
         ))
         fig_sq.add_vline(x=70, line_dash="dash", line_color="#ef4444", line_width=1,
                          annotation_text="pass threshold",
@@ -948,20 +953,20 @@ def _show_overview(agent_id: str) -> None:
         )
         if step_hot:
             rows_s = [
-                {"Step": name, "Sessions failed": cnt, "% of sessions": f"{rate * 100:.0f}%"}
+                {"Step": name, "Conversations failed": cnt, "% of conversations": f"{rate * 100:.0f}%"}
                 for n, name, cnt, rate in step_hot
             ]
             st.dataframe(
                 pd.DataFrame(rows_s),
                 column_config={
                     "Step": st.column_config.TextColumn("Step"),
-                    "Sessions failed": st.column_config.NumberColumn("Sessions failed", width="small"),
-                    "% of sessions": st.column_config.TextColumn("% of sessions", width="small"),
+                    "Conversations failed": st.column_config.NumberColumn("Conversations failed", width="small"),
+                    "% of conversations": st.column_config.TextColumn("% of conversations", width="small"),
                 },
                 hide_index=True, use_container_width=True,
             )
         else:
-            st.caption(f"No failed sessions in the {sel_label}.")
+            st.caption(f"No failed conversations in the {sel_label}.")
 
     with col_r:
         st.markdown(
@@ -985,18 +990,18 @@ def _show_overview(agent_id: str) -> None:
                 text=[f"{v}  ({p * 100:.0f}%)" for v, p in zip(x_vals, pct_vals)],
                 textposition="outside",
                 textfont=dict(size=11, color="#475569"),
-                hovertemplate="<b>%{y}</b><br>%{x} sessions<extra></extra>",
+                hovertemplate="<b>%{y}</b><br>%{x} conversations<extra></extra>",
             ))
             chart_h = max(160, len(top_types) * 44)
             _plotly_defaults(fig_ft, chart_h).update_layout(
-                xaxis=dict(title="Sessions with this failure", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
+                xaxis=dict(title="Conversations with this failure", gridcolor="#f1f5f9", linecolor="#e2e8f0"),
                 yaxis=dict(tickfont=dict(size=12), linecolor="#e2e8f0", automargin=True),
                 showlegend=False,
                 margin=dict(l=10, r=90, t=8, b=40),
             )
             st.plotly_chart(fig_ft, use_container_width=True, config={"displayModeBar": False})
         else:
-            st.caption(f"No failed sessions in the {sel_label}.")
+            st.caption(f"No failed conversations in the {sel_label}.")
 
     # ── Scoring Configuration ─────────────────────────────────────────────────
     st.markdown('<div style="height:8px"/>', unsafe_allow_html=True)
@@ -1243,7 +1248,7 @@ def _show_overview(agent_id: str) -> None:
             _sharing_setting()
             _retention_setting()
             st.markdown("**Delete this agent's data**")
-            st.caption("Removes every session, score, problem, rule, guard decision and label Kalytera stores "
+            st.caption("Removes every conversation, score, problem, rule, guard decision and label Kalytera stores "
                        "for this agent, and frees its name. This can't be undone.")
             typed = st.text_input("Type the agent's name to confirm", key=f"del_confirm_{agent_id}",
                                   placeholder=agent_id)
@@ -1282,7 +1287,7 @@ def _ago(ts: Optional[datetime]) -> str:
 
 
 def _n_sessions(n: int) -> str:
-    return f"{n} session{'' if n == 1 else 's'}"
+    return f"{n} conversation{'' if n == 1 else 's'}"
 
 
 def _pct(n: int, total: int) -> str:
@@ -1353,7 +1358,7 @@ _FEED_CSS = """
 def _chips(g: Dict[str, Any], seen_in: Optional[int] = None) -> str:
     chips = []
     if g["types"]:
-        chips.append(html.escape(g["types"][0].replace("_", " ")))
+        chips.append(html.escape(FT_WORDS.get(g["types"][0], g["types"][0].replace("_", " "))))
     if g["steps"]:
         chips.append(f"at {html.escape(g['steps'][0])}")
     out = "".join(f'<span class="ff-chip">{c}</span>' for c in chips)
@@ -1370,7 +1375,7 @@ def _coverage_note(cov: Dict[str, Any]) -> str:
     pm, pt = cov.get("passing_matched", 0), cov.get("passing_total", 0)
     good = f" · touches {pm} of {pt} good ones" if pt else ""
     return (f'<div class="ff-note {"ok" if pm == 0 else "warn"}">Would have caught {fm} of {ft} failed '
-            f'sessions{good}</div>')
+            f'conversations{good}</div>')
 
 
 _TEST_NOTE = {"blocked": "bad", "watching": "warn", "allowed": "ok", "error": "bad"}
@@ -1388,7 +1393,7 @@ def _rule_line(option: Dict[str, Any], m: Optional[Dict[str, Any]]) -> str:
             note = (f'<div class="ff-note {_TEST_NOTE.get(kind, "bad")}">{_TEST_ICON.get(kind, "")} '
                     f'Live check — {html.escape(text)}</div>')
         elif m["blocking"]:
-            note = '<div class="ff-note">Stops matching calls before the tool runs.</div>'
+            note = '<div class="ff-note">Kalytera stops this before it happens.</div>'
         else:
             note = (_coverage_note(m.get("coverage") or {}) if m.get("coverage") else "") + \
                 '<div class="ff-note">Watching only: nothing is blocked until you start blocking.</div>'
@@ -1438,7 +1443,7 @@ def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], tota
         head.markdown(f'<div class="ff-title">{html.escape(g["title"])}</div>{_chips(g, seen_in)}', unsafe_allow_html=True)
         pct = _pct(g["sessions"], total)
         stat.markdown(f'<div class="ff-stat"><div class="n">{g["sessions"]}</div>'
-                      f'<div class="l">sessions{" · " + pct if pct else ""}</div></div>', unsafe_allow_html=True)
+                      f'<div class="l">conversations{" · " + pct if pct else ""}</div></div>', unsafe_allow_html=True)
         st.markdown(_rule_line(option, m), unsafe_allow_html=True)
         if failed_make and not failed_make["ok"]:
             st.error(failed_make["msg"])
@@ -1455,9 +1460,9 @@ def _problem_card(agent_id: str, g: Dict[str, Any], option: Dict[str, Any], tota
         elif m is not None and not m["blocking"]:
             a1.button("Start blocking", key=f"block_{p.id}", type="primary", use_container_width=True,
                       on_click=_start_blocking, args=(agent_id, p.id),
-                      help="From now on guard() stops matching calls before the tool runs")
+                      help="From now on Kalytera stops this before it happens")
         is_open = p.id in opened
-        a4.button(("▾ Hide sessions" if is_open else f"▸ {_n_sessions(g['sessions'])}"), key=f"see_{p.id}",
+        a4.button(("▾ Hide conversations" if is_open else f"▸ {_n_sessions(g['sessions'])}"), key=f"see_{p.id}",
                   type="tertiary", use_container_width=True,
                   on_click=opened.symmetric_difference_update, args=({p.id},))
         if is_open:
@@ -1480,22 +1485,22 @@ def _failure_feed_fragment(agent_id: str) -> None:
         db.close()
 
     st.markdown(_FEED_CSS, unsafe_allow_html=True)
-    if not agent_id.startswith(SAMPLE_PREFIX) and agent_id != "demo-agent":
-        _profile_prompt(agent_id)
+    if _is_demo(agent_id):
+        _demo_banner()
     if st.session_state.pop("_feed_toast", False):
         st.toast("**That's the loop.** Found → rule → blocked.", icon="🎉")
     total, failed = counts.get("total", 0), counts.get("failed", 0)
     _held_replies(held)
     if total == 0:
-        st.info("No sessions scored yet. Kalytera scores a session about 30 seconds after it ends "
+        st.info("No conversations scored yet. Kalytera scores a conversation about 30 seconds after it ends "
                 "(when the `kalytera.session()` block exits).", icon="⏳")
-        if st.button("↻ Score my sessions now", key="check_now"):
+        if st.button("↻ Score my conversations now", key="check_now"):
             st.session_state["_want_check"] = True
             st.rerun(scope="app")
         return
     if not patterns and not recent:
-        st.success(f"All {total} sessions passed. Nothing to fix." if total > 1 else
-                   "Its one session passed. Nothing to fix.", icon="✅")
+        st.success(f"All {total} conversations passed. Nothing to fix." if total > 1 else
+                   "Its one conversation passed. Nothing to fix.", icon="✅")
         return
 
     problems = _problems(patterns, counts)
@@ -1508,10 +1513,10 @@ def _failure_feed_fragment(agent_id: str) -> None:
     # The headline: how big the problem is, in one sentence.
     if problems:
         head = (f"<b>{len(problems)} problem{'s keep' if len(problems) != 1 else ' keeps'} happening</b> — "
-                f"{failed} of {total} sessions failed ({_pct(failed, total)})")
+                f"{failed} of {total} conversations failed ({_pct(failed, total)})")
         st.markdown(f'<div class="ff-sum">{head}</div>', unsafe_allow_html=True)
     else:
-        st.markdown(f'<div class="ff-sum"><b>{failed} of {total} sessions failed.</b> A problem shows here once '
+        st.markdown(f'<div class="ff-sum"><b>{failed} of {total} conversations failed.</b> A problem shows here once '
                     f'the same failure happens {MIN_REPEAT} times.</div>', unsafe_allow_html=True)
         if st.button("↻ Look for problems now", key="check_now", help="Otherwise Kalytera looks every hour"):
             st.session_state["_want_check"] = True
@@ -1523,7 +1528,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
     focus = st.session_state.pop("_focus_problem", None)  # opened from a Slack alert
     if focus and any(g["main"].id == focus for g in problems):
         opened.add(focus)
-    seen = {} if agent_id.startswith(SAMPLE_PREFIX) else {
+    seen = {} if _is_demo(agent_id) else {
         k["failure_type"]: k["companies"] for k in _known_problems(st.session_state.get("api_key", ""), agent_id)}
     for g, option in zip(problems, options):
         _problem_card(agent_id, g, option, total, opened, seen.get(g["types"][0]) if g["types"] else None)
@@ -1546,21 +1551,6 @@ def _known_problems(key: str, agent_id: str) -> List[Dict[str, Any]]:
     return body.get("problems", []) if status == 200 and isinstance(body, dict) else []
 
 
-def _profile_prompt(agent_id: str) -> None:
-    """Asked once: lets Kalytera compare this agent with similar ones (anonymously)."""
-    key = st.session_state.get("api_key", "")
-    profile = _agent_profile(key, agent_id)
-    if not profile or (profile.get("industry") and profile.get("agent_type")):
-        return
-    with st.expander("Get warned about mistakes that agents like this one make at other companies"):
-        chosen = _profile_fields(f"profile_{agent_id}")
-        if st.button("Save", key=f"profile_save_{agent_id}"):
-            _rules_api("PUT", f"/agents/{agent_id}/profile", chosen)
-            _agent_profile.clear()
-            _known_problems.clear()
-            st.rerun(scope="app")
-
-
 def _sample_progress(agent_id: str, problems: List[Dict[str, Any]], options: List[Dict[str, Any]]) -> int:
     """The sample agent's guided loop: which of the three steps you're on (4 = all done)."""
     states = [_rule_in_place(agent_id, g["main"], o) for g, o in zip(problems, options)]
@@ -1575,7 +1565,7 @@ def _sample_finish() -> None:
     with st.container(border=True):
         st.markdown('<div class="ob-card-t">That\'s the whole loop — now point it at your agent</div>'
                     '<div class="ob-card-d">Kalytera found the problem on its own, wrote the rule from the '
-                    'sessions, and the next bad refund never ran. Connect Langfuse or LangSmith to see your own '
+                    'conversations, and the next bad refund never ran. Connect Langfuse or LangSmith to see your own '
                     'agent\'s mistakes in minutes, no code.</div>', unsafe_allow_html=True)
         st.button("Connect your agent", type="primary", key="finish_connect",
                   on_click=st.session_state.__setitem__, args=("_page", "connect"))
@@ -1635,7 +1625,7 @@ def _latest_failures(agent_id: str, recent: List[Tuple[Any, Any]], names: Dict[s
     if not latest:
         return
     st.markdown('<div style="height:18px"></div>', unsafe_allow_html=True)
-    with st.expander(f"Latest failed sessions ({len(latest)}{'+' if len(recent) >= 50 else ''})"):
+    with st.expander(f"Latest failed conversations ({len(latest)}{'+' if len(recent) >= 50 else ''})"):
         _latest_rows(agent_id, recent, latest, names)
 
 
@@ -1668,14 +1658,14 @@ def _latest_rows(agent_id: str, recent: List[Tuple[Any, Any]], latest: Dict[str,
 
 
 def _pattern_sessions(agent_id: str, p: Any) -> None:
-    """The sessions behind one problem, inline under its card: one compact line each."""
+    """The conversations behind one problem, inline under its card: one compact line each."""
     db = _db()
     try:
         sessions = get_pattern_sessions(agent_id, p.pattern_type, p.pattern_value, PATTERN_SESSIONS_SHOWN, db)
     finally:
         db.close()
     if not sessions:
-        st.caption("These sessions are no longer in the database.")
+        st.caption("These conversations are no longer in the database.")
         return
     for s in sessions:
         text, btn = st.columns([7, 1], vertical_alignment="center")
@@ -1686,7 +1676,7 @@ def _pattern_sessions(agent_id: str, p: Any) -> None:
             _open_trace(s["session_id"])
             st.rerun(scope="app")
     if len(sessions) >= PATTERN_SESSIONS_SHOWN:
-        st.caption(f"The latest {PATTERN_SESSIONS_SHOWN}. Search any session at the top right.")
+        st.caption(f"The latest {PATTERN_SESSIONS_SHOWN}. Search any conversation at the top right.")
 
 
 def _show_failure_feed(agent_id: str) -> None:
@@ -1863,7 +1853,7 @@ def _set_verdict(agent_id: str, session_id: str, passed: bool) -> None:
 def _show_trace(agent_id: str, session_id: str) -> None:
     st.button(f"← Back to {view.split('  ', 1)[-1]}", key="trace_back",
               on_click=lambda: st.session_state.pop("open_session", None))
-    _page_header("Session trace", "Every step, its score, and where it went wrong")
+    _page_header("Conversation trace", "Every step, its score, and where it went wrong")
 
     db = _db()
     try:
@@ -1872,7 +1862,7 @@ def _show_trace(agent_id: str, session_id: str) -> None:
         db.close()
 
     if not steps:
-        st.warning(f"No steps found for session `{session_id}`.")
+        st.warning(f"No steps found for conversation `{session_id}`.")
         return
 
     all_evals = [ev for _, ev in steps if ev is not None]
@@ -2103,17 +2093,17 @@ def _open_result(session_id: str, agent: str) -> None:
 
 def _search_bar() -> None:
     _, box = st.columns([3, 1.25])
-    box.text_input("Search sessions", key="session_search", on_change=_run_search,
-                   placeholder="🔍  Search sessions — ID or error text", label_visibility="collapsed")
+    box.text_input("Search conversations", key="session_search", on_change=_run_search,
+                   placeholder="🔍  Search conversations — ID or error text", label_visibility="collapsed")
     results = st.session_state.get("search_results")
     if not results:
         return
     q, found = results
     with st.container(border=True):
         head, close = st.columns([6, 1], vertical_alignment="center")
-        head.markdown(f"**{len(found)}{'+' if len(found) >= SEARCH_LIMIT else ''} session"
+        head.markdown(f"**{len(found)}{'+' if len(found) >= SEARCH_LIMIT else ''} conversation"
                       f"{'' if len(found) == 1 else 's'}** matching “{html.escape(q)}”" if found
-                      else f"No sessions match “{html.escape(q)}”. Session IDs and error text are searched, "
+                      else f"No conversations match “{html.escape(q)}”. Conversation IDs and error text are searched, "
                            f"across all your agents.")
         close.button("Close", key="search_close", on_click=_clear_search, use_container_width=True)
         for r in found:
@@ -2134,6 +2124,20 @@ def _search_bar() -> None:
 # SAMPLE AGENT — a new account's first two minutes
 # ═══════════════════════════════════════════════════════════════════════════════
 SAMPLE_PREFIX = "sample-refund-bot-"
+DEMO_PREFIXES = (SAMPLE_PREFIX, "quickstart-refund-bot-")  # made-up refund agents (dashboard, kalytera quickstart)
+
+
+def _is_demo(agent_id: str) -> bool:
+    return agent_id == "demo-agent" or agent_id.startswith(DEMO_PREFIXES)
+
+
+def _demo_banner() -> None:
+    """Above a demo agent's feed: these failures are made up, and where the real ones come from."""
+    text, btn = st.columns([5, 1.4], vertical_alignment="center")
+    text.markdown('<div class="ff-row"><b>Sample data.</b> A made-up refund agent, so you can see how Kalytera '
+                  'works. Your own agents show up here once you connect them.</div>', unsafe_allow_html=True)
+    btn.button("Connect your agent", key="demo_connect", use_container_width=True,
+               on_click=st.session_state.__setitem__, args=("_page", "connect"))
 SAMPLE_SESSIONS = 24
 SAMPLE_TIMEOUT_S = 240
 LIVE_ROWS = 6
@@ -2164,8 +2168,8 @@ _ONBOARD_CSS = """
 </style>
 """
 
-_LOOP = [("Find the problem", "An AI judge reads every session and groups the failures that keep happening."),
-         ("Make it a rule", "One click turns a problem into a rule, drafted from your own sessions."),
+_LOOP = [("Find the problem", "An AI judge reads every conversation and groups the failures that keep happening."),
+         ("Make it a rule", "One click turns a problem into a rule, drafted from your own conversations."),
          ("Stop it", "A costly action, like a bad refund, is stopped before it runs. Your agent tells the user why.")]
 
 
@@ -2203,7 +2207,7 @@ def _wait_for_first_agent() -> None:
     """Sentry-style: watch for the user's own agent, then take them straight to it."""
     key = st.session_state.get("api_key", "")
     agents = _fetch_agents(key) if key else []
-    mine = [a for a in agents if a != "demo-agent" and not a.startswith(SAMPLE_PREFIX)]
+    mine = [a for a in agents if not _is_demo(a)]
     known = st.session_state.setdefault("_known_agents", list(mine))  # agents that existed before don't count
     new = [a for a in mine if a not in known]
     if new:
@@ -2211,7 +2215,7 @@ def _wait_for_first_agent() -> None:
         _agents_for_key.clear()
         st.session_state["_switch_to"] = (new[0], FEED_VIEW)
         st.rerun(scope="app")
-    st.markdown('<div class="ob-wait"><span class="ob-dot"></span>Waiting for your agent\'s first session… '
+    st.markdown('<div class="ob-wait"><span class="ob-dot"></span>Waiting for your agent\'s first conversation… '
                 'this page opens it as soon as it arrives.</div>', unsafe_allow_html=True)
 
 
@@ -2300,7 +2304,7 @@ def _run_sample_agent() -> None:
 def _check_now(agent_id: str) -> None:
     """Score this agent's waiting sessions and look for problems now, instead of on the hourly run."""
     _page_header("Failure Feed", "")
-    with st.status("Checking your latest sessions…", expanded=True) as box:
+    with st.status("Checking your latest conversations…", expanded=True) as box:
         status, body = _rules_api("POST", f"/agents/{agent_id}/refresh")
         if status not in (200, 202):
             box.update(label="Couldn't start the check", state="error")
