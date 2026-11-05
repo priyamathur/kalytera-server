@@ -325,7 +325,25 @@ from kalytera.dashboard_rules import (  # noqa: E402
 )
 
 
+def _account_from_db(key: str) -> Tuple[bool, Optional[Any], Optional[Dict[str, Any]]]:
+    """(reached the database, account, plan and usage), read directly, so signing in and opening the
+    dashboard don't wait for a sleeping API. (False, None, None) means ask the API instead."""
+    from api.billing import hash_key, usage_summary
+    from db.queries import get_key_and_org
+    db = _db()
+    try:
+        _, org = get_key_and_org(hash_key(key), db)
+        return True, org, (usage_summary(org, db) if org is not None else None)
+    except Exception:
+        return False, None, None
+    finally:
+        db.close()
+
+
 def _validate_key(key: str, timeout: float = 5) -> Optional[Dict[str, Any]]:
+    reached, _, acct = _account_from_db(key)
+    if reached:
+        return acct
     try:
         r = _requests.get(
             f"{_API}/billing/usage",
@@ -341,6 +359,9 @@ def _check_key(key: str) -> Tuple[Optional[Dict[str, Any]], str]:
     """Sign-in: (account, "") or (None, why). A sleeping API can take a minute to wake;
     that is not a wrong key."""
     import time as _time
+    reached, _, acct = _account_from_db(key)
+    if reached:
+        return (acct, "") if acct else (None, _WRONG_KEY)
     deadline = _time.monotonic() + WAKE_S
     while True:
         try:
@@ -353,13 +374,14 @@ def _check_key(key: str) -> Tuple[Optional[Dict[str, Any]], str]:
             except ValueError:
                 pass  # a "waking up" page, not Kalytera's answer
         elif r is not None and r.status_code in (401, 403):
-            return None, "Kalytera doesn't recognize this key. Check that you copied all of it, or email info@kalytera.dev."
+            return None, _WRONG_KEY
         # Asleep or starting (no answer, 502/503, a waiting page): Render answers like this while it wakes.
         if _time.monotonic() > deadline:
             return None, "Kalytera is taking longer than usual to start. Wait a moment and try again."
         _time.sleep(3)
 
 
+_WRONG_KEY = "Kalytera doesn't recognize this key. Check that you copied all of it, or email info@kalytera.dev."
 WAKE_S = 120  # the free Render API takes 30–60 s to wake after 15 idle minutes
 
 
@@ -468,6 +490,15 @@ def _agents_for_key(key: str) -> List[str]:
 
 
 def _fetch_agents(key: str) -> List[str]:
+    reached, org, _ = _account_from_db(key)
+    if reached and org is not None:
+        db = _db()
+        try:
+            return get_agent_ids_for_org(org.id, db)
+        except Exception:
+            pass  # ask the API
+        finally:
+            db.close()
     try:
         r = _requests.get(f"{_API}/agents", headers={"Authorization": f"Bearer {key}"}, timeout=5)
         return r.json() if r.status_code == 200 else []

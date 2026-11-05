@@ -318,6 +318,20 @@ at = dashboard("📊  Overview")
 check("growth" in texts(at) and any(b.label == "Manage billing" for b in at.button),
       "after paying: plan shows growth, and Manage billing replaces Upgrade")
 
+print("10d. Sign in with an API key: no wait on the API")
+calls_before = []
+_orig_get = requests.get
+requests.get = lambda u, **kw: (calls_before.append(u), _orig_get(u, **kw))[1]
+at = run(AppTest.from_file("kalytera/dashboard.py", default_timeout=120))
+next(x for x in at.text_input if x.label == "API key").input("kly_live_not_a_real_key")
+run(next(b for b in at.button if b.label == "Sign in →").click())
+check("doesn't recognize this key" in texts(at), "a wrong key says so at once")
+next(x for x in at.text_input if x.label == "API key").input(KEY)
+run(next(b for b in at.button if b.label == "Sign in →").click())
+check(at.session_state["authenticated"] and not [u for u in calls_before if "/billing/usage" in u],
+      "the right key signs in, read from the database (a sleeping API doesn't hold it up)")
+requests.get = _orig_get
+
 print("11. A brand-new account: welcome panel → sample agent → rule → blocking")
 import kalytera.judge as _judge  # noqa: E402
 

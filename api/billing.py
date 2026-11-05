@@ -388,6 +388,11 @@ def get_usage(
     db: Session = Depends(get_db),
 ):
     _, org = auth
+    return usage_summary(org, db)
+
+
+def usage_summary(org: Organization, db: Session) -> dict:
+    """Plan and this month's usage. The dashboard reads it straight from the database at sign-in."""
     period = datetime.now(timezone.utc).strftime("%Y-%m")
     usage = get_current_usage(org.id, period, db)
     sessions_used = usage.session_count if usage else 0
