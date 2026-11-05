@@ -6,6 +6,7 @@ Problems that mean traces are NOT being recorded (rejected key, monthly limit,
 unreachable endpoint) are printed once to stderr — never silently dropped.
 """
 import asyncio
+import atexit
 import functools
 import json
 import os
@@ -253,6 +254,25 @@ def _ensure_worker() -> None:
     if _worker is None or not _worker.is_alive():
         _worker = threading.Thread(target=_worker_loop, daemon=True)
         _worker.start()
+
+
+FLUSH_ON_EXIT_S = 10.0
+
+
+def _flush_on_exit() -> None:
+    """A short script (a batch job, a cron task) would otherwise exit before its last
+    conversations are sent: the sender is a background thread. Wait a little for them."""
+    deadline = time.monotonic() + FLUSH_ON_EXIT_S
+    while _queue.unfinished_tasks and _worker is not None and _worker.is_alive() and time.monotonic() < deadline:
+        time.sleep(0.05)
+
+
+# Before Python shuts down its thread pools (the sender needs one), not after: atexit is too late.
+_register = getattr(threading, "_register_atexit", None)
+if _register is not None:
+    _register(_flush_on_exit)
+else:
+    atexit.register(_flush_on_exit)
 
 
 def _worker_loop() -> None:
