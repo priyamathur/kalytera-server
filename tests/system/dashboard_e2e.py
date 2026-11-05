@@ -373,7 +373,7 @@ for k in ("demo_connect", "finish_connect"):
     if b is None:
         continue
     run(b.click())
-    check("Point Kalytera at where your agent" in texts(at), f"'Connect your agent' ({k}) opens the Connect page")
+    check("Where does your agent log its conversations?" in texts(at), f"'Connect your agent' ({k}) opens the Connect page")
     run(at.radio[0].set_value("📊  Overview"))
     run(at.radio[0].set_value("🔴  Failure Feed"))
 
@@ -401,8 +401,12 @@ _conn_api.requests.post = lambda url, json, timeout: (_slack_posts.append(json) 
                                                      type("R", (), {"status_code": 200, "text": "ok"})())
 run(button(at, "＋ Connect an agent").click())
 t = texts(at)
-check("Point Kalytera at where your agent" in t, "connect page opens")
-check(any(NEW_KEY in c.value for c in at.code), "its 'add to your code' tab has the key filled in")
+check("Where does your agent log its conversations?" in t, "connect page opens")
+check(not any("Industry" in x.label or "job" in x.label for x in at.selectbox)
+      and "Alerts in Slack" not in t, "just the form: no extra questions, Slack tucked away")
+run(next(b for b in at.button_group if b.key == "connect_source").set_value("My own code"))
+check(any(NEW_KEY in c.value for c in at.code), "'My own code' has the key filled in")
+run(next(b for b in at.button_group if b.key == "connect_source").set_value("Langfuse"))
 
 
 def _fill_langfuse(secret: str) -> None:
@@ -410,8 +414,6 @@ def _fill_langfuse(secret: str) -> None:
     form_inputs[0].input("Billing bot")
     form_inputs[1].input("pk-lf-1")
     form_inputs[2].input(secret)
-    next(x for x in at.selectbox if x.label == "Industry (optional)").select("Retail & e-commerce")
-    next(x for x in at.selectbox if x.label == "Agent's job (optional)").select("Customer support")
 
 
 _fill_langfuse("wrong")
@@ -436,14 +438,13 @@ at = reopen(at)
 t = texts(at)
 agent_picker = next(x for x in at.selectbox if x.key == "agent_id")
 check(at.radio[0].value == "🔴  Failure Feed" and "billing-bot" in str(agent_picker.value)
-      and "Point Kalytera at where your agent" not in t, "after reading: lands on the new agent's Failure Feed")
+      and "Where does your agent log its conversations?" not in t, "after reading: lands on the new agent's Failure Feed")
 check("6 of 9 conversations failed" in t, "its real mistakes are there: 6 of 9 conversations failed")
 conns = client.get("/connections", headers={"Authorization": f"Bearer {NEW_KEY}"}).json()["connections"]
 check(len(conns) == 1 and conns[0]["kind"] == "langfuse" and conns[0]["status"] == "ok", "the connection is saved")
 NEW_AGENT = conns[0]["agent_id"]
 prof = client.get(f"/agents/{NEW_AGENT}/profile", headers={"Authorization": f"Bearer {NEW_KEY}"}).json()
-check((prof["industry"], prof["agent_type"], prof["system"]) == ("retail", "support", "langfuse"),
-      "the profile was saved (industry and type from the form, system from the connection)")
+check(prof["system"] == "langfuse", "the agent knows its conversations come from Langfuse")
 
 print("12b. Rules from your other agents")
 at.session_state["view"] = "🛡  Rules"

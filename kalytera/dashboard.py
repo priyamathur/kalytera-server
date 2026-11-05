@@ -2210,10 +2210,8 @@ def _connect_steps() -> None:
     key = st.session_state.get("api_key") or "kly_live_..."
     st.code(f'pip install kalytera\nexport KALYTERA_API_KEY="{key}"', language="bash")
     st.code("import kalytera\nkalytera.init()   # first thing, before your agents run", language="python")
-    st.caption("That's all for the **OpenAI Agents SDK** and **LangChain / LangGraph**: each agent shows up "
-               "under its own name, every run is judged, and every action is checked against your rules. "
-               "Your key is already filled in.")
-    with st.expander("Your own agent loop, no framework?"):
+    st.caption("Works with the OpenAI Agents SDK and LangChain / LangGraph. Your key is already filled in.")
+    with st.expander("No framework?"):
         st.code(_NO_FRAMEWORK_CODE, language="python")
         st.caption("[Full guide](https://github.com/priyamathur/kalytera-server#add-kalytera-to-an-agent-in-production)")
 
@@ -2335,56 +2333,44 @@ def _check_now(agent_id: str) -> None:
     st.rerun()
 
 
-from api.memory_api import AGENT_TYPES, INDUSTRIES  # noqa: E402
 from kalytera.importers import LANGFUSE_REGIONS, LANGSMITH_REGIONS  # noqa: E402
 
 _SOURCE = {"langfuse": "Langfuse", "langsmith": "LangSmith"}
-_KEEP_SAFE = ("Kalytera stores these keys encrypted, only ever reads conversations, and deletes the keys when you "
-              "remove the connection.")
-
-
-def _profile_fields(prefix: str) -> Dict[str, str]:
-    c1, c2 = st.columns(2)
-    industry = c1.selectbox("Industry (optional)", list(INDUSTRIES.values()), index=None,
-                            placeholder="Choose", key=f"{prefix}_industry")
-    kind = c2.selectbox("Agent's job (optional)", list(AGENT_TYPES.values()), index=None,
-                        placeholder="Choose", key=f"{prefix}_type")
-    out = {}
-    if industry:
-        out["industry"] = next(k for k, v in INDUSTRIES.items() if v == industry)
-    if kind:
-        out["agent_type"] = next(k for k, v in AGENT_TYPES.items() if v == kind)
-    return out
+_WHERE_KEYS = {"langfuse": "In Langfuse: **Settings → API Keys → Create new API key**.",
+               "langsmith": "In LangSmith: **Settings → API Keys → Create API Key**."}
 
 
 def _connect_form(kind: str) -> None:
-    with st.form(f"connect_{kind}"):
+    st.caption(_WHERE_KEYS[kind])
+    with st.form(f"connect_{kind}", border=False):
         name = st.text_input("Agent name", placeholder="support-bot", help="How this agent shows up in Kalytera")
-        profile = _profile_fields(kind)
         if kind == "langfuse":
-            region = st.selectbox("Region", [*LANGFUSE_REGIONS, "Self-hosted"])
-            custom = st.text_input("Self-hosted URL (only if self-hosted)", placeholder="https://langfuse.acme.com")
-            pk = st.text_input("Public key", placeholder="pk-lf-…")
-            sk = st.text_input("Secret key", type="password", placeholder="sk-lf-…")
-            body = {"settings": {"base_url": custom.strip() if region == "Self-hosted" else LANGFUSE_REGIONS[region]},
+            left, right = st.columns(2)
+            pk = left.text_input("Public key", placeholder="pk-lf-…")
+            sk = right.text_input("Secret key", type="password", placeholder="sk-lf-…")
+            region = st.selectbox("Region", list(LANGFUSE_REGIONS))
+            with st.expander("Self-hosted Langfuse?"):
+                custom = st.text_input("Your Langfuse URL", placeholder="https://langfuse.acme.com")
+            body = {"settings": {"base_url": custom.strip() or LANGFUSE_REGIONS[region]},
                     "secrets": {"public_key": pk, "secret_key": sk}}
-            missing = not (pk and sk and (region != "Self-hosted" or custom))
+            missing = not (pk and sk)
         else:
+            left, right = st.columns(2)
+            key = left.text_input("API key", type="password", placeholder="lsv2_…")
+            project = right.text_input("Project", placeholder="support-bot-prod", help="The project name in LangSmith")
             region = st.selectbox("Region", list(LANGSMITH_REGIONS))
-            project = st.text_input("Project", placeholder="support-bot-prod", help="The project name in LangSmith")
-            key = st.text_input("API key", type="password", placeholder="lsv2_…")
             body = {"settings": {"api_url": LANGSMITH_REGIONS[region], "project": project}, "secrets": {"api_key": key}}
             missing = not (key and project)
-        st.caption(_KEEP_SAFE)
         go = st.form_submit_button("Connect", type="primary")
+    st.caption("🔒 Read-only. Keys are stored encrypted and deleted when you remove the connection.")
     if go:
         if missing or not name.strip():
             st.error("Fill in the agent name and the keys first.")
             return
-        _run_connect({"kind": kind, "agent_name": name.strip(), **body}, profile)
+        _run_connect({"kind": kind, "agent_name": name.strip(), **body})
 
 
-def _run_connect(body: Dict[str, Any], profile: Dict[str, str]) -> None:
+def _run_connect(body: Dict[str, Any]) -> None:
     with st.status(f"Reading your conversations from {_SOURCE[body['kind']]}…", expanded=True) as box:
         status, resp = _rules_api("POST", "/connections", body)
         if status != 202:
@@ -2392,8 +2378,6 @@ def _run_connect(body: Dict[str, Any], profile: Dict[str, str]) -> None:
             st.error(resp.get("detail") if isinstance(resp, dict) else str(resp))
             return
         agent = resp["agent_id"]
-        if profile:
-            _rules_api("PUT", f"/agents/{agent}/profile", profile)
         done = _follow_job(agent, box, 0, "conversation",
                            preparing=f"Reading the last 30 days from {_SOURCE[body['kind']]}…")
     if done is None:
@@ -2440,7 +2424,6 @@ def _connections_list(fetched: Optional[Tuple[int, Any]] = None) -> None:
 
 
 def _slack_settings(fetched: Optional[Tuple[int, Any]] = None) -> None:
-    st.markdown("**Alerts in Slack**")
     status, body = fetched or _rules_api("GET", "/alerts")
     if status != 200 or not isinstance(body, dict):
         return
@@ -2467,29 +2450,34 @@ def _slack_settings(fetched: Optional[Tuple[int, Any]] = None) -> None:
             st.error(b_.get("detail") if isinstance(b_, dict) else str(b_))
 
 
+_SOURCES = {"Langfuse": "langfuse", "LangSmith": "langsmith", "My own code": "code"}
+
+
 def _connect_page() -> None:
-    # Both lists at once instead of one after the other (each is a round trip to the API).
+    # Both lists load while the form draws (each is a round trip to the API).
     from concurrent.futures import ThreadPoolExecutor
     key = st.session_state.get("api_key", "")
-    with ThreadPoolExecutor(2) as pool:
-        conns = pool.submit(_rules_api, "GET", "/connections", key=key)
-        alerts = pool.submit(_rules_api, "GET", "/alerts", key=key)
+    pool = ThreadPoolExecutor(2)
+    conns = pool.submit(_rules_api, "GET", "/connections", key=key)
+    alerts = pool.submit(_rules_api, "GET", "/alerts", key=key)
+    pool.shutdown(wait=False)
     st.markdown(_ONBOARD_CSS, unsafe_allow_html=True)
-    _page_header("Connect", "")
-    st.markdown('<div class="ob-sub" style="margin-top:-14px">Point Kalytera at where your agent\'s production '
-                'conversations already are. It reads the last 30 days right away, then keeps watching. '
-                'No code.</div>', unsafe_allow_html=True)
-    lf, ls, code = st.tabs(["Langfuse", "LangSmith", "Add to your code (also stops mistakes)"])
-    with lf:
-        _connect_form("langfuse")
-    with ls:
-        _connect_form("langsmith")
-    with code:
-        _connect_steps()
-        _wait_for_first_agent()
+    _page_header("Connect your agent", "")
+    st.markdown('<div class="ob-sub" style="margin:-14px 0 14px">Where does your agent log its conversations?</div>',
+                unsafe_allow_html=True)
+    picked = st.segmented_control("Source", list(_SOURCES), default="Langfuse", key="connect_source",
+                                  label_visibility="collapsed") or "Langfuse"
+    with st.container(border=True):
+        if _SOURCES[picked] == "code":
+            st.caption("Add Kalytera to your agent. This also lets it stop risky actions before they run.")
+            _connect_steps()
+            _wait_for_first_agent()
+        else:
+            _connect_form(_SOURCES[picked])
     st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
     _connections_list(conns.result())
-    _slack_settings(alerts.result())
+    with st.expander("Get alerts in Slack (optional)"):
+        _slack_settings(alerts.result())
 
 
 def _welcome_panel() -> None:
