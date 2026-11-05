@@ -368,6 +368,14 @@ check(any("That's the loop" in str(x.value) for x in at.toast), "a toast celebra
 check("now point it at your agent" in t and any(b.label == "Connect your agent" for b in at.button),
       "finish card: connect your own agent")
 check("ob-step now" not in t and t.count('ob-step done') >= 3, "stepper: all three steps done")
+for k in ("demo_connect", "finish_connect"):
+    b = next((b for b in at.button if b.key == k), None)
+    if b is None:
+        continue
+    run(b.click())
+    check("Point Kalytera at where your agent" in texts(at), f"'Connect your agent' ({k}) opens the Connect page")
+    run(at.radio[0].set_value("📊  Overview"))
+    run(at.radio[0].set_value("🔴  Failure Feed"))
 
 print("12. Connect page: Langfuse with no code → its mistakes, live")
 import api.connections_api as _conn_api  # noqa: E402

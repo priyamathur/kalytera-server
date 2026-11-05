@@ -1577,6 +1577,12 @@ def _sample_progress(agent_id: str, problems: List[Dict[str, Any]], options: Lis
     return stage
 
 
+def _open_connect() -> None:
+    """For buttons inside the auto-refreshing feed: a click there reruns only the feed, so rerun the whole page."""
+    st.session_state["_page"] = "connect"
+    st.rerun(scope="app")
+
+
 def _sample_finish() -> None:
     """Under the blocked card: the loop is done, so the next step is the user's own agent."""
     st.markdown('<div style="height:10px"></div>', unsafe_allow_html=True)
@@ -1585,8 +1591,8 @@ def _sample_finish() -> None:
                     '<div class="ob-card-d">Kalytera found the problem on its own, wrote the rule from the '
                     'conversations, and the next bad refund never ran. Connect Langfuse or LangSmith to see your own '
                     'agent\'s mistakes in minutes, no code.</div>', unsafe_allow_html=True)
-        st.button("Connect your agent", type="primary", key="finish_connect",
-                  on_click=st.session_state.__setitem__, args=("_page", "connect"))
+        if st.button("Connect your agent", type="primary", key="finish_connect"):
+            _open_connect()
 
 
 def _serious_mistakes(recent: List[Tuple[Any, Any]], names: Dict[str, str], patterns: List[Any]) -> None:
@@ -2146,8 +2152,8 @@ def _demo_banner() -> None:
     text, btn = st.columns([5, 1.4], vertical_alignment="center")
     text.markdown('<div class="ff-row"><b>Sample data.</b> A made-up refund agent, so you can see how Kalytera '
                   'works. Your own agents show up here once you connect them.</div>', unsafe_allow_html=True)
-    btn.button("Connect your agent", key="demo_connect", use_container_width=True,
-               on_click=st.session_state.__setitem__, args=("_page", "connect"))
+    if btn.button("Connect your agent", key="demo_connect", use_container_width=True):
+        _open_connect()
 SAMPLE_SESSIONS = 24
 SAMPLE_TIMEOUT_S = 240
 LIVE_ROWS = 6
