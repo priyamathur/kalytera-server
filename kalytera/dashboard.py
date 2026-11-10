@@ -1550,6 +1550,7 @@ def _failure_feed_fragment(agent_id: str) -> None:
     if not patterns and not recent:
         st.success(f"All {total} conversations passed. Nothing to fix." if total > 1 else
                    "Its one conversation passed. Nothing to fix.", icon="✅")
+        st.markdown(_ONBOARD_CSS + _live_rows(agent_id), unsafe_allow_html=True)
         return
 
     problems = _problems(patterns, counts)
@@ -1572,6 +1573,8 @@ def _failure_feed_fragment(agent_id: str) -> None:
             st.rerun(scope="app")
 
     stage = _sample_progress(agent_id, problems, options) if agent_id.startswith(SAMPLE_PREFIX) and problems else 0
+    if not _is_demo(agent_id):  # the same report as while connecting: each latest conversation, passed or why not
+        st.markdown(_ONBOARD_CSS + _live_rows(agent_id), unsafe_allow_html=True)
 
     opened: set = st.session_state.setdefault("_feed_open", set())
     focus = st.session_state.pop("_focus_problem", None)  # opened from a Slack alert
